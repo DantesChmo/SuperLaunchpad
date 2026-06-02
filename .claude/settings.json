@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(xcodebuild:*)",
+      "Bash(swift build:*)",
+      "Bash(swift test:*)",
+      "Bash(swift package:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git ls-files:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(file:*)",
+      "Bash(sqlite3:*)",
+      "Bash(plutil:*)",
+      "Bash(mdfind:*)",
+      "Bash(defaults read:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:developer.apple.com)",
+      "WebFetch(domain:swiftpackageindex.com)",
+      "WebFetch(domain:groue.github.io)"
+    ],
+    "deny": [
+      "Bash(rm -rf /:*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Read(~/.com.apple.dock.launchpad/**)",
+      "Edit(~/.com.apple.dock.launchpad/**)",
+      "Write(~/.com.apple.dock.launchpad/**)"
+    ]
+  }
+}
