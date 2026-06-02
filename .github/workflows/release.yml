@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version $VERSION"
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+            ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved', '**/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Build (unsigned)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project SuperLaunchpad.xcodeproj \
+            -scheme SuperLaunchpad \
+            -configuration Release \
+            -derivedDataPath build \
+            -destination 'platform=macOS' \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$VERSION" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Locate .app
+        id: app
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find build/Build/Products/Release -maxdepth 2 -name 'SuperLaunchpad.app' -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "SuperLaunchpad.app not found" >&2
+            exit 1
+          fi
+          echo "Found app at $APP_PATH"
+          echo "path=$APP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Create DMG
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          APP_PATH: ${{ steps.app.outputs.path }}
+        run: |
+          set -euo pipefail
+          STAGING=$(mktemp -d)
+          cp -R "$APP_PATH" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          DMG_NAME="SuperLaunchpad-$VERSION.dmg"
+          hdiutil create \
+            -volname "SuperLaunchpad" \
+            -srcfolder "$STAGING" \
+            -ov \
+            -format UDZO \
+            "$DMG_NAME"
+          echo "DMG_PATH=$DMG_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SuperLaunchpad-${{ steps.version.outputs.version }}-dmg
+          path: ${{ env.DMG_PATH }}
+          if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.DMG_PATH }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true

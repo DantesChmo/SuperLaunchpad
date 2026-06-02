@@ -45,7 +45,7 @@ final class LaunchpadViewModel {
             .sorted { ($0.folderOrderIndex ?? 0) < ($1.folderOrderIndex ?? 0) }
     }
 
-    private var database: AppDatabase?
+    var database: AppDatabase?
 
     init() {
         do {
@@ -53,6 +53,10 @@ final class LaunchpadViewModel {
         } catch {
             print("Failed to initialize database: \(error)")
         }
+    }
+
+    init(database: AppDatabase?) {
+        self.database = database
     }
 
     func loadApps() {
@@ -104,7 +108,7 @@ final class LaunchpadViewModel {
         }
     }
 
-    private func applyOrdering(_ ordering: LaunchpadOrdering?, to apps: [AppEntry]) -> ([AppEntry], [FolderEntry]) {
+    func applyOrdering(_ ordering: LaunchpadOrdering?, to apps: [AppEntry]) -> ([AppEntry], [FolderEntry]) {
         guard let ordering else {
             // No system DB — alphabetical fallback, no folders
             let sorted = apps.sorted {
@@ -165,7 +169,7 @@ final class LaunchpadViewModel {
         return (ordered, newFolders)
     }
 
-    private func mergeNewApps(_ enumerated: [AppEntry], systemOrdering: LaunchpadOrdering?) -> ([AppEntry], [FolderEntry]) {
+    func mergeNewApps(_ enumerated: [AppEntry], systemOrdering: LaunchpadOrdering?) -> ([AppEntry], [FolderEntry]) {
         let existing = (try? database?.fetchAllApps()) ?? []
         let existingByID = Dictionary(uniqueKeysWithValues: existing.map { ($0.bundleIdentifier, $0) })
         var existingFolders = (try? database?.fetchAllFolders()) ?? []

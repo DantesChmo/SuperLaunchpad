@@ -1,0 +1,230 @@
+# AGENTS.md
+
+Instructions for AI coding agents (Claude Code, Cursor, Codex, Aider, Continue, …) working in this repository. Read this first — it's the single source of truth for project conventions and constraints. Skip nothing.
+
+## TL;DR
+
+**SuperLaunchpad** — macOS Launchpad clone. Fullscreen app launcher with a 7×5 grid, paging, trackpad gestures, and ordering imported from the system Launchpad.
+
+- **Language:** Swift 5.0
+- **UI:** SwiftUI + AppKit (`NSPanel`, `NSWorkspace`, `NSVisualEffectView`)
+- **Database:** GRDB 7.0+ (SQLite)
+- **Platform:** macOS 15.4+ (Sequoia)
+- **Tests:** swift-testing (`import Testing`) — **not** XCTest
+- **Architecture:** MVVM with `@Observable`, single `LaunchpadViewModel` as source of truth
+
+## Build, run, test
+
+```bash
+# build
+xcodebuild -project SuperLaunchpad.xcodeproj -scheme SuperLaunchpad build
+
+# all tests
+xcodebuild -project SuperLaunchpad.xcodeproj -scheme SuperLaunchpad test
+
+# single test (swift-testing filter)
+xcodebuild -project SuperLaunchpad.xcodeproj -scheme SuperLaunchpad test \
+  -only-testing:SuperLaunchpadTests/AppDatabaseTests/saveAppsUpsertsByBundleIdentifier
+```
+
+For UI-affecting changes, open `SuperLaunchpad.xcodeproj` in Xcode and **⌘R** — tests alone don't validate visual behavior.
+
+## Architecture in 60 seconds
+
+`LaunchpadViewModel` (`@Observable`, `@MainActor`) is the single source of truth. `LaunchpadPanel` (`NSPanel`) hosts the SwiftUI hierarchy. `AppDatabase` (GRDB) persists app/folder ordering across launches.
+
+Data flow:
+
+1. `AppDelegate.applicationDidFinishLaunching()` → creates `LaunchpadPanel`, calls `viewModel.loadApps()`.
+2. `loadApps()` reads DB cache first, then `Task.detached` scans `/Applications` + `/System/Applications` via `AppEnumerator`, syncs back to `@MainActor`.
+3. First launch only: `SystemLaunchpadDB` reads `~/.com.apple.dock.launchpad/db/db` for ordering and folders; otherwise alphabetical fallback.
+4. Subsequent launches: existing positions preserved, new apps appended at end.
+5. `AppDirectoryWatcher` (DispatchSource) triggers `loadApps()` on install/uninstall.
+6. `GestureMonitor` listens for global trackpad pinch (threshold 0.5) to show/hide.
+
+**Storage:** `~/Library/Application Support/com.dantes.SuperLaunchpad/apps.db`
+
+## Project map
+
+| Path | Role |
+|------|------|
+| `SuperLaunchpadApp.swift` | `@main`, `AppDelegate`, `MenuBarExtra` |
+| `ViewModels/LaunchpadViewModel.swift` | source of truth — apps, pages, currentPage, show/hide/launch |
+| `Models/AppEntry.swift` | GRDB record — bundleIdentifier (PK), pageIndex, orderIndex, folderID, folderOrderIndex |
+| `Models/FolderEntry.swift` | GRDB record — id (PK), title, pageIndex, orderIndex |
+| `Models/GridItem.swift` | `LaunchpadItem` enum: `.app(AppEntry)` / `.folder(FolderEntry, apps)` |
+| `Database/AppDatabase.swift` | SQLite, migrations, CRUD |
+| `Views/LaunchpadView.swift` | root, GeometryReader, LayoutMetrics |
+| `Views/PagingGridView.swift` | horizontal ScrollView + `SinglePageBehavior` snap |
+| `Views/AppGridPageView.swift` | LazyVGrid for one page |
+| `Views/AppIconView.swift` | icon + label, hover scale 1.08 |
+| `Views/FolderIconView.swift` | 3×3 mini preview |
+| `Views/FolderDetailView.swift` | folder popup, 4×3 grid |
+| `Window/LaunchpadPanel.swift` | `NSPanel`, borderless, screenSaver level |
+| `Window/VisualEffectBackground.swift` | `NSVisualEffectView` wrapper |
+| `Services/AppEnumerator.swift` | scans `/Applications`, extracts 128×128 PNG icons |
+| `Services/SystemLaunchpadDB.swift` | parses macOS Launchpad DB |
+| `Services/GestureMonitor.swift` | global+local `NSEvent.magnify` monitors |
+| `Services/AppDirectoryWatcher.swift` | DispatchSource on `/Applications` |
+| `Helpers/Constants.swift` | `Grid`, `FolderGrid`, `AnimationDuration`, `LayoutMetrics` |
+| `Helpers/NSImageExtensions.swift` | `pngData()`, `resized(to:)` |
+| `SuperLaunchpadTests/` | swift-testing test suites |
+
+## Conventions
+
+### Swift style
+
+- **Naming:** `PascalCase` for types, `camelCase` for methods and properties. No Hungarian notation, no `m_` prefixes.
+- **Visibility:** mark members `private` aggressively. Default to `private`, widen only when needed.
+- **`// MARK: - …`** to group methods in large classes (`AppDatabase`, `LaunchpadPanel`, `LaunchpadViewModel`).
+- **Error handling:** prefer `try?` with an explicit default over `do/catch`:
+  ```swift
+  let apps = (try? database?.fetchAllApps()) ?? []
+  ```
+  Only use `do/catch` when the error path needs distinct behavior.
+- **No force unwrap (`!`)** except in `lazy` initializers where the value is guaranteed.
+- **`guard` for early exits**, not for the happy path.
+
+### SwiftUI
+
+- `LaunchpadViewModel` is the only source of truth. Pass it (or a slice of it) to child views **through parameters** — do not reach for a global singleton.
+- `@State` is reserved for **local UI state only** (hover, animation toggles, open/closed flags). Anything persistent or shared lives on the ViewModel.
+- `@Bindable` (Swift 5.9+) when a child needs to write back to the `@Observable` model.
+- Use `NSViewRepresentable` for AppKit bridges (see `VisualEffectBackground.swift`). For a top-level window use `NSPanel` directly, not a SwiftUI overlay.
+- Animations: `.spring(duration: 0.25, bounce: 0)` for page transitions; `.easeInOut(duration: 0.15)` for hover. Wrap state changes in `withAnimation`. Constants live in `AnimationDuration`.
+
+### GRDB
+
+- Models are `struct` and conform to `Codable, Identifiable, Equatable`.
+- Persistence in a **separate extension**:
+  ```swift
+  extension AppEntry: FetchableRecord, PersistableRecord {
+      static let databaseTableName = "appEntry"
+      enum Columns: String, ColumnExpression {
+          case bundleIdentifier, displayName, pageIndex, orderIndex, folderID, folderOrderIndex
+      }
+  }
+  ```
+- **`enum Columns: String, ColumnExpression`** is mandatory — use it for type-safe queries, never raw strings.
+- Queries via method chains: `AppEntry.order(Columns.orderIndex.ascNullsLast).fetchAll(db)`.
+- **Migrations only ADD/ALTER** — never `DROP TABLE`. Versions are `"v1"`, `"v2"`, `"v3"`. Add a new `"vN+1"` block; never edit a shipped one.
+- Foreign keys use `.setNull` on delete (e.g. removing a folder nulls `appEntry.folderID`).
+- Upsert by primary key: `app.save(db)`. For batches, loop in a single transaction.
+
+### Threading
+
+- `Task.detached` for background work (file scans, icon extraction). Always capture `[weak self]`.
+- Return to the main thread with explicit `await MainActor.run { … }` for state mutation.
+- The ViewModel is `@MainActor`. Do not call its setters from a background queue.
+- No `actor` types in this codebase — concurrency is structured around `@MainActor` + `Task.detached`.
+- `DispatchQueue.main.asyncAfter` is used only for deferred UI cosmetics (folder close delays). Don't put logic in it.
+
+### Constants
+
+- **All numbers** that aren't loop indices live in `Helpers/Constants.swift`. No inline literals.
+- Existing namespaces:
+
+  | Constant | Value |
+  |----------|-------|
+  | `Grid.columns` | 7 |
+  | `Grid.rows` | 5 |
+  | `Grid.appsPerPage` | 35 |
+  | `AnimationDuration.show` | 0.25 |
+  | `AnimationDuration.hide` | 0.20 |
+  | `LayoutMetrics.horizontalPadding` | 6% of screen width |
+  | `LayoutMetrics.iconSize` | 50% of `itemWidth` |
+  | Pinch threshold | 0.5 magnitude |
+
+- `LayoutMetrics` is computed from `GeometryReader` size — don't cache it across resize.
+
+## Testing
+
+- **Framework: swift-testing**, not XCTest. `import Testing`, decorate tests with `@Test`, assert with `#expect(…)`. If you see `XCTestCase` or `XCTAssert` anywhere — that's wrong, fix it.
+- File layout:
+  ```swift
+  import Testing
+  @testable import SuperLaunchpad
+
+  @MainActor
+  struct LaunchpadViewModelStateTests {
+      @Test func showSetsIsVisible() throws {
+          let vm = LaunchpadViewModel(database: makeTempDB())
+          vm.show()
+          #expect(vm.isVisible == true)
+      }
+  }
+  ```
+- `@MainActor` is required on test suites that touch the ViewModel.
+- Use `makeTempDB()` helper from `AppDatabaseTests.swift` for a fresh on-disk SQLite per test, cleaned up via `defer`. Do **not** share a database between tests.
+- Fixtures: small private helpers like `func app(_ id: String = "com.test.app") -> AppEntry { … }` inside the test struct. Don't build a fixture framework.
+- `throws` on the test function — propagate, don't `try?` inside the test (failures should surface).
+
+## Domain gotchas
+
+Things a new developer cannot guess from the code:
+
+- **`NSPanel` must be `.screenSaver` level** with `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`. Lower levels leave the launcher behind Dock/menubar; wrong collection behavior breaks multi-Space usage.
+- **Trackpad gestures only work via `NSEvent.addGlobalMonitorForEvents`** (and a paired local monitor for events while the app is focused). SwiftUI `.gesture(MagnifyGesture)` does **not** fire when SuperLaunchpad isn't the frontmost app — that's why the global monitor exists.
+- **An app inside a folder has `pageIndex == nil` and `orderIndex == nil`.** Its position is solely `folderID + folderOrderIndex`. Setting both at once is a bug; pick one positioning scheme.
+- **Sort display names with `localizedCaseInsensitiveCompare`**, not `<`. Otherwise unicode/locale ordering goes wrong (e.g. `é` vs `e`).
+- **`FolderEntry.id` is generated in code** (`UUID().uuidString`), not by SQLite. Newly created folders need this set before `save(db)`.
+- **System Launchpad DB at `~/.com.apple.dock.launchpad/db/db`** — read-only import on first launch via `Services/SystemLaunchpadDB.swift`. Hierarchy is `Root → Page → Folder(type=2) → FolderPage(type=3) → App`; folder titles in `groups` table. Never write to this DB.
+- **`NSHostingView` needs explicit `frame = screen.frame`** on resize when embedded in `NSPanel` — SwiftUI doesn't propagate sizing to the AppKit host automatically here.
+- **`searchText` exists on the ViewModel but is not wired.** Don't add filtering downstream of it without also building the search UI and decide on debounce/scope first.
+
+## Forbidden patterns
+
+- ❌ Force unwrap `!` outside `lazy` initializers.
+- ❌ `do/catch` that swallows errors silently — use `try?` + explicit default instead.
+- ❌ `DROP TABLE` in migrations. Ever.
+- ❌ Magic numbers inline. Add them to `Constants.swift`.
+- ❌ Duplicating state (one copy on the ViewModel, another in `@State`) without an `onChange` sync — pick one home.
+- ❌ Mutating `@Observable` ViewModel state off the main thread.
+- ❌ Hardcoded filesystem paths. Use `FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)`.
+- ❌ Inventing new persistence layers. There is one `AppDatabase` — extend it.
+
+## Known limitations / dead ends
+
+These are intentionally unimplemented. Don't half-implement them as a side effect of another task.
+
+- **Search** — `searchText` property exists, not wired. Requires a full UI before backend filtering.
+- **Drag-and-drop reorder** — not feasible inside SwiftUI `ScrollView` on macOS as of Sequoia. Several attempts have been ruled out; consult before re-attempting.
+- **Folder creation / renaming** — folders are read-only, imported once from the system DB. Adding mutation requires schema rework on `FolderEntry`.
+- **Multi-monitor** — only `NSScreen.main` is supported. Adding multi-screen requires rethinking `LaunchpadPanel` ownership.
+
+## Workflow
+
+- **Commits:** short, lowercase, imperative. Match the style in `git log` (`init`, etc.). Keep PR titles ≤ 70 chars; put detail in the body.
+- **Branches:** feature branches off `main`; PRs target `main`.
+- **CI:** `.github/workflows/release.yml` builds an unsigned `.dmg` on tag `v*` and publishes a GitHub Release. Runs on `macos-15`. To trigger: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+- **Versioning:** version comes from the git tag via `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` xcodebuild flags. Don't bump version in `project.pbxproj` manually.
+
+## Context economy — delegate to Explore
+
+**Default to spawning an `Explore` subagent for any multi-file search or codebase question.** The main agent's context is precious; the Explore subagent reads in its own context and returns a compact summary. Use it whenever you'd otherwise read more than ~2 files to answer one question.
+
+Triggers — delegate to Explore when you need to:
+
+- find where a symbol / function / type is defined or used (`grep`-style searches across the repo);
+- understand a subsystem you haven't touched yet (e.g. "how does folder import work?");
+- audit consistency across multiple files (e.g. "is `try?` used everywhere or do we have `do/catch` somewhere?");
+- locate the right place to add a new feature.
+
+Do **not** delegate when:
+
+- you already know the exact file and line range — `Read` directly;
+- the task is a single targeted edit and you have all the context;
+- the question is conceptual / architectural and already answered by this `AGENTS.md`.
+
+In Claude Code: call the `Agent` tool with `subagent_type: "Explore"` and a self-contained prompt (the subagent doesn't see the parent conversation). Specify search breadth in the prompt: `"quick"` for one targeted lookup, `"medium"` for moderate exploration, `"very thorough"` for cross-cutting audits.
+
+Pattern: short, specific prompt → compact reply (under 300 words). If you find yourself writing a long prompt explaining the whole project, you're doing it wrong — most of that context is already in this file, just point at it.
+
+## Scope discipline (for AI agents)
+
+- Do only the task asked. No drive-by refactors, no "while I'm here" cleanups, no defensive abstractions for hypothetical futures.
+- Don't add error handling for cases that can't happen. Trust internal invariants; validate only at boundaries (user input, external APIs).
+- **Default: no comments.** Add one only when the *why* is non-obvious (a workaround, a hidden constraint, a surprising invariant). Never narrate *what* the code does.
+- Don't create new `.md` files unless explicitly asked. This includes README updates, ADRs, plans, summaries.
+- For UI-affecting changes: build and run the app in Xcode, exercise the feature, and verify visually. Type-check / test pass is not enough — say so explicitly if you couldn't run it.
+- When unsure between two reasonable approaches, pick one and proceed. The user will redirect if needed; don't stall on clarifying questions in this codebase unless the task is genuinely ambiguous.

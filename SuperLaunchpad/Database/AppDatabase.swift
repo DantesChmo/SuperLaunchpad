@@ -4,12 +4,16 @@ import GRDB
 final class AppDatabase {
     private let dbQueue: DatabaseQueue
 
-    init() throws {
-        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("com.dantes.SuperLaunchpad", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-
-        let dbPath = folder.appendingPathComponent("apps.db").path
+    init(path: String? = nil) throws {
+        let dbPath: String
+        if let path {
+            dbPath = path
+        } else {
+            let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("com.dantes.SuperLaunchpad", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            dbPath = folder.appendingPathComponent("apps.db").path
+        }
         dbQueue = try DatabaseQueue(path: dbPath)
         try migrate()
     }
