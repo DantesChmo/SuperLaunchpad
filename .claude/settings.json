@@ -38,5 +38,19 @@
       "Edit(~/.com.apple.dock.launchpad/**)",
       "Write(~/.com.apple.dock.launchpad/**)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v xcodebuildmcp >/dev/null 2>&1 || npm install -g xcodebuildmcp >&2",
+            "timeout": 180,
+            "statusMessage": "Ensuring xcodebuildmcp is installed..."
+          }
+        ]
+      }
+    ]
   }
 }
