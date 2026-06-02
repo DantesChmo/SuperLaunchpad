@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Interactive Conventional Commits wizard.
+#
+# Triggered on `git commit -m "<subject>"`. Asks for a commit type via a
+# small arrow-key TUI and prepends `<type>: ` to the subject. Skipped for
+# merge/squash/amend/template commits, for messages that already match the
+# Conventional Commits format, and when stdin is not attached to a terminal
+# (GUI clients, CI).
+
+set -u
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="${2:-}"
+
+case "$COMMIT_SOURCE" in
+    merge|squash|commit|template) exit 0 ;;
+esac
+
+CONVENTIONAL_RE='^(feat|fix|infra|refactor|perf|test|docs|build|ci|chore|style|revert)(\([a-z0-9_/-]+\))?!?: .+'
+
+subject=$(grep -v '^#' "$COMMIT_MSG_FILE" | sed '/^[[:space:]]*$/d' | head -n1)
+
+[[ "$subject" =~ $CONVENTIONAL_RE ]] && exit 0
+[ -z "$subject" ] && exit 0
+
+{ exec < /dev/tty; } 2>/dev/null || exit 0
+
+TYPES=(
+    "feat       новая фича"
+    "fix        баг-фикс"
+    "infra      инфраструктура, скрипты, тулинг"
+    "refactor   рефакторинг без изменения поведения"
+    "perf       оптимизация производительности"
+    "test       только тесты"
+    "docs       документация"
+    "build      сборка, зависимости, Package.swift"
+    "ci         CI/CD пайплайны"
+    "chore      рутинные задачи"
+    "style      форматирование, без логики"
+    "revert     откат предыдущего коммита"
+)
+
+select_type() {
+    local options=("$@")
+    local count=${#options[@]}
+    local selected=0
+    local key key2 i
+
+    tput civis >&2
+    trap 'tput cnorm >&2; printf "\n" >&2; exit 130' INT TERM
+
+    draw() {
+        for i in "${!options[@]}"; do
+            if [ "$i" -eq "$selected" ]; then
+                printf "  \033[1;36m▸ %s\033[0m\n" "${options[$i]}" >&2
+            else
+                printf "    %s\n" "${options[$i]}" >&2
+            fi
+        done
+    }
+
+    printf "\033[1mВыбери тип коммита\033[0m  \033[2m(↑↓ или j/k, Enter, Esc — отмена)\033[0m\n" >&2
+    draw
+
+    while true; do
+        IFS= read -rsn1 key
+        case "$key" in
+            $'\x1b')
+                IFS= read -rsn2 -t 0.05 key2 || key2=""
+                case "$key2" in
+                    '[A') selected=$(( (selected - 1 + count) % count )) ;;
+                    '[B') selected=$(( (selected + 1) % count )) ;;
+                    '')
+                        tput cnorm >&2
+                        printf "\nОтменено.\n" >&2
+                        return 1
+                        ;;
+                esac
+                ;;
+            '') break ;;
+            k|K) selected=$(( (selected - 1 + count) % count )) ;;
+            j|J) selected=$(( (selected + 1) % count )) ;;
+        esac
+
+        tput cuu "$count" >&2
+        tput ed >&2
+        draw
+    done
+
+    tput cnorm >&2
+    printf '%s\n' "${options[$selected]}" | awk '{print $1}'
+}
+
+chosen=$(select_type "${TYPES[@]}") || exit 1
+new_subject="$chosen: $subject"
+
+tmpfile=$(mktemp)
+awk -v new="$new_subject" '
+    BEGIN { done = 0 }
+    {
+        if (!done && $0 !~ /^#/ && $0 !~ /^[[:space:]]*$/) {
+            print new
+            done = 1
+        } else {
+            print
+        }
+    }
+' "$COMMIT_MSG_FILE" > "$tmpfile" && mv "$tmpfile" "$COMMIT_MSG_FILE"
+
+printf "\033[32m✓\033[0m %s\n" "$new_subject" >&2

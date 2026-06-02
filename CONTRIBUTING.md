@@ -10,6 +10,39 @@ If you're using Claude Code, Cursor, Codex, Aider, or similar tools to work on t
 - Xcode 16+
 - Swift 5.0
 
+## Git hooks
+
+Repo-tracked hooks live in [`.githooks/`](.githooks). Activate them once after
+cloning:
+
+```bash
+./.githooks/install.sh
+```
+
+This sets `core.hooksPath` to `.githooks` for this repository only.
+
+What the hooks do:
+
+- **`prepare-commit-msg`** — when you run `git commit -m "add logs"`, a TUI
+  appears asking for a commit type (arrow keys or `j`/`k`, `Enter` to confirm,
+  `Esc` to cancel). The chosen type is prepended: `infra: add logs`. The wizard
+  is skipped if the message already follows the Conventional Commits format,
+  for `merge`/`squash`/`--amend` flows, and when there is no TTY (GUI clients,
+  CI).
+- **`commit-msg`** — validates the final subject against the Conventional
+  Commits regex and rejects commits that bypass the wizard with an invalid
+  format.
+
+Commit format:
+
+```
+<type>(<scope>): <subject>
+```
+
+Types: `feat`, `fix`, `infra`, `refactor`, `perf`, `test`, `docs`, `build`,
+`ci`, `chore`, `style`, `revert`. Append `!` for breaking changes
+(`feat!: ...`).
+
 ## Build & Test
 
 ```bash

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Validates the commit subject against Conventional Commits.
+# Safety net for paths that bypass the prepare-commit-msg wizard:
+# `git commit --amend`, GUI clients, scripted commits.
+
+set -u
+
+COMMIT_MSG_FILE="$1"
+subject=$(grep -v '^#' "$COMMIT_MSG_FILE" | sed '/^[[:space:]]*$/d' | head -n1)
+
+# Авто-сгенерированные сообщения от git
+[[ "$subject" =~ ^Merge\  ]] && exit 0
+[[ "$subject" =~ ^Revert\  ]] && exit 0
+[[ "$subject" =~ ^fixup! ]] && exit 0
+[[ "$subject" =~ ^squash! ]] && exit 0
+
+CONVENTIONAL_RE='^(feat|fix|infra|refactor|perf|test|docs|build|ci|chore|style|revert)(\([a-z0-9_/-]+\))?!?: .+'
+
+[[ "$subject" =~ $CONVENTIONAL_RE ]] && exit 0
+
+cat <<EOF >&2
+
+✗ Сообщение коммита не соответствует Conventional Commits.
+
+  Получено:  $subject
+
+  Формат:    <type>(<scope>): <subject>
+  Типы:      feat, fix, infra, refactor, perf, test, docs,
+             build, ci, chore, style, revert
+
+  Примеры:
+    feat: add login screen
+    fix(grid): correct page snap on resize
+    infra: bump GRDB to 7.2
+    refactor(viewmodel)!: drop legacy loadApps signature
+
+EOF
+
+exit 1
