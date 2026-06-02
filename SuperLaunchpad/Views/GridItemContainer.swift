@@ -2,6 +2,16 @@ import SwiftUI
 
 /// Inner container for grid items.
 /// Hover is on an explicit inner box (icon + label) with known dimensions.
+///
+/// Generic over two view types — same pattern as SwiftUI's own `Button(_:label:)`.
+/// `Icon` and `Label` get inferred from whatever the caller passes into the
+/// two `@ViewBuilder` closures.
+///
+/// Why two nested VStacks? The outer one expands to fill whatever cell size
+/// the parent gives (so each cell of the LazyVGrid stays uniform). The inner
+/// one has an EXPLICIT size — hover/tap modifiers only fire on this inner
+/// hit-box, so empty cell space around the icon doesn't trigger hover scaling.
+/// Without this, hovering an empty corner of a cell would scale the icon.
 struct GridItemContainer<Icon: View, Label: View>: View {
     let metrics: LayoutMetrics
     let onTap: () -> Void
@@ -11,16 +21,19 @@ struct GridItemContainer<Icon: View, Label: View>: View {
     @State private var isHovering = false
 
     var body: some View {
-        // Outer: no hover, takes whatever size parent gives
         VStack(spacing: 0) {
-            // Inner: explicit size, hover lives here
             VStack(spacing: 6) {
                 icon
                 label
             }
+            // Explicit inner frame = predictable hover/tap target.
+            // Height = icon + spacing + room for up to 2 label lines.
             .frame(width: metrics.iconSize, height: metrics.iconSize + 6 + metrics.labelFont * 3)
+            // 1.08× scale on hover — matches macOS Launchpad's subtle bump.
             .scaleEffect(isHovering ? 1.08 : 1.0)
             .animation(.easeInOut(duration: 0.15), value: isHovering)
+            // `onHover` is macOS-only (iOS has no cursor). Fires `true` on
+            // mouse enter and `false` on exit.
             .onHover { hovering in
                 isHovering = hovering
             }
