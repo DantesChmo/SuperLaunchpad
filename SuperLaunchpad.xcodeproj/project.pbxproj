@@ -1,0 +1,599 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		78DA2F5A2F5C79370096E8C8 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = AA000002AAAA000000000001 /* GRDB */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		78DA2E572F5C748E0096E8C8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 78DA2E402F5C748D0096E8C8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 78DA2E472F5C748D0096E8C8;
+			remoteInfo = SuperLaunchpad;
+		};
+		78DA2E612F5C748E0096E8C8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 78DA2E402F5C748D0096E8C8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 78DA2E472F5C748D0096E8C8;
+			remoteInfo = SuperLaunchpad;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		78DA2E482F5C748D0096E8C8 /* SuperLaunchpad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SuperLaunchpad.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		78DA2E562F5C748E0096E8C8 /* SuperLaunchpadTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuperLaunchpadTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		78DA2E602F5C748E0096E8C8 /* SuperLaunchpadUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuperLaunchpadUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		78052F2B2F5F764400FF8C87 /* Exceptions for "SuperLaunchpad" folder in "SuperLaunchpad" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 78DA2E472F5C748D0096E8C8 /* SuperLaunchpad */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		78DA2E4A2F5C748D0096E8C8 /* SuperLaunchpad */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				78052F2B2F5F764400FF8C87 /* Exceptions for "SuperLaunchpad" folder in "SuperLaunchpad" target */,
+			);
+			path = SuperLaunchpad;
+			sourceTree = "<group>";
+		};
+		78DA2E592F5C748E0096E8C8 /* SuperLaunchpadTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SuperLaunchpadTests;
+			sourceTree = "<group>";
+		};
+		78DA2E632F5C748E0096E8C8 /* SuperLaunchpadUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SuperLaunchpadUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		78DA2E452F5C748D0096E8C8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				78DA2F5A2F5C79370096E8C8 /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		78DA2E532F5C748E0096E8C8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		78DA2E5D2F5C748E0096E8C8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		78DA2E3F2F5C748D0096E8C8 = {
+			isa = PBXGroup;
+			children = (
+				78DA2E4A2F5C748D0096E8C8 /* SuperLaunchpad */,
+				78DA2E592F5C748E0096E8C8 /* SuperLaunchpadTests */,
+				78DA2E632F5C748E0096E8C8 /* SuperLaunchpadUITests */,
+				78DA2E492F5C748D0096E8C8 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		78DA2E492F5C748D0096E8C8 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				78DA2E482F5C748D0096E8C8 /* SuperLaunchpad.app */,
+				78DA2E562F5C748E0096E8C8 /* SuperLaunchpadTests.xctest */,
+				78DA2E602F5C748E0096E8C8 /* SuperLaunchpadUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		78DA2E472F5C748D0096E8C8 /* SuperLaunchpad */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 78DA2E6A2F5C748E0096E8C8 /* Build configuration list for PBXNativeTarget "SuperLaunchpad" */;
+			buildPhases = (
+				78DA2E442F5C748D0096E8C8 /* Sources */,
+				78DA2E452F5C748D0096E8C8 /* Frameworks */,
+				78DA2E462F5C748D0096E8C8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				78DA2E4A2F5C748D0096E8C8 /* SuperLaunchpad */,
+			);
+			name = SuperLaunchpad;
+			packageProductDependencies = (
+				AA000002AAAA000000000001 /* GRDB */,
+			);
+			productName = SuperLaunchpad;
+			productReference = 78DA2E482F5C748D0096E8C8 /* SuperLaunchpad.app */;
+			productType = "com.apple.product-type.application";
+		};
+		78DA2E552F5C748E0096E8C8 /* SuperLaunchpadTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 78DA2E6D2F5C748E0096E8C8 /* Build configuration list for PBXNativeTarget "SuperLaunchpadTests" */;
+			buildPhases = (
+				78DA2E522F5C748E0096E8C8 /* Sources */,
+				78DA2E532F5C748E0096E8C8 /* Frameworks */,
+				78DA2E542F5C748E0096E8C8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				78DA2E582F5C748E0096E8C8 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				78DA2E592F5C748E0096E8C8 /* SuperLaunchpadTests */,
+			);
+			name = SuperLaunchpadTests;
+			packageProductDependencies = (
+			);
+			productName = SuperLaunchpadTests;
+			productReference = 78DA2E562F5C748E0096E8C8 /* SuperLaunchpadTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		78DA2E5F2F5C748E0096E8C8 /* SuperLaunchpadUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 78DA2E702F5C748E0096E8C8 /* Build configuration list for PBXNativeTarget "SuperLaunchpadUITests" */;
+			buildPhases = (
+				78DA2E5C2F5C748E0096E8C8 /* Sources */,
+				78DA2E5D2F5C748E0096E8C8 /* Frameworks */,
+				78DA2E5E2F5C748E0096E8C8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				78DA2E622F5C748E0096E8C8 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				78DA2E632F5C748E0096E8C8 /* SuperLaunchpadUITests */,
+			);
+			name = SuperLaunchpadUITests;
+			packageProductDependencies = (
+			);
+			productName = SuperLaunchpadUITests;
+			productReference = 78DA2E602F5C748E0096E8C8 /* SuperLaunchpadUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		78DA2E402F5C748D0096E8C8 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					78DA2E472F5C748D0096E8C8 = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					78DA2E552F5C748E0096E8C8 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 78DA2E472F5C748D0096E8C8;
+					};
+					78DA2E5F2F5C748E0096E8C8 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 78DA2E472F5C748D0096E8C8;
+					};
+				};
+			};
+			buildConfigurationList = 78DA2E432F5C748D0096E8C8 /* Build configuration list for PBXProject "SuperLaunchpad" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 78DA2E3F2F5C748D0096E8C8;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AA000001AAAA000000000001 /* XCRemoteSwiftPackageReference "GRDB" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 78DA2E492F5C748D0096E8C8 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				78DA2E472F5C748D0096E8C8 /* SuperLaunchpad */,
+				78DA2E552F5C748E0096E8C8 /* SuperLaunchpadTests */,
+				78DA2E5F2F5C748E0096E8C8 /* SuperLaunchpadUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		78DA2E462F5C748D0096E8C8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		78DA2E542F5C748E0096E8C8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		78DA2E5E2F5C748E0096E8C8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		78DA2E442F5C748D0096E8C8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		78DA2E522F5C748E0096E8C8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		78DA2E5C2F5C748E0096E8C8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		78DA2E582F5C748E0096E8C8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 78DA2E472F5C748D0096E8C8 /* SuperLaunchpad */;
+			targetProxy = 78DA2E572F5C748E0096E8C8 /* PBXContainerItemProxy */;
+		};
+		78DA2E622F5C748E0096E8C8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 78DA2E472F5C748D0096E8C8 /* SuperLaunchpad */;
+			targetProxy = 78DA2E612F5C748E0096E8C8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		78DA2E682F5C748E0096E8C8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = KHDQ5WLJ79;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		78DA2E692F5C748E0096E8C8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = KHDQ5WLJ79;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.4;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		78DA2E6B2F5C748E0096E8C8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SuperLaunchpad/SuperLaunchpad.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KHDQ5WLJ79;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SuperLaunchpad/Info.plist;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dantes.SuperLaunchpad;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		78DA2E6C2F5C748E0096E8C8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SuperLaunchpad/SuperLaunchpad.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KHDQ5WLJ79;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SuperLaunchpad/Info.plist;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dantes.SuperLaunchpad;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		78DA2E6E2F5C748E0096E8C8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KHDQ5WLJ79;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dantes.SuperLaunchpadTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SuperLaunchpad.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SuperLaunchpad";
+			};
+			name = Debug;
+		};
+		78DA2E6F2F5C748E0096E8C8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KHDQ5WLJ79;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dantes.SuperLaunchpadTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SuperLaunchpad.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SuperLaunchpad";
+			};
+			name = Release;
+		};
+		78DA2E712F5C748E0096E8C8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KHDQ5WLJ79;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dantes.SuperLaunchpadUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = SuperLaunchpad;
+			};
+			name = Debug;
+		};
+		78DA2E722F5C748E0096E8C8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KHDQ5WLJ79;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dantes.SuperLaunchpadUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = SuperLaunchpad;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		78DA2E432F5C748D0096E8C8 /* Build configuration list for PBXProject "SuperLaunchpad" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				78DA2E682F5C748E0096E8C8 /* Debug */,
+				78DA2E692F5C748E0096E8C8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		78DA2E6A2F5C748E0096E8C8 /* Build configuration list for PBXNativeTarget "SuperLaunchpad" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				78DA2E6B2F5C748E0096E8C8 /* Debug */,
+				78DA2E6C2F5C748E0096E8C8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		78DA2E6D2F5C748E0096E8C8 /* Build configuration list for PBXNativeTarget "SuperLaunchpadTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				78DA2E6E2F5C748E0096E8C8 /* Debug */,
+				78DA2E6F2F5C748E0096E8C8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		78DA2E702F5C748E0096E8C8 /* Build configuration list for PBXNativeTarget "SuperLaunchpadUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				78DA2E712F5C748E0096E8C8 /* Debug */,
+				78DA2E722F5C748E0096E8C8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA000001AAAA000000000001 /* XCRemoteSwiftPackageReference "GRDB" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA000002AAAA000000000001 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA000001AAAA000000000001 /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 78DA2E402F5C748D0096E8C8 /* Project object */;
+}
