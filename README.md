@@ -1,5 +1,12 @@
 # SuperLaunchpad
 
+[![Latest release](https://img.shields.io/github/v/release/DantesChmo/SuperLaunchpad?display_name=tag&sort=semver&logo=github)](https://github.com/DantesChmo/SuperLaunchpad/releases/latest)
+[![Release build](https://img.shields.io/github/actions/workflow/status/DantesChmo/SuperLaunchpad/release.yml?label=release%20build)](https://github.com/DantesChmo/SuperLaunchpad/actions/workflows/release.yml)
+[![Coverage](https://codecov.io/gh/DantesChmo/SuperLaunchpad/branch/main/graph/badge.svg)](https://codecov.io/gh/DantesChmo/SuperLaunchpad)
+[![Downloads](https://img.shields.io/github/downloads/DantesChmo/SuperLaunchpad/total?logo=github)](https://github.com/DantesChmo/SuperLaunchpad/releases)
+[![Platform](https://img.shields.io/badge/macOS-15.4%2B-blue?logo=apple)](https://www.apple.com/macos/)
+[![Swift](https://img.shields.io/badge/Swift-5.0-orange?logo=swift)](https://swift.org)
+
 A macOS Launchpad clone — a fullscreen app launcher with a grid layout, paging, trackpad gestures, and ordering imported from the system Launchpad.
 
 Built as a replacement for the system Launchpad removed in macOS 26.
