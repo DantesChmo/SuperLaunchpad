@@ -2,6 +2,8 @@
 
 [![Latest release](https://img.shields.io/github/v/release/DantesChmo/SuperLaunchpad?display_name=tag&sort=semver&logo=github)](https://github.com/DantesChmo/SuperLaunchpad/releases/latest)
 [![Release build](https://img.shields.io/github/actions/workflow/status/DantesChmo/SuperLaunchpad/release.yml?label=release%20build)](https://github.com/DantesChmo/SuperLaunchpad/actions/workflows/release.yml)
+[![Unit tests](https://img.shields.io/github/actions/workflow/status/DantesChmo/SuperLaunchpad/ci.yml?label=unit%20tests&branch=main)](https://github.com/DantesChmo/SuperLaunchpad/actions/workflows/ci.yml)
+[![UI tests](https://img.shields.io/github/actions/workflow/status/DantesChmo/SuperLaunchpad/ui-tests.yml?label=UI%20tests&branch=main)](https://github.com/DantesChmo/SuperLaunchpad/actions/workflows/ui-tests.yml)
 [![Coverage](https://codecov.io/gh/DantesChmo/SuperLaunchpad/branch/main/graph/badge.svg)](https://codecov.io/gh/DantesChmo/SuperLaunchpad)
 [![Downloads](https://img.shields.io/github/downloads/DantesChmo/SuperLaunchpad/total?logo=github)](https://github.com/DantesChmo/SuperLaunchpad/releases)
 [![Platform](https://img.shields.io/badge/macOS-15.4%2B-blue?logo=apple)](https://www.apple.com/macos/)

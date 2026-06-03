@@ -1,0 +1,54 @@
+name: UI tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ui-tests:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+            ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved', '**/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Run UI tests (XCUITest)
+        if: hashFiles('SuperLaunchpadUITests/**/*.swift') != ''
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -project SuperLaunchpad.xcodeproj \
+            -scheme SuperLaunchpad \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            -only-testing:SuperLaunchpadUITests \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results
+          path: |
+            build/Logs/Test/*.xcresult
+          retention-days: 14
+          if-no-files-found: ignore

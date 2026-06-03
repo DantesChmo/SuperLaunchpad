@@ -15,6 +15,12 @@ Instructions for AI coding agents (Claude Code, Cursor, Codex, Aider, Continue, 
 
 ## Build, run, test
 
+**Prefer the `xcodebuildmcp` MCP tools over raw `xcodebuild` shell calls.** When available, build / test / coverage / simulator / device operations should route through `mcp__xcodebuildmcp__*` (e.g. `session_show_defaults`, `build_mac`, `test_mac`, `get_coverage_report`). Before the first build/test in a session, call `session_show_defaults` to verify project/scheme/destination — don't assume. Fall back to raw `xcodebuild` only when a specific capability isn't exposed by MCP, and say so explicitly.
+
+The project ships an `.mcp.json` that enables the `macos` workflow (plus `simulator`, `ui-automation`, `debugging`, `coverage`, etc.) — so `build_mac` / `test_mac` are available out of the box. Requires `xcodebuildmcp` installed locally. If the macOS tools aren't visible, restart Claude Code (MCP servers load at session start).
+
+The raw commands below remain valid for CI, scripts, and humans:
+
 ```bash
 # build
 xcodebuild -project SuperLaunchpad.xcodeproj -scheme SuperLaunchpad build
@@ -182,6 +188,7 @@ Things a new developer cannot guess from the code:
 - ❌ Mutating `@Observable` ViewModel state off the main thread.
 - ❌ Hardcoded filesystem paths. Use `FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)`.
 - ❌ Inventing new persistence layers. There is one `AppDatabase` — extend it.
+- ❌ Reaching for `xcodebuild` via Bash when an `xcodebuildmcp` tool covers the task. See "Build, run, test".
 
 ## Known limitations / dead ends
 

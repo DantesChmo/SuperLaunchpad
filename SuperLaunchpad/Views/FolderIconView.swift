@@ -26,6 +26,8 @@ struct FolderIconView: View {
                 .multilineTextAlignment(.center)
                 .frame(width: metrics.labelWidth)
         }
+        .accessibilityIdentifier("folder-icon")
+        .accessibilityLabel(folder.title)
     }
 
     private var folderIcon: some View {

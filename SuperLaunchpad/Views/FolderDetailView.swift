@@ -99,6 +99,8 @@ struct FolderDetailView: View {
         // (in LaunchpadView) should close it.
         .onTapGesture {
         }
+        .accessibilityIdentifier("folder-detail")
+        .accessibilityLabel(folder.title)
     }
 
     private var folderGridHeight: CGFloat {

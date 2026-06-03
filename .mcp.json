@@ -1,3 +1,12 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "xcodebuildmcp": {
+      "type": "stdio",
+      "command": "xcodebuildmcp",
+      "args": ["mcp"],
+      "env": {
+        "XCODEBUILDMCP_ENABLED_WORKFLOWS": "macos,simulator,simulator-management,ui-automation,debugging,coverage,session-management,project-discovery,utilities,xcode-ide,workflow-discovery,swift-package"
+      }
+    }
+  }
 }

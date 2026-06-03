@@ -41,8 +41,8 @@ struct LaunchpadOrdering {
 
 final class SystemLaunchpadDB {
 
-    static func readOrdering() -> LaunchpadOrdering? {
-        guard let dbPath = systemDBPath(),
+    static func readOrdering(dbPath overridePath: String? = nil) -> LaunchpadOrdering? {
+        guard let dbPath = overridePath ?? systemDBPath(),
               FileManager.default.fileExists(atPath: dbPath) else {
             return nil
         }

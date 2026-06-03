@@ -1,4 +1,4 @@
-name: CI
+name: Unit tests
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  unit-tests:
     runs-on: macos-15
     timeout-minutes: 30
 
@@ -39,21 +39,6 @@ jobs:
             -derivedDataPath build \
             -only-testing:SuperLaunchpadTests \
             -enableCodeCoverage YES \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
-
-      - name: Run UI tests (XCUITest)
-        if: hashFiles('SuperLaunchpadUITests/**/*.swift') != ''
-        run: |
-          set -euo pipefail
-          xcodebuild test \
-            -project SuperLaunchpad.xcodeproj \
-            -scheme SuperLaunchpad \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath build \
-            -only-testing:SuperLaunchpadUITests \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO

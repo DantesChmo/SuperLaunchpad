@@ -48,4 +48,34 @@ final class SuperLaunchpadUITests: XCTestCase {
             "Expected at least one app-icon in the grid."
         )
     }
+
+    @MainActor
+    func testTappingFolderOpensFolderDetail() throws {
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+
+        // Folders only exist if the system Launchpad DB was imported (first
+        // launch) or apps were assigned to folders by hand. On a fresh CI
+        // box `/Applications` is mostly system apps with no folder data, so
+        // the launcher may have zero folders — skip rather than fail in
+        // that environment.
+        let folders = app.buttons.matching(identifier: "folder-icon")
+        guard folders.firstMatch.waitForExistence(timeout: 3) else {
+            throw XCTSkip("No folders present — system DB had no folder import.")
+        }
+
+        folders.firstMatch.tap()
+
+        let detail = app.descendants(matching: .any)
+            .matching(identifier: "folder-detail").firstMatch
+        XCTAssertTrue(
+            detail.waitForExistence(timeout: 2),
+            "Folder detail did not appear after tapping a folder."
+        )
+
+        let attachment = XCTAttachment(screenshot: window.screenshot())
+        attachment.name = "folder-detail-open"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
 }
