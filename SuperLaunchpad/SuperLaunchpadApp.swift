@@ -75,6 +75,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         gestureMonitor.start()
 
+        // UI tests launch with `-UITestMode YES`. The launcher panel is normally
+        // hidden until the user pinches or clicks the menu-bar item, neither of
+        // which XCUITest can drive reliably on a headless CI runner. Show the
+        // panel immediately so `app.windows.firstMatch` resolves.
+        if UserDefaults.standard.bool(forKey: "UITestMode") {
+            panel.showPanel()
+        }
+
         // SwiftUI views can't reach `panel.hidePanel()` directly without coupling
         // (the panel is an AppKit object far up the ownership tree). A named
         // notification — `.hideLaunchpad` declared at the bottom of LaunchpadView.swift —
