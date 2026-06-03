@@ -16,8 +16,23 @@ The repo's source of truth for AI agents is [`AGENTS.md`](../AGENTS.md). Tick ex
 
 The pre-push hook prints a drift report. If it warned, address it here before merging.
 
-## Test plan
+## Tests
 
-- [ ] `xcodebuild -project SuperLaunchpad.xcodeproj -scheme SuperLaunchpad build` succeeds
-- [ ] `xcodebuild -project SuperLaunchpad.xcodeproj -scheme SuperLaunchpad test` passes
-- [ ] For UI changes: opened the project in Xcode, ran (⌘R), and verified the affected screens/interactions visually
+- [ ] Unit tests added/updated in `SuperLaunchpadTests/` for the changed behaviour
+- [ ] UI test added/updated in `SuperLaunchpadUITests/` (only if a new user-observable flow was introduced)
+- [ ] OR: no test added because — <!-- explain (cosmetic / infra / etc.) -->
+
+## Regression
+
+- [ ] `xcodebuild ... build` succeeds locally
+- [ ] `xcodebuild ... test` passes locally
+- [ ] Ran `/regression-check` in Claude Code and the report is clean (for non-trivial changes)
+- [ ] For UI changes: opened the project in Xcode (⌘R) and verified the affected flows visually
+
+## Manual verification checklist (UI changes only)
+
+<!-- 3–5 subjective items the test suite can't capture: animation feel, hover timing, focus order, VoiceOver narrative. Delete this block for non-UI PRs. -->
+
+-
+-
+-

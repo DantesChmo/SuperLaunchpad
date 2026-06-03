@@ -28,7 +28,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
-      - name: Run tests with coverage
+      - name: Run unit tests with coverage
         run: |
           set -euo pipefail
           xcodebuild test \
@@ -39,6 +39,21 @@ jobs:
             -derivedDataPath build \
             -only-testing:SuperLaunchpadTests \
             -enableCodeCoverage YES \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run UI tests (XCUITest)
+        if: hashFiles('SuperLaunchpadUITests/**/*.swift') != ''
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -project SuperLaunchpad.xcodeproj \
+            -scheme SuperLaunchpad \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            -only-testing:SuperLaunchpadUITests \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO

@@ -26,7 +26,9 @@ Skills available to you (load via the `Skill` tool *before* forming the design �
 - `macos-desktop-architect` — anything window/panel/lifecycle/event/sandbox specific to macOS. Load before reasoning about window-server, gesture, Spaces, Stage Manager, NSPanel/NSWindow, or AppKit↔SwiftUI bridging.
 - `swift-engineer` — when the architectural call hinges on a Swift-language idiom (actor isolation, Observation, generics, error-handling shape).
 - `ui-ux-designer` — when the design has a visible UI component you need to sanity-check against HIG, motion, and accessibility.
+- `qa-engineer` — when designing the test strategy for a new feature: what to cover, which layer (unit / XCUI / manual), edge cases for macOS GUI, regression checklist.
 
 Out of scope (route elsewhere):
 - Straightforward implementation against a clear spec → `dev`
 - Mechanical renames/moves/formatting → `refactor`
+- Executing a regression pass and reporting state → `qa-runner`

@@ -24,8 +24,10 @@ Skills available to you (load via the `Skill` tool when your task hits one of th
 - `swift-engineer` — before writing non-trivial Swift (concurrency choices, error-handling, Observation, generics). Pre-loads the idiom checklist so you don't re-derive it from this project's `AGENTS.md`.
 - `macos-desktop-architect` — when the task touches `NSPanel`/`NSWindow`, AppKit↔SwiftUI bridges, gestures, or system integration. Pre-loads the architectural reference even when the task is implementation-level.
 - `ui-ux-designer` — before changing visual or interaction behaviour. Pre-loads HIG + accessibility + motion checklist.
+- `qa-engineer` — before writing or expanding tests. Pre-loads the test-matrix design heuristic, swift-testing idioms, XCUITest patterns, anti-patterns to avoid.
 
 Out of scope (route elsewhere):
 - Architectural changes, new modules, cross-cutting refactors → suggest `architect`
 - Mechanical renames/moves/formatting across many files → suggest `refactor`
 - Murky bugs without a clear hypothesis → suggest `architect`
+- Running a regression pass and reporting state → suggest `qa-runner` (read-only on production code)

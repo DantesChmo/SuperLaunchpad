@@ -25,6 +25,8 @@ struct AppIconView: View {
                 .multilineTextAlignment(.center)
                 .frame(width: metrics.labelWidth)
         }
+        .accessibilityIdentifier("app-icon")
+        .accessibilityLabel(app.displayName)
     }
 
     // `@ViewBuilder` lets us return different concrete view types from the

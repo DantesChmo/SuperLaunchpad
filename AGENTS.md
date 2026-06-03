@@ -224,11 +224,12 @@ Pattern: short, specific prompt → compact reply (under 300 words). If you find
 
 This repo defines three project-scoped subagents in `.claude/agents/`:
 
-| Subagent    | Model  | Use for                                                            |
-| ----------- | ------ | ------------------------------------------------------------------ |
-| `dev`       | Sonnet | Feature implementation against a clear spec, clear-cause bug fixes, tests, UI wiring |
-| `architect` | Opus   | Architecture, cross-cutting refactors, murky bugs, design reviews  |
-| `refactor`  | Haiku  | Mechanical transformations with an unambiguous rule                |
+| Subagent     | Model  | Use for                                                            |
+| ------------ | ------ | ------------------------------------------------------------------ |
+| `dev`        | Sonnet | Feature implementation against a clear spec, clear-cause bug fixes, tests, UI wiring |
+| `architect`  | Opus   | Architecture, cross-cutting refactors, murky bugs, design reviews  |
+| `refactor`   | Haiku  | Mechanical transformations with an unambiguous rule                |
+| `qa-runner`  | Sonnet | Execute regression: run tests, drive the app, capture screenshots, report state. Read-only on production code. |
 
 When the user's request fits one of these shapes, delegate via the `Agent` tool with the matching `subagent_type` rather than doing the work inline in the main session. Each agent's own `description` and system prompt hold the precise scope; this table is just the index.
 
@@ -243,6 +244,7 @@ Beyond subagents, this repo defines three project-scoped **skills** in `.claude/
 | `macos-desktop-architect` | Designing or debugging anything window/event/system-integration | NSPanel/NSWindow levels & collectionBehavior, AppKit↔SwiftUI bridges, Spaces/Stage Manager, global event monitors, threading, sandbox/entitlements, performance |
 | `swift-engineer`          | Writing or reviewing non-trivial Swift code                    | Modern idioms (Swift Concurrency, `@Observable`, generics, error-handling), swift-testing, anti-pattern list |
 | `ui-ux-designer`          | Building or critiquing a visible UI surface                    | macOS HIG, hierarchy & typography, motion duration ladder, accessibility (VoiceOver/Dynamic Type/contrast), Nielsen/Fitts/Hick heuristics |
+| `qa-engineer`             | Writing or reviewing tests, designing a test matrix, auditing coverage | Test pyramid for macOS GUI, 5-bucket scenario matrix (happy / sad / edge / state-transition / environmental), swift-testing in depth (parameterised, traits, `withKnownIssue`, `confirmation`), XCUITest for macOS, edge-case checklist, anti-patterns |
 
 Rules of thumb:
 
@@ -251,7 +253,27 @@ Rules of thumb:
 - **Skills and `AGENTS.md` complement each other.** This file holds *project-specific* conventions (the GRDB column enum rule, the `try?` style, the `NSPanel` level used here). Skills hold *domain knowledge* applicable across macOS Swift projects. Project rules override skill defaults when they conflict.
 - **Don't load all three by default.** Pick the one that matches the task; loading every skill burns context for nothing.
 
-Subagents `architect`, `dev`, and `refactor` each list the skills they should consider in their own system prompts (`.claude/agents/*.md`). The main session also has access — invoke `Skill` directly when the task warrants it.
+Subagents `architect`, `dev`, `refactor`, and `qa-runner` each list the skills they should consider in their own system prompts (`.claude/agents/*.md`). The main session also has access — invoke `Skill` directly when the task warrants it.
+
+## QA workflow — quality as a continuous concern
+
+Quality is not a phase. The setup below keeps the app working *at every stage* of development, separates "writing tests" from "running them", and gives an on-demand view of overall test health.
+
+| Layer | Mechanism | When |
+|---|---|---|
+| **Unit tests** (swift-testing) | `SuperLaunchpadTests/`, `xcodebuild ... test`, CI on PR | Every feature / bug fix. Designed via `qa-engineer` skill, written by `dev`. |
+| **Functional tests** (XCUITest) | `SuperLaunchpadUITests/`, runs on CI when files present | One stable test per user-observable core flow. See `SuperLaunchpadUITests/README.md` for the contract. |
+| **Regression pass** | `/regression-check` slash command → `qa-runner` subagent | Before merge of a non-trivial change. Builds, runs all tests, drives the app, captures screenshots, reports. |
+| **Coverage gate** | `.github/workflows/ci.yml` → Codecov | Automatic on every PR. |
+| **Drift / health snapshot** | `/quality-report` slash command | On-demand. Disabled tests, files without test pairs, recently churned tests. |
+| **Pre-push nudge** | `.githooks/pre-push` "code without tests" check | On `git push`. Soft warning when new production code lands without test changes. |
+
+Rules of thumb:
+
+- **`qa-engineer` is the knowledge; `qa-runner` is the worker.** A `dev` agent loads `qa-engineer` before writing tests; the user invokes `qa-runner` (via `/regression-check`) to verify the app currently works.
+- **`qa-runner` does not write or edit code.** It runs, observes, reports. Bugs it finds go to `dev`; design gaps go to `architect`.
+- **Pre-push warnings are advisory.** The "new code without tests" check has false positives (cosmetic Views/ tweaks don't need new tests) — it's a question, not a gate.
+- **`/quality-report` is read-only.** It's a snapshot you read; nothing is edited.
 
 ## Keeping AGENTS.md in sync — when to suggest `/sync-agents-md`
 

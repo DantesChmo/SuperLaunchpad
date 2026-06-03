@@ -9,20 +9,24 @@ If you're using Claude Code, Cursor, Codex, Aider, or similar tools to work on t
 This repo defines three Claude Code subagents in [`.claude/agents/`](.claude/agents)
 so work gets routed to the right model + thinking depth automatically:
 
-| Subagent    | Model  | Use for                                                            |
-| ----------- | ------ | ------------------------------------------------------------------ |
-| `dev`       | Sonnet | Everyday features, clear-cause bug fixes, tests, UI wiring         |
-| `architect` | Opus   | Architecture, cross-cutting refactors, murky bugs, design reviews  |
-| `refactor`  | Haiku  | Mechanical transformations with an unambiguous rule                |
+| Subagent     | Model  | Use for                                                            |
+| ------------ | ------ | ------------------------------------------------------------------ |
+| `dev`        | Sonnet | Everyday features, clear-cause bug fixes, tests, UI wiring         |
+| `architect`  | Opus   | Architecture, cross-cutting refactors, murky bugs, design reviews  |
+| `refactor`   | Haiku  | Mechanical transformations with an unambiguous rule                |
+| `qa-runner`  | Sonnet | Run regression: tests + drive app + screenshots + report. Read-only on production code. |
 
 The main Claude Code session will delegate to these automatically based on
 their `description`. For explicit routing, use the slash commands in
 [`.claude/commands/`](.claude/commands):
 
 ```
-/dev      <task>   — delegates to dev (Sonnet)
-/arch     <task>   — delegates to architect (Opus)
-/refactor <rule>   — delegates to refactor (Haiku)
+/dev                <task>      — delegates to dev (Sonnet)
+/arch               <task>      — delegates to architect (Opus)
+/refactor           <rule>      — delegates to refactor (Haiku)
+/regression-check   [checklist] — delegates to qa-runner (Sonnet)
+/quality-report     [area]      — read-only test-health snapshot
+/sync-agents-md     [section]   — propose AGENTS.md patch
 ```
 
 ### Claude Code skills
@@ -37,10 +41,35 @@ checklist; it's not a separate worker. Use *before* writing the code, not after.
 | `macos-desktop-architect` | Designing or debugging window / event / system-integration code (NSPanel, AppKit↔SwiftUI bridges, Spaces, global event monitors) |
 | `swift-engineer`          | Writing or reviewing non-trivial Swift (concurrency, Observation, generics, error handling, swift-testing) |
 | `ui-ux-designer`          | Building or critiquing a visible UI surface (HIG, motion, accessibility, Nielsen/Fitts/Hick heuristics) |
+| `qa-engineer`             | Writing or expanding tests, designing a test matrix, auditing coverage (test pyramid, swift-testing in depth, XCUITest, macOS edge cases) |
 
 Subagents are wired to consider these skills automatically; the main session can
 also invoke `Skill` directly. Skills hold *domain knowledge*; `AGENTS.md` holds
 *project-specific conventions*. When they conflict, the project wins.
+
+### Keeping the app working — QA workflow
+
+Quality is treated as a continuous concern, not a release-time phase. The setup:
+
+- **Unit tests** (swift-testing) live in `SuperLaunchpadTests/`. Required for every feature / bug fix. Designed with the `qa-engineer` skill, written by `dev`.
+- **Functional UI tests** (XCUITest) live in `SuperLaunchpadUITests/`. One stable test per user-observable core flow. See `SuperLaunchpadUITests/README.md` for the contract (accessibility identifiers, no `Thread.sleep`).
+- **CI on every PR** (`.github/workflows/ci.yml`) runs unit tests + XCUITest + uploads coverage to Codecov.
+- **Pre-push hook** prints a soft warning when new production code lands without test changes (false-positive-friendly — cosmetic Views/ tweaks can be ignored).
+- **`/regression-check`** runs a full pass: build → unit tests → XCUITest → drive the app through core flows → screenshots → structured report. Use before merging non-trivial changes. Delegates to `qa-runner` — read-only on production code.
+- **`/quality-report`** is an on-demand snapshot: disabled tests, files without test pairs, recently churned tests. Read-only analysis.
+
+Typical flow on a feature branch:
+
+```
+# while implementing:
+# - dev agent loads qa-engineer skill, writes unit tests as part of the feature
+
+git push                # pre-push warns if production code changed but tests didn't
+# in Claude Code (before opening PR):
+/regression-check       # qa-runner verifies the app currently works
+/sync-agents-md         # propose AGENTS.md updates if structure drifted
+# open PR — CI runs unit + UI tests on the diff
+```
 
 ### Keeping AGENTS.md accurate
 
@@ -94,14 +123,14 @@ What the hooks do:
 - **`commit-msg`** — validates the final subject against the Conventional
   Commits regex and rejects commits that bypass the wizard with an invalid
   format.
-- **`pre-push`** — non-blocking drift check for `AGENTS.md`. Warns when the
-  branch adds/removes Swift files in directories listed under "Project map",
-  changes `Helpers/Constants.swift`, touches architecturally significant
-  files (`ViewModels/`, `Database/`, `Window/`, `Services/`,
-  `SuperLaunchpadApp.swift`), or introduces a pattern banned in
-  "Forbidden patterns" (`XCTest` idioms, `DROP TABLE`, `actor` types). The
-  warning ends with `→ /sync-agents-md` — run that in Claude Code to get a
-  concrete patch proposal. Use `git push --no-verify` to skip (discouraged).
+- **`pre-push`** — non-blocking drift check. Warns when the branch:
+  - adds/removes Swift files in directories listed under "Project map",
+  - changes `Helpers/Constants.swift`,
+  - touches architecturally significant files (`ViewModels/`, `Database/`, `Window/`, `Services/`, `SuperLaunchpadApp.swift`),
+  - introduces a pattern banned in "Forbidden patterns" (`XCTest` in `SuperLaunchpadTests/`, `DROP TABLE`, `actor` types),
+  - adds new production code in `Models/Services/Database/ViewModels/Helpers` without corresponding changes in `SuperLaunchpadTests/` or `SuperLaunchpadUITests/`.
+
+  The warning ends with `→ /sync-agents-md` or a nudge to load the `qa-engineer` skill. Use `git push --no-verify` to skip (discouraged).
 
 Commit format:
 

@@ -69,7 +69,21 @@ if echo "$CHANGED" | grep -qE "$ARCH_RE"; then
     WARN+=("    Проверь актуальность секций 'Architecture in 60 seconds', 'Project map', 'Domain gotchas' в AGENTS.md.")
 fi
 
-# 5) Удалены файлы из Project map → таблица почти точно устарела
+# 5) Новый production-код без изменений в SuperLaunchpadTests/
+PROD_TESTABLE_RE='^SuperLaunchpad/(Models|Services|Database|ViewModels|Helpers)/.*\.swift$'
+TEST_RE='^SuperLaunchpad(Tests|UITests)/.*\.swift$'
+NEW_PROD=$(git diff --name-only --diff-filter=A "$RANGE" 2>/dev/null | grep -E "$PROD_TESTABLE_RE" | grep -vE 'Constants\.swift$|NSImageExtensions\.swift$' || true)
+TESTS_TOUCHED=$(git diff --name-only "$RANGE" 2>/dev/null | grep -E "$TEST_RE" || true)
+if [[ -n "$NEW_PROD" && -z "$TESTS_TOUCHED" ]]; then
+    WARN+=("Добавлен новый production-код без изменений в тестах:")
+    while IFS= read -r f; do
+        WARN+=("    + $f")
+    done <<< "$NEW_PROD"
+    WARN+=("    Если правки чисто декоративные/инфраструктурные — пропусти.")
+    WARN+=("    Иначе: загрузи qa-engineer skill, спроектируй матрицу, добавь @Test на наблюдаемое поведение.")
+fi
+
+# 6) Удалены файлы из Project map → таблица почти точно устарела
 DELETED=$(git diff --name-only --diff-filter=D "$RANGE" 2>/dev/null | grep -E "$TRACKED_DIRS_RE" || true)
 if [[ -n "$DELETED" ]]; then
     WARN+=("Удалены файлы из каталогов Project map — соответствующие строки в таблице AGENTS.md нужно убрать:")
