@@ -27,6 +27,10 @@ struct AppIconView: View {
         }
         .accessibilityIdentifier("app-icon")
         .accessibilityLabel(app.displayName)
+        // `GridItemContainer` is a `VStack` + `onTapGesture`, not a `Button`,
+        // so XCUI's `app.buttons` query wouldn't match it without this trait.
+        // Adding `.isButton` also gives VoiceOver the correct semantic role.
+        .accessibilityAddTraits(.isButton)
     }
 
     // `@ViewBuilder` lets us return different concrete view types from the

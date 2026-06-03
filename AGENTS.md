@@ -15,9 +15,13 @@ Instructions for AI coding agents (Claude Code, Cursor, Codex, Aider, Continue, 
 
 ## Build, run, test
 
-**Prefer the `xcodebuildmcp` MCP tools over raw `xcodebuild` shell calls.** When available, build / test / coverage / simulator / device operations should route through `mcp__xcodebuildmcp__*` (e.g. `session_show_defaults`, `build_mac`, `test_mac`, `get_coverage_report`). Before the first build/test in a session, call `session_show_defaults` to verify project/scheme/destination — don't assume. Fall back to raw `xcodebuild` only when a specific capability isn't exposed by MCP, and say so explicitly.
+**HARD RULE — Always use `xcodebuildmcp` MCP tools. Never run `xcodebuild` via Bash by default.** All build / test / coverage / simulator / device operations MUST route through `mcp__xcodebuildmcp__*` (e.g. `session_show_defaults`, `build_macos`, `test_macos`, `build_run_macos`, `get_coverage_report`). Before the first build/test in a session, call `session_show_defaults` to verify project/scheme/destination — don't assume.
 
-The project ships an `.mcp.json` that enables the `macos` workflow (plus `simulator`, `ui-automation`, `debugging`, `coverage`, etc.) — so `build_mac` / `test_mac` are available out of the box. Requires `xcodebuildmcp` installed locally. If the macOS tools aren't visible, restart Claude Code (MCP servers load at session start).
+**The only allowed fallback to raw `xcodebuild`** is when the MCP server itself fails to start (binary missing, server crashes, tools not exposed at all). In that case: state explicitly that MCP is unavailable, then use `xcodebuild`. A missing _individual_ capability is not a fallback trigger — ask the user instead.
+
+The project ships an `.mcp.json` that enables the `macos` workflow (plus `simulator`, `ui-automation`, `debugging`, `coverage`, etc.) — so `build_macos` / `test_macos` / `build_run_macos` are available out of the box. Requires `xcodebuildmcp` installed locally (`brew install getsentry/xcodebuildmcp/xcodebuildmcp`).
+
+If macOS tools aren't visible after a restart, check `~/.claude.json > projects > <repo> > mcpServers.xcodebuildmcp.env` — a per-user override there can shadow the repo's `.mcp.json`. The env must include `XCODEBUILDMCP_ENABLED_WORKFLOWS` with `macos` in the list, otherwise only the simulator workflow tools register and the macOS ones silently disappear.
 
 The raw commands below remain valid for CI, scripts, and humans:
 
@@ -188,7 +192,7 @@ Things a new developer cannot guess from the code:
 - ❌ Mutating `@Observable` ViewModel state off the main thread.
 - ❌ Hardcoded filesystem paths. Use `FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)`.
 - ❌ Inventing new persistence layers. There is one `AppDatabase` — extend it.
-- ❌ Reaching for `xcodebuild` via Bash when an `xcodebuildmcp` tool covers the task. See "Build, run, test".
+- ❌ Running `xcodebuild` via Bash. Hard rule — use `xcodebuildmcp` MCP tools. Only fall back if the MCP server itself fails to start. See "Build, run, test".
 
 ## Known limitations / dead ends
 

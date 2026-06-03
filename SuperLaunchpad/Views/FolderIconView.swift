@@ -28,6 +28,7 @@ struct FolderIconView: View {
         }
         .accessibilityIdentifier("folder-icon")
         .accessibilityLabel(folder.title)
+        .accessibilityAddTraits(.isButton)
     }
 
     private var folderIcon: some View {
