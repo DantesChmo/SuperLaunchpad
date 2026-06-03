@@ -61,5 +61,6 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage/cobertura.xml
+          flags: unit
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
