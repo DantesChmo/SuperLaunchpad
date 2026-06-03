@@ -42,10 +42,16 @@ final class SuperLaunchpadUITests: XCTestCase {
         // AppIconView. If this fails with "0 elements", add the identifier in
         // Views/AppIconView.swift — see qa-engineer skill: "Accessibility
         // identifiers — the only stable query".
+        // `loadApps()` runs the `/Applications` scan in a `Task.detached`, so
+        // icons don't appear synchronously with the window. Counting buttons
+        // immediately after `window.waitForExistence` races the scan and
+        // reports 0. Wait on `firstMatch.waitForExistence` instead — XCUI
+        // re-evaluates the query on each poll, so it picks up icons as soon
+        // as the detached task hops back to MainActor.
         let icons = app.buttons.matching(identifier: "app-icon")
-        XCTAssertGreaterThan(
-            icons.count, 0,
-            "Expected at least one app-icon in the grid."
+        XCTAssertTrue(
+            icons.firstMatch.waitForExistence(timeout: 15),
+            "Expected at least one app-icon in the grid within 15s of launch."
         )
     }
 
