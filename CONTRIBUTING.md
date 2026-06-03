@@ -103,14 +103,13 @@ git push                # warnings should be gone
 
 ## Git hooks
 
-Repo-tracked hooks live in [`.githooks/`](.githooks). Activate them once after
-cloning:
+Repo-tracked hooks live in [`.githooks/`](.githooks). Activate them as part of the one-shot setup:
 
 ```bash
-./.githooks/install.sh
+./bootstrap.sh
 ```
 
-This sets `core.hooksPath` to `.githooks` for this repository only.
+`bootstrap.sh` is the canonical entry point for first-time setup of a clone — currently it just delegates to `.githooks/install.sh` (which sets `core.hooksPath` to `.githooks` for this repo only), but it exists as the single command future setup steps can be added to. Idempotent — safe to re-run.
 
 What the hooks do:
 

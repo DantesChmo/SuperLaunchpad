@@ -53,4 +53,12 @@ After this, the app launches normally. Alternatively, build from source — open
 
 ## Contributing
 
+After cloning, run the one-shot setup:
+
+```bash
+./bootstrap.sh
+```
+
+This activates the repo-tracked git hooks (commit-msg validation, the interactive commit-type wizard, the pre-push drift check). Idempotent, safe to re-run.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the tech stack, architecture, and project layout.
