@@ -220,6 +220,63 @@ In Claude Code: call the `Agent` tool with `subagent_type: "Explore"` and a self
 
 Pattern: short, specific prompt → compact reply (under 300 words). If you find yourself writing a long prompt explaining the whole project, you're doing it wrong — most of that context is already in this file, just point at it.
 
+## Routing — delegate by task shape
+
+This repo defines three project-scoped subagents in `.claude/agents/`:
+
+| Subagent    | Model  | Use for                                                            |
+| ----------- | ------ | ------------------------------------------------------------------ |
+| `dev`       | Sonnet | Feature implementation against a clear spec, clear-cause bug fixes, tests, UI wiring |
+| `architect` | Opus   | Architecture, cross-cutting refactors, murky bugs, design reviews  |
+| `refactor`  | Haiku  | Mechanical transformations with an unambiguous rule                |
+
+When the user's request fits one of these shapes, delegate via the `Agent` tool with the matching `subagent_type` rather than doing the work inline in the main session. Each agent's own `description` and system prompt hold the precise scope; this table is just the index.
+
+If the routing is ambiguous (e.g. a "refactor" that actually requires design decisions), ask before delegating. Don't force-fit. Trivial in-conversation Q&A and reading a single file don't need delegation.
+
+## Skills — knowledge packs
+
+Beyond subagents, this repo defines three project-scoped **skills** in `.claude/skills/`. A skill is a reusable knowledge pack invoked via the `Skill` tool — load it *before* writing code (or critique) when the task hits its area, so you don't re-derive the domain checklist from scratch:
+
+| Skill | Load before…  | Contents in brief |
+| ---------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `macos-desktop-architect` | Designing or debugging anything window/event/system-integration | NSPanel/NSWindow levels & collectionBehavior, AppKit↔SwiftUI bridges, Spaces/Stage Manager, global event monitors, threading, sandbox/entitlements, performance |
+| `swift-engineer`          | Writing or reviewing non-trivial Swift code                    | Modern idioms (Swift Concurrency, `@Observable`, generics, error-handling), swift-testing, anti-pattern list |
+| `ui-ux-designer`          | Building or critiquing a visible UI surface                    | macOS HIG, hierarchy & typography, motion duration ladder, accessibility (VoiceOver/Dynamic Type/contrast), Nielsen/Fitts/Hick heuristics |
+
+Rules of thumb:
+
+- **Skills are knowledge, subagents are workers.** A skill is loaded *in the current session* to bias your reasoning; a subagent is a *separate session* you delegate work to. They compose: a subagent (e.g. `dev`) can itself load `swift-engineer` before writing code.
+- **Load before, not after.** A skill loaded after you've already written the code can only critique — its value is in shaping the approach.
+- **Skills and `AGENTS.md` complement each other.** This file holds *project-specific* conventions (the GRDB column enum rule, the `try?` style, the `NSPanel` level used here). Skills hold *domain knowledge* applicable across macOS Swift projects. Project rules override skill defaults when they conflict.
+- **Don't load all three by default.** Pick the one that matches the task; loading every skill burns context for nothing.
+
+Subagents `architect`, `dev`, and `refactor` each list the skills they should consider in their own system prompts (`.claude/agents/*.md`). The main session also has access — invoke `Skill` directly when the task warrants it.
+
+## Keeping AGENTS.md in sync — when to suggest `/sync-agents-md`
+
+`AGENTS.md` is the source of truth for every AI agent on this repo. When it drifts from the code, every agent loses ground. The `/sync-agents-md` slash command proposes a patch; the pre-push hook prints a soft warning. Both are reactive — you, the agent, can be the first to notice.
+
+At the end of a task, **suggest** running `/sync-agents-md` (one short line, no insistence) when at least one of these is true:
+
+- A `.swift` file was **added or removed** in `SuperLaunchpad/{Models,Views,Services,Database,Window,Helpers,ViewModels}/` → Project map row needs updating.
+- `Helpers/Constants.swift` gained a new namespace or member → constants table.
+- The change altered the data flow described in "Architecture in 60 seconds" (new watcher, new entry point in `loadApps()`, new persistence path, new gesture source).
+- New non-obvious behaviour was introduced that a future developer wouldn't guess from the code → gotcha candidate.
+- A rule in "Forbidden patterns" no longer applies, or a new project-wide rule emerged.
+
+**Do not** suggest when:
+
+- Pure bug fix with no structural change; comment/whitespace/formatting edits; test-only changes that don't introduce new conventions.
+- You already suggested it once in this session.
+- The user has explicitly said they'll handle docs separately for this PR.
+
+Format the suggestion as a single closing line, no header, no urgency:
+
+> Note: this added `Services/AppDirectoryWatcher.swift` — consider running `/sync-agents-md` before pushing to update the Project map.
+
+The user decides. Don't run the command yourself unless asked. Don't edit `AGENTS.md` directly as a side-effect of another task — let `/sync-agents-md` route through the `architect` subagent so the patch reflects judgement, not a mechanical scrape.
+
 ## Scope discipline (for AI agents)
 
 - Do only the task asked. No drive-by refactors, no "while I'm here" cleanups, no defensive abstractions for hypothetical futures.

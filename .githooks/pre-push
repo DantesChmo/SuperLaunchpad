@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Pre-push: warns about drift between code and AGENTS.md.
+# NON-BLOCKING — always exits 0. A reminder, not a gate.
+# To act on the report: run `/sync-agents-md` in Claude Code.
+
+set -u
+
+# Skip when there's no origin/main to compare against (fresh clone, detached HEAD,
+# offline work, or pushing the very first commit).
+if ! git rev-parse --verify --quiet origin/main >/dev/null; then
+    exit 0
+fi
+
+BASE=$(git merge-base origin/main HEAD 2>/dev/null || true)
+[[ -z "$BASE" ]] && exit 0
+
+RANGE="$BASE..HEAD"
+CHANGED=$(git diff --name-only "$RANGE" 2>/dev/null || true)
+[[ -z "$CHANGED" ]] && exit 0
+
+WARN=()
+
+# 1) Structural drift — new .swift files in directories listed in AGENTS.md "Project map"
+TRACKED_DIRS_RE='^SuperLaunchpad/(Models|Views|Services|Database|Window|Helpers|ViewModels)/.*\.swift$'
+NEW_FILES=$(git diff --name-only --diff-filter=A "$RANGE" 2>/dev/null | grep -E "$TRACKED_DIRS_RE" || true)
+if [[ -n "$NEW_FILES" ]]; then
+    WARN+=("Новые Swift-файлы в каталогах Project map — проверь, занесены ли они в таблицу AGENTS.md:")
+    while IFS= read -r f; do
+        WARN+=("    + $f")
+    done <<< "$NEW_FILES"
+fi
+
+# 2) Constants drift — Constants.swift changed → table in AGENTS.md может устареть
+if echo "$CHANGED" | grep -q '^SuperLaunchpad/Helpers/Constants\.swift$'; then
+    WARN+=("Изменён Constants.swift — сверь таблицу констант в AGENTS.md (Conventions → Constants).")
+fi
+
+# 3) Forbidden patterns (из AGENTS.md → Forbidden patterns)
+check_forbidden() {
+    local pattern="$1"
+    local where="$2"
+    local label="$3"
+    local hits
+    hits=$(grep -rEn --include='*.swift' "$pattern" "$where" 2>/dev/null | head -3 || true)
+    if [[ -n "$hits" ]]; then
+        WARN+=("$label")
+        while IFS= read -r line; do
+            WARN+=("    $line")
+        done <<< "$hits"
+    fi
+}
+
+# Тесты должны быть на swift-testing, не XCTest
+[[ -d SuperLaunchpadTests ]] && check_forbidden 'XCTestCase|XCTAssert' SuperLaunchpadTests \
+    'Найдены XCTest-идиомы (AGENTS.md: тесты — swift-testing):'
+
+# Миграции только ADD/ALTER, никаких DROP TABLE
+[[ -d SuperLaunchpad/Database ]] && check_forbidden 'DROP TABLE' SuperLaunchpad/Database \
+    'Найдено DROP TABLE в Database/ (AGENTS.md: миграции только ADD/ALTER):'
+
+# В этом коде actor-типов нет — концурренси на @MainActor + Task.detached
+[[ -d SuperLaunchpad ]] && check_forbidden '^actor [A-Z]' SuperLaunchpad \
+    'Найдены actor-типы (AGENTS.md: не используются в этом коде):'
+
+# 4) Архитектурно значимые изменения — мягкий пинок проверить высокоуровневые секции
+ARCH_RE='^SuperLaunchpad/(ViewModels/|Database/|Window/|Services/|Helpers/Constants\.swift|SuperLaunchpadApp\.swift)'
+if echo "$CHANGED" | grep -qE "$ARCH_RE"; then
+    WARN+=("Затронуты архитектурно значимые файлы (ViewModels / Database / Window / Services / Constants / SuperLaunchpadApp).")
+    WARN+=("    Проверь актуальность секций 'Architecture in 60 seconds', 'Project map', 'Domain gotchas' в AGENTS.md.")
+fi
+
+# 5) Удалены файлы из Project map → таблица почти точно устарела
+DELETED=$(git diff --name-only --diff-filter=D "$RANGE" 2>/dev/null | grep -E "$TRACKED_DIRS_RE" || true)
+if [[ -n "$DELETED" ]]; then
+    WARN+=("Удалены файлы из каталогов Project map — соответствующие строки в таблице AGENTS.md нужно убрать:")
+    while IFS= read -r f; do
+        WARN+=("    - $f")
+    done <<< "$DELETED"
+fi
+
+# --- Вывод
+if (( ${#WARN[@]} > 0 )); then
+    cat <<EOF >&2
+
+⚠️  Pre-push drift check — AGENTS.md может быть неактуален.
+   Push НЕ блокируется. Это напоминание.
+
+EOF
+    for line in "${WARN[@]}"; do
+        printf '   %s\n' "$line" >&2
+    done
+    cat <<EOF >&2
+
+   → В Claude Code: /sync-agents-md  — получить предлагаемый патч к AGENTS.md.
+   → Bypass (не рекомендуется): git push --no-verify
+
+EOF
+fi
+
+exit 0

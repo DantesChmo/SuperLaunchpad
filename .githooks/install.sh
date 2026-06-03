@@ -6,7 +6,7 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-chmod +x .githooks/prepare-commit-msg .githooks/commit-msg
+chmod +x .githooks/prepare-commit-msg .githooks/commit-msg .githooks/pre-push
 git config core.hooksPath .githooks
 
 echo "✓ Git hooks активированы (core.hooksPath = .githooks)"

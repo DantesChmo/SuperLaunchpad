@@ -4,6 +4,68 @@
 
 If you're using Claude Code, Cursor, Codex, Aider, or similar tools to work on this project, point them at [AGENTS.md](AGENTS.md) — it contains the conventions, patterns, and gotchas an agent needs to be productive without re-exploring the codebase.
 
+### Claude Code subagents
+
+This repo defines three Claude Code subagents in [`.claude/agents/`](.claude/agents)
+so work gets routed to the right model + thinking depth automatically:
+
+| Subagent    | Model  | Use for                                                            |
+| ----------- | ------ | ------------------------------------------------------------------ |
+| `dev`       | Sonnet | Everyday features, clear-cause bug fixes, tests, UI wiring         |
+| `architect` | Opus   | Architecture, cross-cutting refactors, murky bugs, design reviews  |
+| `refactor`  | Haiku  | Mechanical transformations with an unambiguous rule                |
+
+The main Claude Code session will delegate to these automatically based on
+their `description`. For explicit routing, use the slash commands in
+[`.claude/commands/`](.claude/commands):
+
+```
+/dev      <task>   — delegates to dev (Sonnet)
+/arch     <task>   — delegates to architect (Opus)
+/refactor <rule>   — delegates to refactor (Haiku)
+```
+
+### Claude Code skills
+
+Beyond subagents, [`.claude/skills/`](.claude/skills) defines three project-scoped
+**skills** — reusable knowledge packs invoked via the `Skill` tool. A skill is
+loaded *in the current session* to bias the model's reasoning with a domain
+checklist; it's not a separate worker. Use *before* writing the code, not after.
+
+| Skill                     | Load before…                                                                  |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| `macos-desktop-architect` | Designing or debugging window / event / system-integration code (NSPanel, AppKit↔SwiftUI bridges, Spaces, global event monitors) |
+| `swift-engineer`          | Writing or reviewing non-trivial Swift (concurrency, Observation, generics, error handling, swift-testing) |
+| `ui-ux-designer`          | Building or critiquing a visible UI surface (HIG, motion, accessibility, Nielsen/Fitts/Hick heuristics) |
+
+Subagents are wired to consider these skills automatically; the main session can
+also invoke `Skill` directly. Skills hold *domain knowledge*; `AGENTS.md` holds
+*project-specific conventions*. When they conflict, the project wins.
+
+### Keeping AGENTS.md accurate
+
+`AGENTS.md` is the source of truth for every AI agent working on this repo,
+so the moment it drifts from the code, every agent loses ground. Two automated
+nudges keep it accurate:
+
+- **Pre-push drift check** (see [Git hooks](#git-hooks) below) prints a soft
+  warning when the push touches files documented in `AGENTS.md` (Project map,
+  Constants, architecturally significant directories) or introduces a forbidden
+  pattern.
+- **`/sync-agents-md` slash command** — runs the `architect` subagent against
+  the current branch's diff vs. `AGENTS.md` and proposes a unified-diff patch
+  for the sections that have drifted. It does not auto-apply — you review and
+  decide.
+
+Typical flow before opening a PR:
+
+```
+git push                # pre-push prints drift warnings, doesn't block
+# in Claude Code:
+/sync-agents-md         # → review and apply the proposed AGENTS.md patch
+git push                # warnings should be gone
+```
+
 ## Requirements
 
 - macOS 15.4 (Sequoia) or newer
@@ -32,6 +94,14 @@ What the hooks do:
 - **`commit-msg`** — validates the final subject against the Conventional
   Commits regex and rejects commits that bypass the wizard with an invalid
   format.
+- **`pre-push`** — non-blocking drift check for `AGENTS.md`. Warns when the
+  branch adds/removes Swift files in directories listed under "Project map",
+  changes `Helpers/Constants.swift`, touches architecturally significant
+  files (`ViewModels/`, `Database/`, `Window/`, `Services/`,
+  `SuperLaunchpadApp.swift`), or introduces a pattern banned in
+  "Forbidden patterns" (`XCTest` idioms, `DROP TABLE`, `actor` types). The
+  warning ends with `→ /sync-agents-md` — run that in Claude Code to get a
+  concrete patch proposal. Use `git push --no-verify` to skip (discouraged).
 
 Commit format:
 
