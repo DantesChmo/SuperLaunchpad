@@ -68,13 +68,15 @@ select_type() {
             $'\x1b')
                 # Arrow keys send a 3-byte sequence: ESC [ A/B (CSI mode) or
                 # ESC O A/B (application/SS3 mode — some terminals use this).
-                # Read the prefix and the final byte separately, each with
-                # a 200 ms timeout — 50 ms is too tight on slower TTYs and
-                # over SSH, which makes arrow keys silently fail.
-                # A bare ESC (no follow-up bytes) means "cancel".
-                IFS= read -rsn1 -t 0.2 key2 || key2=""
+                # Read the prefix and final byte separately. Use an integer
+                # timeout — macOS ships bash 3.2, which rejects fractional
+                # `-t` values (`read: 0.2: invalid timeout specification`)
+                # and silently fails the read, making arrow keys look dead.
+                # Buffered bytes return instantly; the timeout only applies
+                # to a genuine bare ESC (cancel), so 1s is fine.
+                IFS= read -rsn1 -t 1 key2 || key2=""
                 if [[ "$key2" == "[" || "$key2" == "O" ]]; then
-                    IFS= read -rsn1 -t 0.2 key3 || key3=""
+                    IFS= read -rsn1 -t 1 key3 || key3=""
                     case "$key3" in
                         A) selected=$(( (selected - 1 + count) % count )) ;;
                         B) selected=$(( (selected + 1) % count )) ;;
