@@ -187,8 +187,16 @@ struct FolderDetailView: View {
                 .onExitCommand {
                     cancelRename()
                 }
-                .onChange(of: titleFieldFocused) { _, focused in
-                    if !focused {
+                // Focus is requested once the field is in the window. Asked for
+                // in `beginRename()`, before the field exists, it may not land
+                // (after an Escape it doesn't), and the true→false bounce
+                // would read as a lost focus and commit at once.
+                .task {
+                    titleFieldFocused = true
+                }
+                // Only a focus the field really had and lost ends the edit.
+                .onChange(of: titleFieldFocused) { wasFocused, focused in
+                    if wasFocused, !focused {
                         commitRename()
                     }
                 }
@@ -217,7 +225,6 @@ struct FolderDetailView: View {
     private func beginRename() {
         draftTitle = folder.title
         isRenaming = true
-        titleFieldFocused = true
     }
 
     private func commitRename() {
@@ -229,9 +236,8 @@ struct FolderDetailView: View {
         }
     }
 
-    // Focus is cleared with the edit: a `titleFieldFocused` left at true makes
-    // the next `beginRename()` a no-op write, and the new field drops focus
-    // and commits right away.
+    // Focus is cleared with the edit, so the next field's `.task` is a real
+    // false→true change.
     private func cancelRename() {
         isRenaming = false
         titleFieldFocused = false
