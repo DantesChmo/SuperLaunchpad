@@ -89,10 +89,25 @@ struct IconCacheTests {
         let entry = app(iconData: try png(side: 16))
 
         await cache.prewarm([entry])
+        #expect(cache.containsCurrentIcon(for: entry))
         let first = try #require(cache.image(for: entry))
         await cache.prewarm([entry])
         let second = try #require(cache.image(for: entry))
 
         #expect(first === second)
+    }
+
+    @Test func prewarmReplacesStaleEntry() async throws {
+        let cache = makeCache()
+        let stale = try #require(cache.image(for: app(iconData: try png(side: 16))))
+        let updated = app(iconData: try png(side: 32))
+        #expect(!cache.containsCurrentIcon(for: updated))
+
+        await cache.prewarm([updated])
+
+        #expect(cache.containsCurrentIcon(for: updated))
+        let fresh = try #require(cache.image(for: updated))
+        #expect(fresh !== stale)
+        #expect(fresh.size.width == 32)
     }
 }

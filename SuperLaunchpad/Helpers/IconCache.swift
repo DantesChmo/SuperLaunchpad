@@ -57,11 +57,7 @@ final class IconCache {
     // finds its icons ready.
     func prewarm(_ apps: [AppEntry]) async {
         let pending: [(String, Data)] = apps.compactMap { app in
-            guard let data = app.iconData else { return nil }
-            if let entry = entries[app.bundleIdentifier],
-               entry.fingerprint == Self.fingerprint(of: data) {
-                return nil
-            }
+            guard let data = app.iconData, !containsCurrentIcon(for: app) else { return nil }
             return (app.bundleIdentifier, data)
         }
         guard !pending.isEmpty else { return }
@@ -74,10 +70,18 @@ final class IconCache {
         }.value
 
         for (bundleIdentifier, fingerprint, cgImage) in decoded {
-            // A lookup during the decode may already have stored a newer icon.
-            guard entries[bundleIdentifier] == nil else { continue }
+            // A lookup during the decode may already have stored this icon.
+            // An entry with a different fingerprint is stale and gets replaced.
+            guard entries[bundleIdentifier]?.fingerprint != fingerprint else { continue }
             entries[bundleIdentifier] = Entry(fingerprint: fingerprint, image: Self.makeImage(cgImage))
         }
+    }
+
+    // True when the app's current `iconData` is already decoded, i.e. a
+    // lookup would not decode anything.
+    func containsCurrentIcon(for app: AppEntry) -> Bool {
+        guard let data = app.iconData, let entry = entries[app.bundleIdentifier] else { return false }
+        return entry.fingerprint == Self.fingerprint(of: data)
     }
 
     func removeAll() {
