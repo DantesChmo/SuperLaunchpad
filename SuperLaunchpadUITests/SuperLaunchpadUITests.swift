@@ -116,8 +116,11 @@ final class SuperLaunchpadUITests: XCTestCase {
         // the active keyboard layout cannot produce (e.g. a Cyrillic one), and
         // macOS turns a double space into ". ".
 
+        // `click()`, not `tap()`: after the Escape below, a synthesized tap
+        // no longer reaches the title's tap gesture, while a click does.
+
         // Escape cancels the edit but keeps the folder open.
-        title.tap()
+        title.click()
         XCTAssertTrue(field.waitForExistence(timeout: 2))
         field.typeText("123")
         XCTAssertEqual(field.value as? String, "123", "The title was not selected when editing began.")
@@ -129,26 +132,33 @@ final class SuperLaunchpadUITests: XCTestCase {
         // Enter commits. Edits only append and delete, so the test ends with
         // the original name in the real launcher DB.
         let suffix = " 2026"
-        title.tap()
+        title.click()
         XCTAssertTrue(field.waitForExistence(timeout: 2))
         field.typeKey(.rightArrow, modifierFlags: [])
         field.typeText(suffix)
         field.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(title.waitForExistence(timeout: 2))
         XCTAssertEqual(title.label, originalTitle + suffix)
-        XCTAssertTrue(
-            app.buttons.matching(NSPredicate(format: "identifier == 'folder-icon' AND label == %@", originalTitle + suffix))
-                .firstMatch.exists,
-            "The folder tile on the grid kept the old title."
-        )
 
         let attachment = XCTAttachment(screenshot: window.screenshot())
         attachment.name = "folder-renamed"
         attachment.lifetime = .keepAlways
         add(attachment)
 
+        // The open popup is modal, so the grid is hidden from accessibility:
+        // close the folder to check its tile, then open it again.
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: detail), "Escape did not close the folder.")
+        let renamedTile = app.buttons
+            .matching(NSPredicate(format: "identifier == 'folder-icon' AND label == %@", originalTitle + suffix))
+            .firstMatch
+        XCTAssertTrue(renamedTile.waitForExistence(timeout: 2), "The folder tile on the grid kept the old title.")
+        renamedTile.click()
+        XCTAssertTrue(detail.waitForExistence(timeout: 2), "Folder detail did not reopen.")
+        XCTAssertTrue(title.waitForExistence(timeout: 2))
+
         // A blank title reverts.
-        title.tap()
+        title.click()
         XCTAssertTrue(field.waitForExistence(timeout: 2))
         field.typeKey(.delete, modifierFlags: [])
         field.typeText(" ")
@@ -157,7 +167,7 @@ final class SuperLaunchpadUITests: XCTestCase {
         XCTAssertEqual(title.label, originalTitle + suffix)
 
         // Trailing whitespace is trimmed; clicking the card commits.
-        title.tap()
+        title.click()
         XCTAssertTrue(field.waitForExistence(timeout: 2))
         field.typeKey(.rightArrow, modifierFlags: [])
         for _ in 0..<suffix.count {
