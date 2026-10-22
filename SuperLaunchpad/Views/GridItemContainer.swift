@@ -20,6 +20,7 @@ struct GridItemContainer<Icon: View, Label: View>: View {
 
     @State private var isHovering = false
     @Environment(\.isGridDragActive) private var isGridDragActive
+    @Environment(\.enterEditMode) private var enterEditMode
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,6 +43,7 @@ struct GridItemContainer<Icon: View, Label: View>: View {
             .onTapGesture {
                 onTap()
             }
+            .editModeGestures(enterEditMode)
         }
     }
 }
@@ -49,4 +51,61 @@ struct GridItemContainer<Icon: View, Label: View>: View {
 extension EnvironmentValues {
     // True while an icon is being dragged on the main grid.
     @Entry var isGridDragActive = false
+    // Edit mode: icons wiggle (see `WiggleEffect`).
+    @Entry var isEditing = false
+    @Entry var enterEditMode = EnterEditModeAction(viewModel: nil)
+}
+
+// What a long press on an icon does. Compared by view model identity, so a
+// launcher re-render doesn't hand every icon a "changed" environment value
+// the way a fresh closure would.
+struct EnterEditModeAction: Equatable {
+    let viewModel: LaunchpadViewModel?
+
+    @MainActor func callAsFunction() {
+        viewModel?.enterEditMode()
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.viewModel === rhs.viewModel
+    }
+}
+
+extension View {
+    // Long press to enter edit mode, plus the wiggle while in it. Shared by
+    // grid icons and the open folder's icons.
+    func editModeGestures(_ enterEditMode: EnterEditModeAction) -> some View {
+        modifier(WiggleEffect())
+            .onLongPressGesture(minimumDuration: Edit.longPressDuration, maximumDistance: Drag.threshold) {
+                enterEditMode()
+            }
+    }
+}
+
+// Rocks the icon while in edit mode. Each icon reads the shared clock
+// (`TimelineView`'s date) inside its own small closure, so a frame only
+// re-renders the rotation, never the icon or the grid around it. Paused
+// outside edit mode. The view tree is the same in and out of edit mode, so
+// entering it doesn't reset hover state.
+private struct WiggleEffect: ViewModifier {
+    @Environment(\.isEditing) private var isEditing
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    // Random start in the cycle, so neighbours don't rock in lockstep.
+    @State private var phase = Double.random(in: 0..<1)
+
+    func body(content: Content) -> some View {
+        let wiggles = isEditing && !reduceMotion
+        TimelineView(.animation(paused: !wiggles)) { context in
+            content
+                .rotationEffect(.degrees(wiggles ? angle(at: context.date) : 0))
+        }
+        // Reduce Motion: a still cue instead of the rocking.
+        .scaleEffect(isEditing && reduceMotion ? Edit.reducedMotionScale : 1)
+        .animation(.easeInOut(duration: Edit.reducedMotionAnimation), value: isEditing && reduceMotion)
+    }
+
+    private func angle(at date: Date) -> Double {
+        let cycle = date.timeIntervalSinceReferenceDate / Edit.wigglePeriod + phase
+        return sin(cycle * 2 * .pi) * Edit.wiggleAngle
+    }
 }

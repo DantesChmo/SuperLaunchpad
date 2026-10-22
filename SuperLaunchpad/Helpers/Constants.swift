@@ -144,6 +144,21 @@ enum Drag {
     static let coordinateSpace = "launchpad"
 }
 
+// Edit (jiggle) mode, as in macOS Launchpad.
+enum Edit {
+    // Holding an icon this long without moving past `Drag.threshold` enters
+    // edit mode.
+    static let longPressDuration: Double = 0.6
+    // Icons rock by up to this angle (degrees) either way…
+    static let wiggleAngle: Double = 1.5
+    // …once per this period (s). Each icon starts at a random phase so they
+    // don't move in lockstep.
+    static let wigglePeriod: Double = 0.25
+    // With Reduce Motion icons don't rock; they shrink this much instead.
+    static let reducedMotionScale: CGFloat = 0.94
+    static let reducedMotionAnimation: Double = 0.15
+}
+
 // Tuning for the main-grid pager. Positions and velocities are in "pages"
 // (1.0 = one screen width), so the numbers are independent of display size.
 enum Paging {

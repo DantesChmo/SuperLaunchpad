@@ -71,7 +71,8 @@ struct LaunchpadView: View {
                             drag: drag,
                             metrics: metrics,
                             onLaunch: { app in
-                                viewModel.launchApp(app)
+                                // Edit mode: a click doesn't launch.
+                                guard viewModel.launchApp(app) else { return }
                                 // Notification → AppDelegate → hidePanel. We
                                 // don't call panel directly because views
                                 // shouldn't know about AppKit windows.
@@ -98,7 +99,9 @@ struct LaunchpadView: View {
                 // actual icon rects, not the gaps between them.
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    // Click outside any icon → hide the launcher.
+                    // Click outside any icon → leave edit mode, or hide the
+                    // launcher.
+                    guard !viewModel.exitEditMode() else { return }
                     NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                 }
 
@@ -132,8 +135,7 @@ struct LaunchpadView: View {
                         apps: folderPreviewApps,
                         metrics: metrics,
                         onLaunch: { app in
-                            guard !drag.isTapSuppressed else { return }
-                            viewModel.launchApp(app)
+                            guard !drag.isTapSuppressed, viewModel.launchApp(app) else { return }
                             NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                         },
                         onClose: {
@@ -164,6 +166,9 @@ struct LaunchpadView: View {
                     .scaleEffect(folderIsOpen ? 1 : 0.85)
                 }
             }
+            // Below the drag modifier, so the lifted icon doesn't wiggle.
+            .environment(\.isEditing, viewModel.isEditing)
+            .environment(\.enterEditMode, EnterEditModeAction(viewModel: viewModel))
             .modifier(LaunchpadDragGesture(
                 viewModel: viewModel,
                 pager: pager,
@@ -198,6 +203,9 @@ struct LaunchpadView: View {
                     : .spring(duration: AnimationDuration.hide, bounce: 0),
                 value: viewModel.isVisible
             )
+            .onChange(of: viewModel.isEditing) { _, editing in
+                AccessibilityNotification.Announcement(editing ? "Editing" : "Done editing").post()
+            }
             // React to programmatic folder dismissals (e.g. Escape key handled
             // in `LaunchpadPanel.keyDown`). The animations below mirror what
             // `closeFolder()` does locally.

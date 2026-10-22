@@ -268,6 +268,7 @@ private struct FolderAppIconView: View {
     let onTap: () -> Void
 
     @State private var isHovering = false
+    @Environment(\.enterEditMode) private var enterEditMode
 
     var body: some View {
         // Same outer/inner VStack pattern as `GridItemContainer` — see the
@@ -293,6 +294,7 @@ private struct FolderAppIconView: View {
             .onTapGesture {
                 onTap()
             }
+            .editModeGestures(enterEditMode)
         }
     }
 

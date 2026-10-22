@@ -33,7 +33,10 @@ final class LaunchpadViewModel {
             // Assigned only on change, so views reading it are not
             // re-rendered on every keystroke.
             if isSearching != searching { isSearching = searching }
-            if isSearching { openFolderID = nil }
+            if isSearching {
+                openFolderID = nil
+                exitEditMode()
+            }
             rebuildSearchResults()
             selectedResultIndex = 0
         }
@@ -500,16 +503,23 @@ final class LaunchpadViewModel {
     // `NSWorkspace.open(_:)` launches the app at the given URL via Launch
     // Services — the same mechanism Finder uses on double-click. We hide
     // the launcher straight after so the user lands on the launched app.
-    func launchApp(_ app: AppEntry) {
+    //
+    // Does nothing in edit mode, where a click on an app only selects it for
+    // dragging. Returns whether the app was launched.
+    @discardableResult
+    func launchApp(_ app: AppEntry) -> Bool {
+        guard !isEditing else { return false }
         let url = URL(fileURLWithPath: app.appPath)
         NSWorkspace.shared.open(url)
         hide()
+        return true
     }
 
     func show() {
         // Always reset to the first page on show — matches macOS Launchpad UX.
         currentPage = 0
         isVisible = true
+        isOptionHeld = false
         searchFocusRequest += 1
     }
 
@@ -518,6 +528,7 @@ final class LaunchpadViewModel {
         // in a clean state.
         openFolderID = nil
         searchText = ""
+        exitEditMode()
         isVisible = false
     }
 
@@ -675,8 +686,10 @@ final class LaunchpadViewModel {
         pages.count + (hasTrailingDragPage ? 1 : 0)
     }
 
+    // Starting a drag also enters edit mode, which stays on after the drop.
     func beginDragSession() {
         isDragSessionActive = true
+        enterEditMode()
     }
 
     // Returns false when there is no drag or the page is already shown.
@@ -723,20 +736,65 @@ final class LaunchpadViewModel {
         return true
     }
 
+    // MARK: - Edit mode
+    //
+    // Icons wiggle and clicks don't launch apps. Entered by a long press, by
+    // starting a drag (both stay on until dismissed), or while ⌥ is held.
+
+    private(set) var isEditing = false
+    // Entered by a long press or a drag: stays on when ⌥ is released.
+    @ObservationIgnored private var isEditingSticky = false
+    @ObservationIgnored private var isOptionHeld = false
+
+    func enterEditMode() {
+        guard !isSearching else { return }
+        isEditingSticky = true
+        updateEditing()
+    }
+
+    // Returns false when edit mode was already off.
+    @discardableResult
+    func exitEditMode() -> Bool {
+        let wasEditing = isEditing
+        isEditingSticky = false
+        // A still-held ⌥ no longer counts; pressing it again re-enters.
+        isOptionHeld = false
+        updateEditing()
+        return wasEditing
+    }
+
+    // ⌥ pressed or released. A press is ignored while typing a query or a
+    // folder title, where ⌥ types characters.
+    func setOptionHeld(_ held: Bool) {
+        guard held != isOptionHeld else { return }
+        if held, isSearching || isRenamingFolder || !isVisible { return }
+        isOptionHeld = held
+        updateEditing()
+    }
+
+    private func updateEditing() {
+        let editing = isEditingSticky || isOptionHeld
+        if isEditing != editing { isEditing = editing }
+    }
+
     // MARK: - Search
 
     enum EscapeAction: Equatable {
         case cancelledDrag
+        case exitedEditMode
         case clearedSearch
         case closedFolder
         case hideLauncher
     }
 
-    // Escape acts on the innermost context: a dragged icon, the query, then an open folder,
-    // then the launcher itself (which the caller hides).
+    // Escape acts on the innermost context: a dragged icon, edit mode, the query, then an
+    // open folder, then the launcher itself (which the caller hides).
     func handleEscape() -> EscapeAction {
         if cancelDrag() {
             return .cancelledDrag
+        }
+        if exitEditMode() {
+            return .exitedEditMode
         }
         if !searchText.isEmpty {
             searchText = ""
