@@ -4,6 +4,11 @@ name: Release
 # APPSTORE_* secrets are configured the DMG is signed with Developer ID,
 # notarized and stapled; otherwise an unsigned DMG is built as before.
 # See docs/RELEASING.md for how to create the secrets.
+#
+# Sparkle auto-updates are optional too: with the SPARKLE_PUBLIC_ED_KEY
+# repository variable and the SPARKLE_ED_PRIVATE_KEY secret the app gets the
+# public key and the release gets an EdDSA-signed appcast.xml; without them the
+# app's updater stays off.
 
 on:
   push:
@@ -67,6 +72,24 @@ jobs:
             echo "::warning title=Unsigned build::Missing secrets:$MISSING. Building an UNSIGNED DMG (Gatekeeper will block it). See docs/RELEASING.md."
           fi
 
+      - name: Check Sparkle keys
+        id: sparkle
+        env:
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          if [ -n "$SPARKLE_PUBLIC_ED_KEY" ] && [ -n "$SPARKLE_ED_PRIVATE_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Sparkle keys found: the app checks for updates and the release gets appcast.xml"
+          elif [ -z "$SPARKLE_PUBLIC_ED_KEY" ] && [ -z "$SPARKLE_ED_PRIVATE_KEY" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=No auto-updates::SPARKLE_PUBLIC_ED_KEY variable and SPARKLE_ED_PRIVATE_KEY secret are not set. The app's updater stays off and no appcast is published. See docs/RELEASING.md."
+          else
+            # One without the other would ship an app that rejects every update.
+            echo "::error::Set both the SPARKLE_PUBLIC_ED_KEY variable and the SPARKLE_ED_PRIVATE_KEY secret, or neither." >&2
+            exit 1
+          fi
+
       - name: Cache SwiftPM
         uses: actions/cache@v4
         with:
@@ -111,6 +134,7 @@ jobs:
         if: steps.signing.outputs.enabled != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
         run: |
           set -euo pipefail
           xcodebuild \
@@ -121,6 +145,7 @@ jobs:
             -destination 'platform=macOS' \
             MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION="$VERSION" \
+            SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -131,6 +156,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
         run: |
           set -euo pipefail
           # Hardened runtime comes from the project (ENABLE_HARDENED_RUNTIME = YES).
@@ -142,6 +168,7 @@ jobs:
             -destination 'platform=macOS' \
             MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION="$VERSION" \
+            SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Developer ID Application" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
@@ -241,20 +268,53 @@ jobs:
           spctl -a -vv -t install "$DMG_PATH"
 
       # $DMG_PATH is final from here on (signed, notarized and stapled
-      # when secrets are set). Post-processing steps such as a Sparkle appcast go here.
+      # when secrets are set).
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp "$DMG_PATH" release-assets/
+
+      # The feed URL is releases/latest/download/appcast.xml, so each release
+      # carries an appcast with just its own version; older items are not needed.
+      - name: Generate appcast
+        if: steps.sparkle.outputs.enabled == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          # The Sparkle SPM binary artifact ships the command-line tools.
+          GENERATE_APPCAST=$(find build/SourcePackages/artifacts -path '*/bin/generate_appcast' -type f | head -n 1)
+          if [ -z "$GENERATE_APPCAST" ]; then
+            echo "::error::generate_appcast not found in build/SourcePackages/artifacts" >&2
+            exit 1
+          fi
+
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$GENERATE_APPCAST" \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/${{ github.repository }}/releases/download/v$VERSION/" \
+            --link "https://github.com/${{ github.repository }}" \
+            --full-release-notes-url "https://github.com/${{ github.repository }}/releases/tag/v$VERSION" \
+            --maximum-deltas 0 \
+            release-assets
+
+          test -f release-assets/appcast.xml
+          cat release-assets/appcast.xml
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: SuperLaunchpad-${{ steps.version.outputs.version }}-dmg
-          path: ${{ env.DMG_PATH }}
+          path: release-assets/
           if-no-files-found: error
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.DMG_PATH }}
+          files: release-assets/*
           generate_release_notes: true
           fail_on_unmatched_files: true
 

@@ -153,3 +153,51 @@ Expected: `accepted` and `source=Notarized Developer ID`.
   `.p8` was base64-encoded with line breaks lost. Re-encode with `base64 -i`.
 - **Certificate expired** (Developer ID certificates last 5 years): create a new
   one (steps 1–2) and update the two `MACOS_CERTIFICATE_*` secrets.
+
+## Auto-updates (Sparkle)
+
+The app updates itself with [Sparkle 2](https://sparkle-project.org). It reads
+the feed from `SUFeedURL` in `SuperLaunchpad/Info.plist`:
+`https://github.com/DantesChmo/SuperLaunchpad/releases/latest/download/appcast.xml`.
+Every release uploads its own `appcast.xml` next to the DMG, so that URL always
+points at the newest one. Updates are signed with an EdDSA key pair; the app
+accepts only updates signed with the private key that matches its public key.
+
+Without the key pair the build still works: the updater stays off and
+**Check for Updates…** is disabled. Set it up once:
+
+1. Download the Sparkle tools: the latest `Sparkle-2.x.y.tar.xz` from
+   <https://github.com/sparkle-project/Sparkle/releases>, unpack it. (After a
+   local build they are also in
+   `~/Library/Developer/Xcode/DerivedData/SuperLaunchpad-*/SourcePackages/artifacts/sparkle/Sparkle/bin`.)
+2. Generate the key pair. The private key goes into your login keychain, the
+   public key is printed:
+
+   ```bash
+   ./bin/generate_keys
+   ```
+
+3. Export the private key to a file, copy it, then delete the file:
+
+   ```bash
+   ./bin/generate_keys -x sparkle_private_key.txt
+   pbcopy < sparkle_private_key.txt && rm sparkle_private_key.txt
+   ```
+
+4. In GitHub → **Settings → Secrets and variables → Actions**:
+   - **Secrets** tab → new repository secret `SPARKLE_ED_PRIVATE_KEY`, paste.
+   - **Variables** tab → new repository variable `SPARKLE_PUBLIC_ED_KEY`, the
+     public key from step 2 (`./bin/generate_keys -p` prints it again).
+     It is public, so it is a variable, not a secret.
+5. Keep the private key in the keychain (or a password manager). **If it is
+   lost, installed copies can never be updated again**; if it leaks, anyone can
+   sign updates for them.
+
+The release workflow fails if only one of the two is set. With both, it passes
+the public key to the build (`SPARKLE_PUBLIC_ED_KEY` build setting → `SUPublicEDKey`),
+then runs `generate_appcast` on the final DMG and attaches `appcast.xml` to
+the release. Sparkle compares `CFBundleVersion`, which CI sets to the tag
+version, so tags must keep increasing (`v1.2.0` → `v1.2.1`).
+
+Prereleases are not served: `releases/latest` skips them. Turn on Sparkle only
+together with signing and notarization, so updates are Developer ID-signed.
