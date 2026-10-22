@@ -34,6 +34,8 @@ struct SuperLaunchpadApp: App {
 
 // `NSApplicationDelegate` requires `NSObject` (it's an Objective-C protocol).
 // `final` — we never subclass this; the compiler can devirtualise method calls.
+// `@MainActor` because it owns and drives the main-actor `LaunchpadViewModel`.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     // Implicitly-unwrapped optional (`!`) is used here because `panel` is created
     // in `applicationDidFinishLaunching`, not in `init`. By the time any UI code
@@ -92,7 +94,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.panel.hidePanel()
+            // Delivered on `.main`, but the closure type is not main-actor isolated.
+            MainActor.assumeIsolated {
+                self?.panel.hidePanel()
+            }
         }
     }
 
