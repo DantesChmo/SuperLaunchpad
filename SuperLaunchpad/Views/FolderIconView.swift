@@ -56,8 +56,7 @@ struct FolderIconView: View {
                                 // app without iconData, or empty filler so
                                 // shorter folders still produce a square grid.
                                 if index < previewApps.count,
-                                   let data = previewApps[index].iconData,
-                                   let nsImage = NSImage(data: data) {
+                                   let nsImage = IconCache.shared.image(for: previewApps[index]) {
                                     Image(nsImage: nsImage)
                                         .resizable()
                                         .interpolation(.high)
