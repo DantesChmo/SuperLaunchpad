@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     let hotKeyMonitor: HotKeyMonitor
+    @Bindable var updater: Updater
 
     @AppStorage(Preferences.Key.pinchGestureEnabled)
     private var pinchGestureEnabled = Preferences.Default.pinchGestureEnabled
@@ -40,6 +41,20 @@ struct SettingsView: View {
 
             Section("Keyboard") {
                 HotKeyRecorderView(hotKeyMonitor: hotKeyMonitor)
+            }
+
+            Section("Updates") {
+                if updater.isAvailable {
+                    Toggle("Automatically check for updates", isOn: $updater.automaticallyChecksForUpdates)
+                    Button("Check for Updates…") {
+                        updater.checkForUpdates()
+                    }
+                    .disabled(!updater.canCheckForUpdates)
+                } else {
+                    Text("Updates are not available in this build.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)

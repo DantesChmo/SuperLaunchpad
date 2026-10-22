@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		78DA2F5A2F5C79370096E8C8 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = AA000002AAAA000000000001 /* GRDB */; };
+		AA000003AAAA000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = AA000005AAAA000000000001 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +71,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				78DA2F5A2F5C79370096E8C8 /* GRDB in Frameworks */,
+				AA000003AAAA000000000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -131,6 +133,7 @@
 			name = SuperLaunchpad;
 			packageProductDependencies = (
 				AA000002AAAA000000000001 /* GRDB */,
+				AA000005AAAA000000000001 /* Sparkle */,
 			);
 			productName = SuperLaunchpad;
 			productReference = 78DA2E482F5C748D0096E8C8 /* SuperLaunchpad.app */;
@@ -216,6 +219,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AA000001AAAA000000000001 /* XCRemoteSwiftPackageReference "GRDB" */,
+				AA000004AAAA000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 78DA2E492F5C748D0096E8C8 /* Products */;
@@ -435,6 +439,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.dantes.SuperLaunchpad;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				SPARKLE_PUBLIC_ED_KEY = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -464,6 +469,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.dantes.SuperLaunchpad;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				SPARKLE_PUBLIC_ED_KEY = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -587,6 +593,14 @@
 				minimumVersion = 7.0.0;
 			};
 		};
+		AA000004AAAA000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -594,6 +608,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AA000001AAAA000000000001 /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;
+		};
+		AA000005AAAA000000000001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA000004AAAA000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

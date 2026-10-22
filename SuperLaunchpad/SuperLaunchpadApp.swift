@@ -21,6 +21,10 @@ struct SuperLaunchpadApp: App {
             SettingsMenuButton {
                 appDelegate.prepareForSettings()
             }
+            Button("Check for Updates…") {
+                appDelegate.checkForUpdates()
+            }
+            .disabled(!appDelegate.updater.canCheckForUpdates)
             Divider()
             Button("Quit") {
                 // `NSApp` is the shared `NSApplication` singleton.
@@ -32,7 +36,7 @@ struct SuperLaunchpadApp: App {
         }
 
         Settings {
-            SettingsView(hotKeyMonitor: appDelegate.hotKeyMonitor)
+            SettingsView(hotKeyMonitor: appDelegate.hotKeyMonitor, updater: appDelegate.updater)
         }
     }
 }
@@ -72,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var watcher: AppDirectoryWatcher!
     private let gestureMonitor = GestureMonitor()
     let hotKeyMonitor = HotKeyMonitor()
+    let updater = Updater()
     private let preferences = Preferences()
     private var isGestureMonitorRunning = false
 
@@ -172,6 +177,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func prepareForSettings() {
         panel.hidePanel()
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // The panel sits above Sparkle's windows, so hide it first.
+    func checkForUpdates() {
+        panel.hidePanel()
+        updater.checkForUpdates()
     }
 
     // `GestureMonitor.start()` is not idempotent (it would add duplicate monitors),
