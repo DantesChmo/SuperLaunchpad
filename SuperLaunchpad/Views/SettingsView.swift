@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SettingsView: View {
+    let hotKeyMonitor: HotKeyMonitor
+
     @AppStorage(Preferences.Key.pinchGestureEnabled)
     private var pinchGestureEnabled = Preferences.Default.pinchGestureEnabled
 
@@ -36,10 +38,8 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Global hotkey recorder goes here.
             Section("Keyboard") {
-                Text("Global hotkey: coming soon")
-                    .foregroundStyle(.secondary)
+                HotKeyRecorderView(hotKeyMonitor: hotKeyMonitor)
             }
         }
         .formStyle(.grouped)

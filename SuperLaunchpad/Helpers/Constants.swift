@@ -25,6 +25,14 @@ enum SettingsWindow {
     static let width: CGFloat = 420
 }
 
+enum HotKey {
+    // Four-char code 'SLPd' identifying our Carbon hotkey events.
+    static let signature: UInt32 = 0x534C_5064
+    static let identifier: UInt32 = 1
+    static let maxKeyNameLength = 4
+    static let noKeyCode = -1
+}
+
 // Snapshot of layout numbers derived from the current screen size.
 // Built from a SwiftUI `GeometryReader` — recompute on resize rather than caching,
 // because external display changes or stage-manager resizes invalidate the values.

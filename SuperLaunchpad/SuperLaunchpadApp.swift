@@ -18,8 +18,6 @@ struct SuperLaunchpadApp: App {
             Button("Show / Hide") {
                 appDelegate.toggleLaunchpad()
             }
-            // `⌥⌘L` global menu shortcut while this app is frontmost.
-            .keyboardShortcut("l", modifiers: [.command, .option])
             SettingsMenuButton {
                 appDelegate.prepareForSettings()
             }
@@ -34,7 +32,7 @@ struct SuperLaunchpadApp: App {
         }
 
         Settings {
-            SettingsView()
+            SettingsView(hotKeyMonitor: appDelegate.hotKeyMonitor)
         }
     }
 }
@@ -66,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = LaunchpadViewModel()
     private var watcher: AppDirectoryWatcher!
     private let gestureMonitor = GestureMonitor()
+    let hotKeyMonitor = HotKeyMonitor()
     private let preferences = Preferences()
     private var isGestureMonitorRunning = false
 
@@ -99,6 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.panel.hidePanel()
         }
         applyGesturePreference()
+        hotKeyMonitor.onPress = { [weak self] in
+            self?.toggleLaunchpad()
+        }
+        applyHotKeyPreference()
         // Settings writes through @AppStorage; re-apply on any defaults change.
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
@@ -106,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             self?.applyGesturePreference()
+            self?.applyHotKeyPreference()
         }
 
         // UI tests launch with `-UITestMode YES`. The launcher panel is normally
@@ -161,5 +165,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             gestureMonitor.stop()
         }
         isGestureMonitorRunning = enabled
+    }
+
+    // Any defaults write lands here, so skip re-registering an unchanged combo.
+    private func applyHotKeyPreference() {
+        let combo = preferences.hotKey
+        guard combo != hotKeyMonitor.combo else { return }
+        if let combo {
+            hotKeyMonitor.register(combo)
+        } else {
+            hotKeyMonitor.unregister()
+        }
     }
 }
