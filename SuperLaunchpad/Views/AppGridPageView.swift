@@ -4,6 +4,8 @@ import SwiftUI
 struct AppGridPageView: View {
     let items: [LaunchpadItem]
     let metrics: LayoutMetrics
+    // The keyboard-selected app in search results; nil on the main grid.
+    var selectedID: String? = nil
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
     // Item currently lifted by a drag, if it is on this page.
@@ -23,7 +25,7 @@ struct AppGridPageView: View {
                 rowSpacing: metrics.rowSpacing
             ) {
                 ForEach(items) { item in
-                    GridCellView(item: item, metrics: metrics, onLaunch: onLaunch, onOpenFolder: onOpenFolder)
+                    GridCellView(item: item, metrics: metrics, isSelected: item.id == selectedID, onLaunch: onLaunch, onOpenFolder: onOpenFolder)
                         // The dragged item keeps its slot (so the reflow
                         // around it is right) but is drawn by the lifted copy.
                         .opacity(item.id == hiddenItemID ? 0 : 1)
@@ -42,6 +44,7 @@ struct AppGridPageView: View {
 struct GridCellView: View {
     let item: LaunchpadItem
     let metrics: LayoutMetrics
+    var isSelected = false
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
 
@@ -56,7 +59,7 @@ struct GridCellView: View {
             // compile-time exhaustiveness checking.
             switch item {
             case .app(let app):
-                AppIconView(app: app, metrics: metrics) {
+                AppIconView(app: app, metrics: metrics, isSelected: isSelected) {
                     onLaunch(app)
                 }
             case .folder(let folder, let apps):

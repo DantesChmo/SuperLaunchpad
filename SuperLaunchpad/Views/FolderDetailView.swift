@@ -11,6 +11,8 @@ struct FolderDetailView: View {
     let onRename: (String) -> Void
     // A freshly created folder opens with its title already in edit mode.
     var startsRenaming = false
+    // Reports when the title edit starts and ends.
+    var onRenamingChange: (Bool) -> Void = { _ in }
 
     @State private var currentPage: Int = 0
     @State private var isRenaming = false
@@ -119,6 +121,9 @@ struct FolderDetailView: View {
         // hidden): the edit still counts.
         .onDisappear {
             commitRename()
+        }
+        .onChange(of: isRenaming) { _, renaming in
+            onRenamingChange(renaming)
         }
     }
 

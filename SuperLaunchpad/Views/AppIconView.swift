@@ -5,6 +5,7 @@ import SwiftUI
 struct AppIconView: View {
     let app: AppEntry
     let metrics: LayoutMetrics
+    var isSelected = false
     let onTap: () -> Void
 
     var body: some View {
@@ -25,12 +26,17 @@ struct AppIconView: View {
                 .multilineTextAlignment(.center)
                 .frame(width: metrics.labelWidth)
         }
+        .background {
+            RoundedRectangle(cornerRadius: Search.selectionCornerRadius)
+                .fill(.white.opacity(isSelected ? Search.selectionOpacity : 0))
+                .padding(-metrics.iconSize * Search.selectionOutsetRatio)
+        }
         .accessibilityIdentifier("app-icon")
         .accessibilityLabel(app.displayName)
         // `GridItemContainer` is a `VStack` + `onTapGesture`, not a `Button`,
         // so XCUI's `app.buttons` query wouldn't match it without this trait.
         // Adding `.isButton` also gives VoiceOver the correct semantic role.
-        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     // `@ViewBuilder` lets us return different concrete view types from the

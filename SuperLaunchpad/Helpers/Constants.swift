@@ -29,6 +29,30 @@ enum AnimationDuration {
     static let orderOutSlack: Double = 0.1
 }
 
+enum Search {
+    static let fieldWidth: CGFloat = 200
+    static let fieldFontSize: CGFloat = 14
+    static let fieldCornerRadius: CGFloat = 8
+    // The selection highlight extends past the icon box by this share of the
+    // icon size on each side.
+    static let selectionOutsetRatio: CGFloat = 0.15
+    static let selectionCornerRadius: CGFloat = 14
+    static let selectionOpacity: Double = 0.22
+    static let resultsTransition: Double = 0.12
+}
+
+enum SettingsWindow {
+    static let width: CGFloat = 420
+}
+
+enum HotKey {
+    // Four-char code 'SLPd' identifying our Carbon hotkey events.
+    static let signature: UInt32 = 0x534C_5064
+    static let identifier: UInt32 = 1
+    static let maxKeyNameLength = 4
+    static let noKeyCode = -1
+}
+
 // Snapshot of layout numbers derived from the current screen size.
 // Built from a SwiftUI `GeometryReader` — recompute on resize rather than caching,
 // because external display changes or stage-manager resizes invalidate the values.

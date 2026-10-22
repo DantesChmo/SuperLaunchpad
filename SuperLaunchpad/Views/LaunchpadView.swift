@@ -39,11 +39,21 @@ struct LaunchpadView: View {
                 VStack(spacing: 0) {
                     Spacer().frame(height: metrics.topPadding)
 
-                    SearchBarView()
+                    SearchBarView(viewModel: viewModel)
 
                     Spacer().frame(height: metrics.topPadding * 0.5)
 
-                    if viewModel.pages.isEmpty {
+                    if viewModel.isSearching {
+                        SearchResultsView(
+                            viewModel: viewModel,
+                            metrics: metrics,
+                            onLaunch: { app in
+                                viewModel.launchApp(app)
+                                NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
+                            }
+                        )
+                        .transition(.opacity)
+                    } else if viewModel.pages.isEmpty {
                         Spacer()
                         Text("No applications found")
                             .foregroundStyle(.white.opacity(0.6))
@@ -87,6 +97,9 @@ struct LaunchpadView: View {
                     Spacer().frame(height: metrics.bottomPadding)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Short crossfade between the grid and search results; no
+                // paging animation.
+                .animation(.easeInOut(duration: Search.resultsTransition), value: viewModel.isSearching)
                 // `.contentShape(Rectangle())` makes the otherwise transparent
                 // VStack area tappable — without this, taps would only hit the
                 // actual icon rects, not the gaps between them.
@@ -140,6 +153,9 @@ struct LaunchpadView: View {
                                   displayedFolder?.id == folder.id,
                                   let renamed = viewModel.folders.first(where: { $0.id == folder.id }) else { return }
                             displayedFolder = renamed
+                        },
+                        onRenamingChange: { renaming in
+                            viewModel.isRenamingFolder = renaming
                         }
                     )
                     // A different folder gets fresh edit state.

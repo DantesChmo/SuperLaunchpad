@@ -13,8 +13,9 @@ import SwiftUI
 @MainActor
 @Observable
 final class LaunchpadViewModel {
-    // Every write to `apps` or `folders` rebuilds `pages`, unless it happens
-    // inside `updateContents { ... }`, which rebuilds once at the end.
+    // Every write to `apps` or `folders` rebuilds `pages` and `searchResults`,
+    // unless it happens inside `updateContents { ... }`, which rebuilds once
+    // at the end.
     var apps: [AppEntry] = [] {
         didSet { rebuildPagesUnlessBatching() }
     }
@@ -23,10 +24,36 @@ final class LaunchpadViewModel {
     }
     var currentPage: Int = 0
     var isVisible: Bool = false
-    // Exists for future search support; intentionally not wired up.
-    // See AGENTS.md > "Known limitations".
-    var searchText: String = ""
+    // Bound to the search field. A non-empty query replaces the paged grid
+    // with `searchResults`; typing closes an open folder.
+    var searchText: String = "" {
+        didSet {
+            guard searchText != oldValue else { return }
+            let searching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            // Assigned only on change, so views reading it are not
+            // re-rendered on every keystroke.
+            if isSearching != searching { isSearching = searching }
+            if isSearching { openFolderID = nil }
+            rebuildSearchResults()
+            selectedResultIndex = 0
+        }
+    }
     var openFolderID: String?
+
+    // Search results for `searchText` (see `AppSearch`), capped at one page.
+    // Stored for the same reason as `pages`.
+    private(set) var searchResults: [AppEntry] = []
+    private(set) var selectedResultIndex = 0
+    // Bumped on every `show()`; the search field takes focus when it changes,
+    // so typing starts a query straight away.
+    private(set) var searchFocusRequest = 0
+
+    // True while the query has non-whitespace text.
+    private(set) var isSearching = false
+
+    var selectedResult: AppEntry? {
+        searchResults.indices.contains(selectedResultIndex) ? searchResults[selectedResultIndex] : nil
+    }
 
     // Derived view of `apps` + `folders` shaped for the UI:
     //   pages[i] = the items shown on page i, in display order.
@@ -49,11 +76,13 @@ final class LaunchpadViewModel {
         body()
         isBatchingContentUpdates = false
         rebuildPages()
+        rebuildSearchResults()
     }
 
     private func rebuildPagesUnlessBatching() {
         guard !isBatchingContentUpdates else { return }
         rebuildPages()
+        rebuildSearchResults()
     }
 
     private func rebuildPages() {
@@ -482,11 +511,14 @@ final class LaunchpadViewModel {
         // Always reset to the first page on show — matches macOS Launchpad UX.
         currentPage = 0
         isVisible = true
+        searchFocusRequest += 1
     }
 
     func hide() {
-        // Also close any open folder so the next show is in a clean state.
+        // Also close any open folder and clear the query so the next show is
+        // in a clean state.
         openFolderID = nil
+        searchText = ""
         isVisible = false
     }
 
@@ -570,6 +602,10 @@ final class LaunchpadViewModel {
     // Bumped by `cancelDrag()`; the grid observes it.
     private(set) var dragCancelRequest = 0
 
+    // True while a folder title is being edited. The panel's key monitor then
+    // leaves Escape and the arrows to the title field.
+    @ObservationIgnored var isRenamingFolder = false
+
     // Pages the pager shows: the stored ones plus the trailing drag page.
     var displayedPageCount: Int {
         pages.count + (hasTrailingDragPage ? 1 : 0)
@@ -621,5 +657,42 @@ final class LaunchpadViewModel {
         layoutRevision += 1
         try? database?.saveLayout(apps: result.apps, folders: result.folders)
         return true
+    }
+
+    // MARK: - Search
+
+    enum EscapeAction: Equatable {
+        case cancelledDrag
+        case clearedSearch
+        case closedFolder
+        case hideLauncher
+    }
+
+    // Escape acts on the innermost context: a dragged icon, the query, then an open folder,
+    // then the launcher itself (which the caller hides).
+    func handleEscape() -> EscapeAction {
+        if cancelDrag() {
+            return .cancelledDrag
+        }
+        if !searchText.isEmpty {
+            searchText = ""
+            return .clearedSearch
+        }
+        if openFolderID != nil {
+            closeFolder()
+            return .closedFolder
+        }
+        return .hideLauncher
+    }
+
+    // Clamped to the results: the selection never wraps or leaves the page.
+    func moveSelection(by delta: Int) {
+        guard !searchResults.isEmpty else { return }
+        selectedResultIndex = min(max(selectedResultIndex + delta, 0), searchResults.count - 1)
+    }
+
+    private func rebuildSearchResults() {
+        searchResults = Array(AppSearch.results(for: searchText, in: apps).prefix(Grid.appsPerPage))
+        selectedResultIndex = min(selectedResultIndex, max(searchResults.count - 1, 0))
     }
 }

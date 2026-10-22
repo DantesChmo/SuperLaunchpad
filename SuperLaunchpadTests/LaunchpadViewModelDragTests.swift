@@ -85,4 +85,20 @@ struct LaunchpadViewModelDragTests {
         let stored = try db.fetchAllApps().sorted { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) }
         #expect(stored.map(\.bundleIdentifier) == ["b", "a"])
     }
+
+    @Test func escapeCancelsDragBeforeQueryAndFolder() throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let vm = try makeViewModel(db)
+        vm.searchText = "a"
+        vm.beginDragSession()
+        let request = vm.dragCancelRequest
+
+        #expect(vm.handleEscape() == .cancelledDrag)
+        #expect(vm.dragCancelRequest == request + 1)
+        #expect(vm.searchText == "a")
+
+        vm.endDragSession()
+        #expect(vm.handleEscape() == .clearedSearch)
+    }
 }
