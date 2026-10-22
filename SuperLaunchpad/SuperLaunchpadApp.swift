@@ -42,7 +42,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // touches it, it is guaranteed to be non-nil. This is the one place AGENTS.md
     // allows `!` outside `lazy`.
     private var panel: LaunchpadPanel!
-    private let viewModel = LaunchpadViewModel()
+    // UI tests get a fresh throwaway DB so every run exercises the first-launch
+    // layout instead of whatever the user's real DB already holds.
+    private let viewModel = UserDefaults.standard.bool(forKey: "UITestMode")
+        ? LaunchpadViewModel(database: try? AppDatabase(path: FileManager.default.temporaryDirectory
+            .appendingPathComponent("SuperLaunchpad-UITest-\(UUID().uuidString).sqlite").path))
+        : LaunchpadViewModel()
     private var watcher: AppDirectoryWatcher!
     private let gestureMonitor = GestureMonitor()
 

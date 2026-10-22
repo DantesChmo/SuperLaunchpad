@@ -5,6 +5,7 @@ import XCTest
 // swift-testing tests live in SuperLaunchpadTests/.
 
 final class SuperLaunchpadUITests: XCTestCase {
+    private static let maxPagesToSearch = 5
     private var app: XCUIApplication!
 
     override func setUpWithError() throws {
@@ -60,17 +61,20 @@ final class SuperLaunchpadUITests: XCTestCase {
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 5))
 
-        // Folders only exist if the system Launchpad DB was imported (first
-        // launch) or apps were assigned to folders by hand. On a fresh CI
-        // box `/Applications` is mostly system apps with no folder data, so
-        // the launcher may have zero folders — skip rather than fail in
-        // that environment.
+        // UI tests run on a fresh DB, so the first-launch layout applies and
+        // always produces folders (at least Apple's Utilities). They may sit
+        // on a later page, and off-screen pages are still in the
+        // accessibility tree, so page right until one is hittable.
         let folders = app.buttons.matching(identifier: "folder-icon")
-        guard folders.firstMatch.waitForExistence(timeout: 3) else {
-            throw XCTSkip("No folders present — system DB had no folder import.")
-        }
+        XCTAssertTrue(folders.firstMatch.waitForExistence(timeout: 5), "No folders in the first-launch layout.")
 
-        folders.firstMatch.tap()
+        var folder = folders.allElementsBoundByIndex.first(where: \.isHittable)
+        for _ in 0..<Self.maxPagesToSearch where folder == nil {
+            app.typeKey(.rightArrow, modifierFlags: [])
+            folder = folders.allElementsBoundByIndex.first(where: \.isHittable)
+        }
+        let target = try XCTUnwrap(folder, "No folder became hittable after paging.")
+        target.tap()
 
         let detail = app.descendants(matching: .any)
             .matching(identifier: "folder-detail").firstMatch
