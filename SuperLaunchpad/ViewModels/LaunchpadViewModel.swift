@@ -170,25 +170,13 @@ final class LaunchpadViewModel {
     }
 
     // First-launch ordering. Take the freshly enumerated apps and assign
-    // positions based on the system Launchpad layout. Falls back to
-    // alphabetical when the system DB is empty.
+    // positions based on the system Launchpad layout. Falls back to a
+    // categorized layout when the system DB is empty.
     func applyOrdering(_ ordering: LaunchpadOrdering?, to apps: [AppEntry]) -> ([AppEntry], [FolderEntry]) {
         guard let ordering else {
-            // No system DB — alphabetical fallback, no folders.
-            // `localizedCaseInsensitiveCompare` gives correct ordering for
-            // accented/unicode names. Plain `<` would scatter them weirdly.
-            let sorted = apps.sorted {
-                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-            }
-            // Pack apps into pages of `Grid.appsPerPage` (35 by default):
-            //   index / 35 → page,   index % 35 → slot within page.
-            let result = sorted.enumerated().map { index, app in
-                var app = app
-                app.pageIndex = index / Grid.appsPerPage
-                app.orderIndex = index % Grid.appsPerPage
-                return app
-            }
-            return (result, [])
+            // No system DB (always the case on macOS 26 Tahoe) — group apps
+            // by category, see `InitialLayout`.
+            return InitialLayout.build(apps, categoryOf: AppCategory.of)
         }
 
         // The system DB identifies folders by an internal rowid we can't
