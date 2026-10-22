@@ -1,5 +1,8 @@
 import SwiftUI
 
+// Used by `FolderDetailView`'s ScrollView pager. The main grid uses
+// `PagerController` instead.
+//
 // Custom `ScrollTargetBehavior` that limits a horizontal scroll fling to ONE
 // page at a time — even if the user swipes hard enough to "throw" past several
 // pages. macOS Launchpad behaves this way; the default `.paging` behavior
@@ -34,68 +37,68 @@ private extension Comparable {
     }
 }
 
-// Horizontal pager: a ScrollView whose children are `AppGridPageView`s.
+// Main-grid pager: all pages side by side in an HStack, shifted by
+// `-position * width`. Input and the settle spring live in `PagerController`;
+// there is no ScrollView, so nothing else competes for the offset.
 struct PagingGridView: View {
     let pages: [[LaunchpadItem]]
-    // `@Binding` makes the page index two-way — keyboard/scroll updates flow
-    // from the parent ViewModel down here, and swipe updates flow back up.
-    @Binding var currentPage: Int
+    let pager: PagerController
     let metrics: LayoutMetrics
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
 
-    // Tracks the last page index that was set by a gesture (vs. set
-    // programmatically from outside). See the `onChange` below — used to
-    // avoid re-animating a scroll that was just driven by the user.
-    @State private var lastGesturePage: Int = 0
-
     var body: some View {
-        // `ScrollViewReader` exposes a `proxy.scrollTo(id:)` for programmatic
-        // scrolling — used when the user presses an arrow key.
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    // `Array(pages.enumerated())` is needed because ForEach
-                    // can't directly take an `EnumeratedSequence`. `id: \.offset`
-                    // uses the index as identity, which is fine since pages
-                    // are reshuffled holistically rather than reordered.
-                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
-                        AppGridPageView(items: page, metrics: metrics, onLaunch: onLaunch, onOpenFolder: onOpenFolder)
-                            .contentShape(Rectangle())
-                            // Each page fills the ScrollView's visible width
-                            // exactly — `containerRelativeFrame` does this
-                            // without needing a GeometryReader.
-                            .containerRelativeFrame(.horizontal)
-                            // `.id(index)` is the anchor used by `scrollTo`.
-                            .id(index)
-                    }
-                }
-                // Marks the HStack as the "target layout" for snap behaviors.
-                .scrollTargetLayout()
-            }
-            .scrollTargetBehavior(SinglePageBehavior())
-            // Modern API (iOS 17 / macOS 14+) that reports scroll geometry
-            // changes. We compute the current page from the content offset
-            // and write it back to the binding.
-            .onScrollGeometryChange(for: Int.self) { geometry in
-                let pageWidth = geometry.containerSize.width
-                guard pageWidth > 0 else { return 0 }
-                let page = Int(round(geometry.contentOffset.x / pageWidth))
-                return max(0, min(page, pages.count - 1))
-            } action: { _, newValue in
-                lastGesturePage = newValue
-                currentPage = newValue
-            }
-            // Programmatic page change (arrow key, mouse wheel) → animate
-            // scroll. Guard: if `currentPage` was just updated by the
-            // gesture handler above, the ScrollView is already there;
-            // re-animating would cause a tiny stutter.
-            .onChange(of: currentPage) { _, newValue in
-                guard newValue != lastGesturePage else { return }
-                withAnimation(.spring(duration: 0.35, bounce: 0)) {
-                    proxy.scrollTo(newValue, anchor: .leading)
+        GeometryReader { geo in
+            HStack(spacing: 0) {
+                // Index identity is fine: pages are reshuffled holistically
+                // rather than reordered.
+                ForEach(Array(pages.enumerated()), id: \.offset) { _, page in
+                    AppGridPageView(items: page, metrics: metrics, onLaunch: onLaunch, onOpenFolder: onOpenFolder)
+                        .contentShape(Rectangle())
+                        .frame(width: geo.size.width)
                 }
             }
+            .frame(width: geo.size.width, alignment: .leading)
+            .modifier(PagerOffset(pager: pager, pageWidth: geo.size.width))
         }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            pager.pageWidth = width
+        }
+        .onChange(of: pages.count) {
+            pager.syncPageCount()
+        }
+    }
+}
+
+// The only place that reads `pager.position`, so a per-frame change re-runs
+// this modifier and not the pages inside `content`.
+private struct PagerOffset: ViewModifier {
+    let pager: PagerController
+    let pageWidth: CGFloat
+
+    func body(content: Content) -> some View {
+        let offset = -CGFloat(pager.position) * pageWidth
+        content
+            .offset(x: offset)
+            // The pager animates itself; an enclosing implicit animation
+            // (e.g. the show fade) must not tween the offset as well.
+            .transaction(value: offset) { transaction in
+                transaction.animation = nil
+            }
+            .environment(\.isPaging, pager.isPaging)
+    }
+}
+
+private struct IsPagingKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    // True while the main grid is being dragged or is settling.
+    var isPaging: Bool {
+        get { self[IsPagingKey.self] }
+        set { self[IsPagingKey.self] = newValue }
     }
 }
