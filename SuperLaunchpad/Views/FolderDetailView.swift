@@ -26,6 +26,8 @@ struct FolderDetailView: View {
     @FocusState private var titleFieldFocused: Bool
     @State private var cardFrame: CGRect = .zero
     @State private var gridFrame: CGRect = .zero
+    @State private var renameLog: [String] = []
+    private func rlog(_ s: String) { renameLog.append(s) }
 
     // Splits the flat `apps` array into pages of `FolderGrid.appsPerPage`
     // (12). `stride(from:to:by:)` walks indices in steps; for each step we
@@ -67,6 +69,15 @@ struct FolderDetailView: View {
     var body: some View {
         VStack(spacing: 16) {
             title
+            if UserDefaults.standard.bool(forKey: "UITestMode") {
+                Text("dbg")
+                    .font(.system(size: 6))
+                    .foregroundStyle(.white.opacity(0.05))
+                    .accessibilityElement()
+                    .accessibilityLabel("dbg")
+                    .accessibilityValue(renameLog.joined(separator: " "))
+                    .accessibilityIdentifier("rename-debug")
+            }
 
             if folderPages.isEmpty {
                 Text("Empty Folder")
@@ -139,6 +150,7 @@ struct FolderDetailView: View {
         // (in LaunchpadView) should close it. Clicking a non-focusable area
         // does not take focus from the title field, so end the edit here.
         .onTapGesture {
+            rlog("cardTap")
             commitRename()
         }
         // `.contain` keeps the card one container element; otherwise the
@@ -185,9 +197,11 @@ struct FolderDetailView: View {
                 // so it never reaches `LaunchpadPanel.keyDown`, which would
                 // close the folder.
                 .onExitCommand {
+                    rlog("exit")
                     cancelRename()
                 }
                 .onChange(of: titleFieldFocused) { _, focused in
+                    rlog("focus->\(focused)")
                     if !focused {
                         commitRename()
                     }
@@ -199,6 +213,7 @@ struct FolderDetailView: View {
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(.white)
                 .onTapGesture {
+                    rlog("titleTap")
                     beginRename()
                 }
                 .accessibilityAddTraits(.isButton)
@@ -215,12 +230,14 @@ struct FolderDetailView: View {
     }
 
     private func beginRename() {
+        rlog("begin")
         draftTitle = folder.title
         isRenaming = true
         titleFieldFocused = true
     }
 
     private func commitRename() {
+        rlog("commit(\(isRenaming))")
         guard isRenaming else { return }
         isRenaming = false
         if let title = FolderRename.committedTitle(draft: draftTitle, current: folder.title) {
@@ -229,6 +246,7 @@ struct FolderDetailView: View {
     }
 
     private func cancelRename() {
+        rlog("cancel")
         isRenaming = false
     }
 

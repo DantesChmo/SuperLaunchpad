@@ -132,7 +132,22 @@ final class SuperLaunchpadUITests: XCTestCase {
         // Enter commits. Edits only append and delete, so the test ends with
         // the original name in the real launcher DB.
         let suffix = " 2026"
+        let debug = app.descendants(matching: .any).matching(identifier: "rename-debug").firstMatch
+        func dbg(_ tag: String) { print("RENAME-DEBUG \(tag): field=\(field.exists) fr=\(String(describing: app.windows.firstMatch.value)) log=[\(debug.exists ? String(describing: debug.value) : "<none>")]") }
+        dbg("after escape")
         title.click()
+        _ = field.waitForExistence(timeout: 2)
+        dbg("after click 1")
+        if !field.exists {
+            title.click()
+            _ = field.waitForExistence(timeout: 2)
+            dbg("after click 2")
+        }
+        if !field.exists {
+            title.click()
+            _ = field.waitForExistence(timeout: 2)
+            dbg("after click 3")
+        }
         XCTAssertTrue(field.waitForExistence(timeout: 2))
         field.typeKey(.rightArrow, modifierFlags: [])
         field.typeText(suffix)
