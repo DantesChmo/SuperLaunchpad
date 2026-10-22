@@ -129,7 +129,16 @@ final class SuperLaunchpadUITests: XCTestCase {
         // Enter commits. Edits only append and delete, so the test ends with
         // the original name in the real launcher DB.
         let suffix = " 2026"
+        let debug = app.descendants(matching: .any).matching(identifier: "rename-debug").firstMatch
+        print("RENAME-DEBUG after escape: \(debug.exists ? debug.label : "<none>")")
         title.tap()
+        let opened = field.waitForExistence(timeout: 2)
+        print("RENAME-DEBUG after 2nd tap (field=\(opened)): \(debug.exists ? debug.label : "<none>")")
+        if !opened {
+            title.click()
+            let opened2 = field.waitForExistence(timeout: 2)
+            print("RENAME-DEBUG after click (field=\(opened2)): \(debug.exists ? debug.label : "<none>")")
+        }
         XCTAssertTrue(field.waitForExistence(timeout: 2))
         field.typeKey(.rightArrow, modifierFlags: [])
         field.typeText(suffix)

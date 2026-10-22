@@ -26,6 +26,8 @@ struct FolderDetailView: View {
     @FocusState private var titleFieldFocused: Bool
     @State private var cardFrame: CGRect = .zero
     @State private var gridFrame: CGRect = .zero
+    @State private var renameLog: [String] = []
+    private func rlog(_ s: String) { renameLog.append(s) }
 
     // Splits the flat `apps` array into pages of `FolderGrid.appsPerPage`
     // (12). `stride(from:to:by:)` walks indices in steps; for each step we
@@ -67,6 +69,14 @@ struct FolderDetailView: View {
     var body: some View {
         VStack(spacing: 16) {
             title
+            if UserDefaults.standard.bool(forKey: "UITestMode") {
+                Text(renameLog.joined(separator: " "))
+                    .font(.system(size: 2))
+                    .foregroundStyle(.white.opacity(0.02))
+                    .frame(width: 4, height: 4)
+                    .accessibilityLabel(renameLog.joined(separator: " "))
+                    .accessibilityIdentifier("rename-debug")
+            }
 
             if folderPages.isEmpty {
                 Text("Empty Folder")
@@ -139,6 +149,7 @@ struct FolderDetailView: View {
         // (in LaunchpadView) should close it. Clicking a non-focusable area
         // does not take focus from the title field, so end the edit here.
         .onTapGesture {
+            rlog("cardTap")
             commitRename()
         }
         // `.contain` keeps the card one container element; otherwise the
@@ -185,6 +196,7 @@ struct FolderDetailView: View {
                 // so it never reaches `LaunchpadPanel.keyDown`, which would
                 // close the folder.
                 .onExitCommand {
+                    rlog("exit")
                     cancelRename()
                 }
                 // Focus is requested once the field is in the window. Asked for
@@ -192,10 +204,12 @@ struct FolderDetailView: View {
                 // (after an Escape it doesn't), and the true→false bounce
                 // would read as a lost focus and commit at once.
                 .task {
+                    rlog("task")
                     titleFieldFocused = true
                 }
                 // Only a focus the field really had and lost ends the edit.
                 .onChange(of: titleFieldFocused) { wasFocused, focused in
+                    rlog("focus:\(wasFocused)->\(focused)")
                     if wasFocused, !focused {
                         commitRename()
                     }
@@ -207,6 +221,7 @@ struct FolderDetailView: View {
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(.white)
                 .onTapGesture {
+                    rlog("titleTap")
                     beginRename()
                 }
                 .accessibilityAddTraits(.isButton)
@@ -223,11 +238,13 @@ struct FolderDetailView: View {
     }
 
     private func beginRename() {
+        rlog("begin")
         draftTitle = folder.title
         isRenaming = true
     }
 
     private func commitRename() {
+        rlog("commit(\(isRenaming))")
         guard isRenaming else { return }
         isRenaming = false
         titleFieldFocused = false
@@ -239,6 +256,7 @@ struct FolderDetailView: View {
     // Focus is cleared with the edit, so the next field's `.task` is a real
     // false→true change.
     private func cancelRename() {
+        rlog("cancel")
         isRenaming = false
         titleFieldFocused = false
     }
