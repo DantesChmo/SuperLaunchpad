@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-22
+
+### Fixed
+
+- The last row of icons no longer runs into the page indicator: the gaps
+  between rows are now part of the grid's height budget.
+
 ## [1.0.1] - 2026-10-22
 
 ### Fixed
@@ -84,7 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic detection of installed and removed apps; icons and layout cached in
   SQLite.
 
-[Unreleased]: https://github.com/DantesChmo/SuperLaunchpad/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/DantesChmo/SuperLaunchpad/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/DantesChmo/SuperLaunchpad/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/DantesChmo/SuperLaunchpad/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/DantesChmo/SuperLaunchpad/compare/0.0.1...v1.0.0
 [0.0.1]: https://github.com/DantesChmo/SuperLaunchpad/releases/tag/0.0.1

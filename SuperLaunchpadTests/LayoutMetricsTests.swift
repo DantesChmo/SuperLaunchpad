@@ -51,10 +51,13 @@ struct LayoutMetricsTests {
         #expect(m.rowSpacing == m.itemHeight * 0.05)
     }
 
-    @Test func layoutMetricsItemHeightDependsOnAvailableHeight() {
+    // The rows plus the gaps between them fill the height left for the grid,
+    // so the last row stays clear of the page indicator.
+    @Test func rowsAndGapsFitAvailableHeight() {
         let m = LayoutMetrics(screenWidth: 1920, screenHeight: 1080)
         let availableHeight: CGFloat = 1080 - (1080 * 0.06) - (1080 * 0.04) - (1080 * 0.1)
-        #expect(m.itemHeight == availableHeight / 5)
+        let gridHeight = m.itemHeight * CGFloat(Grid.rows) + m.rowSpacing * CGFloat(Grid.rows - 1)
+        #expect(abs(gridHeight - availableHeight) < 0.001)
     }
 
     @Test func layoutMetricsScalesWithLargerScreen() {

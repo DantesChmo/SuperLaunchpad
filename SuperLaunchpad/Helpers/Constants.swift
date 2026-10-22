@@ -131,8 +131,11 @@ struct LayoutMetrics {
         // Reserve ~10% of screen height for the search bar + page indicator
         // chrome that sits above and below the grid.
         let availableHeight = screenHeight - topPadding - bottomPadding - screenHeight * 0.1
-        itemHeight = availableHeight / CGFloat(Grid.rows)
-        rowSpacing = itemHeight * 0.05
+        // The rows and the gaps between them share that height; counting only
+        // the rows pushed the last one into the page indicator.
+        let rowSpacingRatio: CGFloat = 0.05
+        itemHeight = availableHeight / (CGFloat(Grid.rows) + CGFloat(Grid.rows - 1) * rowSpacingRatio)
+        rowSpacing = itemHeight * rowSpacingRatio
     }
 }
 
