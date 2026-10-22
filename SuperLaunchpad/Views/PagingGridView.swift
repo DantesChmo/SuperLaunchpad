@@ -40,26 +40,59 @@ private extension Comparable {
 // Main-grid pager: all pages side by side in an HStack, shifted by
 // `-position * width`. Input and the settle spring live in `PagerController`;
 // there is no ScrollView, so nothing else competes for the offset.
+//
+// Drag-to-reorder: a click-drag on an icon lifts it (`GridDragController`).
+// The pager only listens to scroll events, so a mouse drag never pages and a
+// trackpad swipe never reorders.
 struct PagingGridView: View {
+    let viewModel: LaunchpadViewModel
     let pages: [[LaunchpadItem]]
     let pager: PagerController
     let metrics: LayoutMetrics
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
 
+    @State private var drag = GridDragController()
+    // Resets when the gesture ends or is cancelled, which `onEnded` alone
+    // doesn't report.
+    @GestureState private var isPressing = false
+
+    private static let coordinateSpace = "pagingGrid"
+
     var body: some View {
         GeometryReader { geo in
-            HStack(spacing: 0) {
-                // Index identity is fine: pages are reshuffled holistically
-                // rather than reordered.
-                ForEach(Array(pages.enumerated()), id: \.offset) { _, page in
-                    AppGridPageView(items: page, metrics: metrics, onLaunch: onLaunch, onOpenFolder: onOpenFolder)
+            let geometry = GridGeometry(metrics: metrics, pageWidth: geo.size.width)
+            ZStack(alignment: .topLeading) {
+                HStack(spacing: 0) {
+                    // Index identity is fine: pages are reshuffled holistically
+                    // rather than reordered.
+                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
+                        AppGridPageView(
+                            items: previewItems(page, index: index),
+                            metrics: metrics,
+                            onLaunch: { app in
+                                guard !drag.isTapSuppressed else { return }
+                                onLaunch(app)
+                            },
+                            onOpenFolder: { folder in
+                                guard !drag.isTapSuppressed else { return }
+                                onOpenFolder(folder)
+                            },
+                            hiddenItemID: drag.session?.page == index ? drag.session?.itemID : nil
+                        )
                         .contentShape(Rectangle())
                         .frame(width: geo.size.width)
+                    }
                 }
+                .frame(width: geo.size.width, alignment: .leading)
+                .modifier(PagerOffset(pager: pager, pageWidth: geo.size.width))
+
+                LiftedItemView(drag: drag, metrics: metrics)
             }
-            .frame(width: geo.size.width, alignment: .leading)
-            .modifier(PagerOffset(pager: pager, pageWidth: geo.size.width))
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+            .environment(\.isGridDragActive, drag.isActive)
+            .simultaneousGesture(reorderGesture(geometry: geometry, pageWidth: geo.size.width))
+            .coordinateSpace(.named(Self.coordinateSpace))
         }
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
@@ -68,6 +101,81 @@ struct PagingGridView: View {
         }
         .onChange(of: pages.count) {
             pager.syncPageCount()
+        }
+        .onChange(of: isPressing) { _, pressing in
+            guard !pressing else { return }
+            // Ended without `onEnded` (cancelled): nothing to persist. After a
+            // normal release the session is already dropping and this is a no-op.
+            if drag.session?.isDropping == false {
+                drag.cancel()
+            }
+            viewModel.endDragSession()
+        }
+        .onChange(of: viewModel.isVisible) { _, visible in
+            guard !visible else { return }
+            drag.cancel()
+            viewModel.endDragSession()
+        }
+    }
+
+    private func previewItems(_ items: [LaunchpadItem], index: Int) -> [LaunchpadItem] {
+        guard let session = drag.session, session.page == index else { return items }
+        return session.preview(items)
+    }
+
+    private func reorderGesture(geometry: GridGeometry, pageWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: Drag.threshold, coordinateSpace: .named(Self.coordinateSpace))
+            .updating($isPressing) { _, state, _ in
+                state = true
+            }
+            .onChanged { value in
+                let lifted = drag.update(
+                    start: value.startLocation,
+                    pointer: value.location,
+                    pages: pages,
+                    page: viewModel.currentPage,
+                    geometry: geometry,
+                    pagerPosition: pager.position,
+                    pageWidth: pageWidth
+                )
+                if lifted {
+                    viewModel.beginDragSession()
+                }
+            }
+            .onEnded { _ in
+                drag.end(pages: pages, geometry: geometry, pagerPosition: pager.position, pageWidth: pageWidth) { session in
+                    viewModel.moveItem(session.item, toPage: session.page, slot: session.targetSlot)
+                }
+                viewModel.endDragSession()
+            }
+    }
+}
+
+// The copy of the dragged icon that follows the pointer, lifted above the
+// grid with a scale and a shadow. Reads `drag.location`, so only this view
+// re-renders on every mouse move.
+private struct LiftedItemView: View {
+    let drag: GridDragController
+    let metrics: LayoutMetrics
+
+    @State private var isLifted = false
+
+    var body: some View {
+        if let item = drag.liftedItem {
+            let isDropping = drag.session?.isDropping ?? true
+            GridCellView(item: item, metrics: metrics, onLaunch: { _ in }, onOpenFolder: { _ in })
+                .scaleEffect(isLifted && !isDropping ? Drag.liftScale : 1)
+                .shadow(color: .black.opacity(isLifted && !isDropping ? Drag.shadowOpacity : 0), radius: Drag.shadowRadius)
+                .position(drag.location)
+                .allowsHitTesting(false)
+                .onAppear {
+                    withAnimation(GridDragController.animation) {
+                        isLifted = true
+                    }
+                }
+                .onDisappear {
+                    isLifted = false
+                }
         }
     }
 }

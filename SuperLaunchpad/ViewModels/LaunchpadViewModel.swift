@@ -243,24 +243,35 @@ final class LaunchpadViewModel {
             // state updates. Mutating `@Observable` state off-main is a
             // compile-time error under strict concurrency.
             await MainActor.run {
-                if self.layoutRevision == startRevision {
-                    self.updateContents {
-                        self.apps = sortedApps
-                        self.folders = sortedFolders
-                    }
-                    // Only icons that changed in the rescan are decoded again.
-                    Task { await IconCache.shared.prewarm(sortedApps) }
-                } else {
-                    // The user edited the layout while this scan ran on rows
-                    // read before the edit, and the scan's writes may have
-                    // undone it. Write the edited layout back and scan again so
-                    // new apps still arrive.
-                    try? database?.saveLayout(apps: self.apps, folders: self.folders)
-                    _ = self.rescanGate.request()
-                }
+                self.receiveRescanResult(apps: sortedApps, folders: sortedFolders, startRevision: startRevision)
                 if self.rescanGate.finish() {
                     self.startRescan()
                 }
+            }
+        }
+    }
+
+    // A rescan that finishes mid-drag would swap `pages` under the dragged
+    // icon; its result is parked until the drag ends.
+    func receiveRescanResult(apps scannedApps: [AppEntry], folders scannedFolders: [FolderEntry], startRevision: Int) {
+        guard !isDragSessionActive else {
+            parkedRescan = ParkedRescan(apps: scannedApps, folders: scannedFolders, startRevision: startRevision)
+            return
+        }
+        if layoutRevision == startRevision {
+            updateContents {
+                apps = scannedApps
+                folders = scannedFolders
+            }
+            // Only icons that changed in the rescan are decoded again.
+            Task { await IconCache.shared.prewarm(scannedApps) }
+        } else {
+            // The user edited the layout while this scan ran on rows read
+            // before the edit, and the scan's writes may have undone it. Write
+            // the edited layout back and scan again so new apps still arrive.
+            try? database?.saveLayout(apps: apps, folders: folders)
+            if rescanGate.request() {
+                startRescan()
             }
         }
     }
@@ -538,6 +549,31 @@ final class LaunchpadViewModel {
         layoutRevision += 1
         try? database?.renameFolder(id: folderID, title: newTitle)
         return true
+    }
+
+    // MARK: - Drag session
+
+    private struct ParkedRescan {
+        let apps: [AppEntry]
+        let folders: [FolderEntry]
+        let startRevision: Int
+    }
+
+    // True while an icon is dragged on the grid. Set by the grid view.
+    @ObservationIgnored private(set) var isDragSessionActive = false
+    @ObservationIgnored private var parkedRescan: ParkedRescan?
+
+    func beginDragSession() {
+        isDragSessionActive = true
+    }
+
+    // Safe to call more than once per drag.
+    func endDragSession() {
+        guard isDragSessionActive else { return }
+        isDragSessionActive = false
+        guard let parked = parkedRescan else { return }
+        parkedRescan = nil
+        receiveRescanResult(apps: parked.apps, folders: parked.folders, startRevision: parked.startRevision)
     }
 
     private func applyEdit(_ edit: (inout GridLayout) -> Bool) -> Bool {

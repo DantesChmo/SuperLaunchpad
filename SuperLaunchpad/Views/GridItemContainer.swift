@@ -19,19 +19,21 @@ struct GridItemContainer<Icon: View, Label: View>: View {
     @ViewBuilder let label: Label
 
     @State private var isHovering = false
+    @Environment(\.isGridDragActive) private var isGridDragActive
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 6) {
+            VStack(spacing: LayoutMetrics.iconLabelSpacing) {
                 icon
                 label
             }
             // Explicit inner frame = predictable hover/tap target.
             // Height = icon + spacing + room for up to 2 label lines.
-            .frame(width: metrics.iconSize, height: metrics.iconSize + 6 + metrics.labelFont * 3)
+            .frame(width: metrics.itemHitSize.width, height: metrics.itemHitSize.height)
             // 1.08× scale on hover — matches macOS Launchpad's subtle bump.
-            .scaleEffect(isHovering ? 1.08 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: isHovering)
+            // Icons sliding under a dragged one are not hovered.
+            .scaleEffect(isHovering && !isGridDragActive ? 1.08 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: isHovering && !isGridDragActive)
             // `onHover` is macOS-only (iOS has no cursor). Fires `true` on
             // mouse enter and `false` on exit.
             .onHover { hovering in
@@ -42,4 +44,9 @@ struct GridItemContainer<Icon: View, Label: View>: View {
             }
         }
     }
+}
+
+extension EnvironmentValues {
+    // True while an icon is being dragged on the main grid.
+    @Entry var isGridDragActive = false
 }

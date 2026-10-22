@@ -43,6 +43,15 @@ struct LayoutMetrics {
     let bottomPadding: CGFloat
     let rowSpacing: CGFloat
 
+    // Vertical gap between an icon and its label.
+    static let iconLabelSpacing: CGFloat = 6
+
+    // Hover / tap / drag target of a cell: the icon plus room for two label
+    // lines, centered in the cell (see `GridItemContainer`).
+    var itemHitSize: CGSize {
+        CGSize(width: iconSize, height: iconSize + Self.iconLabelSpacing + labelFont * 3)
+    }
+
     init(screenWidth: CGFloat, screenHeight: CGFloat) {
         // All numbers are screen-relative so the grid looks proportionally the
         // same on a 13" MacBook and a 6K Pro Display. Hard-coded pixel sizes
@@ -64,6 +73,22 @@ struct LayoutMetrics {
         itemHeight = availableHeight / CGFloat(Grid.rows)
         rowSpacing = itemHeight * 0.05
     }
+}
+
+// Drag-to-reorder on the main grid.
+enum Drag {
+    // Pointer travel (pt) before a press on an icon becomes a drag; shorter
+    // movements stay a click.
+    static let threshold: CGFloat = 6
+    // Scale of the lifted icon that follows the pointer.
+    static let liftScale: CGFloat = 1.1
+    static let shadowRadius: CGFloat = 12
+    static let shadowOpacity: Double = 0.4
+    // The pointer must rest over a new slot this long before the neighbours
+    // reflow, so sweeping across the grid doesn't shuffle every icon it passes.
+    static let dwell: Double = 0.15
+    // Spring used for the reflow, the lift and the drop.
+    static let springDuration: Double = 0.25
 }
 
 // Tuning for the main-grid pager. Positions and velocities are in "pages"

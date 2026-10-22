@@ -50,6 +50,7 @@ struct LaunchpadView: View {
                         Spacer()
                     } else {
                         PagingGridView(
+                            viewModel: viewModel,
                             pages: viewModel.pages,
                             pager: pager,
                             metrics: metrics,
