@@ -87,18 +87,16 @@ private struct PagerOffset: ViewModifier {
             .transaction(value: offset) { transaction in
                 transaction.animation = nil
             }
-            .environment(\.isPaging, pager.isPaging)
-    }
-}
-
-private struct IsPagingKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    // True while the main grid is being dragged or is settling.
-    var isPaging: Bool {
-        get { self[IsPagingKey.self] }
-        set { self[IsPagingKey.self] = newValue }
+            // While paging, icons slide under a still cursor: disable hit
+            // testing so hover can't start mid-swipe, and absorb clicks so
+            // they don't fall through to the launcher's tap-to-hide.
+            .allowsHitTesting(!pager.isPaging)
+            .overlay {
+                if pager.isPaging {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture {}
+                }
+            }
     }
 }

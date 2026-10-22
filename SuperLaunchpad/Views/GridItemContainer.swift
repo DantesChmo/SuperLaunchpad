@@ -19,11 +19,8 @@ struct GridItemContainer<Icon: View, Label: View>: View {
     @ViewBuilder let label: Label
 
     @State private var isHovering = false
-    // Icons slide under a still cursor while the grid pages; don't bump them.
-    @Environment(\.isPaging) private var isPaging
 
     var body: some View {
-        let isRaised = isHovering && !isPaging
         VStack(spacing: 0) {
             VStack(spacing: 6) {
                 icon
@@ -33,8 +30,8 @@ struct GridItemContainer<Icon: View, Label: View>: View {
             // Height = icon + spacing + room for up to 2 label lines.
             .frame(width: metrics.iconSize, height: metrics.iconSize + 6 + metrics.labelFont * 3)
             // 1.08× scale on hover — matches macOS Launchpad's subtle bump.
-            .scaleEffect(isRaised ? 1.08 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: isRaised)
+            .scaleEffect(isHovering ? 1.08 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: isHovering)
             // `onHover` is macOS-only (iOS has no cursor). Fires `true` on
             // mouse enter and `false` on exit.
             .onHover { hovering in

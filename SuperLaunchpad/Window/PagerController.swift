@@ -19,7 +19,7 @@ final class PagerController {
     private let viewModel: LaunchpadViewModel
     @ObservationIgnored private var model = PagerModel(pageCount: 0)
     @ObservationIgnored private var wheel = WheelAccumulator()
-    @ObservationIgnored private var isTrackingGesture = false
+    @ObservationIgnored private var gesture = TrackpadGesture.idle
     @ObservationIgnored private var displayLink: CADisplayLink?
     @ObservationIgnored private var lastFrameTimestamp: CFTimeInterval?
 
@@ -51,7 +51,7 @@ final class PagerController {
         stopDisplayLink()
         model.reset()
         wheel = WheelAccumulator()
-        isTrackingGesture = false
+        gesture = .idle
         publish()
         commit(0)
     }
@@ -72,21 +72,39 @@ final class PagerController {
         guard event.momentumPhase.isEmpty else { return }
 
         if event.phase.contains(.began) {
-            syncPageCount()
-            stopDisplayLink()
-            model.beginDrag(timestamp: event.timestamp)
-            isTrackingGesture = true
-            drag(with: event)
+            gesture = .pending
+            decideAxis(with: event)
         } else if event.phase.contains(.changed) {
-            guard isTrackingGesture else { return }
-            drag(with: event)
+            switch gesture {
+            case .pending: decideAxis(with: event)
+            case .dragging: drag(with: event)
+            case .idle, .ignored: break
+            }
         } else if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
-            guard isTrackingGesture else { return }
-            isTrackingGesture = false
+            let wasDragging = gesture == .dragging
+            gesture = .idle
+            guard wasDragging else { return }
             let page = model.endDrag(timestamp: event.timestamp)
             commit(page)
             startSettling()
         }
+    }
+
+    // The first movement decides the gesture: mostly vertical two-finger
+    // scrolls are ignored so they don't grab the grid.
+    private func decideAxis(with event: NSEvent) {
+        let dx = abs(event.scrollingDeltaX)
+        let dy = abs(event.scrollingDeltaY)
+        guard dx > 0 || dy > 0 else { return }
+        guard dx >= dy else {
+            gesture = .ignored
+            return
+        }
+        syncPageCount()
+        stopDisplayLink()
+        model.beginDrag(timestamp: event.timestamp)
+        gesture = .dragging
+        drag(with: event)
     }
 
     private func drag(with event: NSEvent) {
@@ -166,6 +184,14 @@ final class PagerController {
         displayLink = nil
         lastFrameTimestamp = nil
     }
+}
+
+private enum TrackpadGesture {
+    case idle
+    // Fingers are down but haven't moved yet.
+    case pending
+    case dragging
+    case ignored
 }
 
 // The display link retains its target; this proxy holds the controller weakly
