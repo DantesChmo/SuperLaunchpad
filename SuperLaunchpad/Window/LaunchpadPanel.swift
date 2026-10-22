@@ -13,6 +13,10 @@ final class LaunchpadPanel: NSPanel {
     // Token returned by `NSEvent.addLocalMonitor...` — stored so we can pass it
     // back to `removeMonitor` when hiding.
     private var eventMonitor: Any?
+    // Deferred `orderOut` scheduled by `hidePanel`. Kept so `showPanel` can
+    // cancel it: otherwise a quick hide→show lets the stale `orderOut` remove
+    // the window while `viewModel.isVisible` is already true again.
+    private var pendingOrderOut: DispatchWorkItem?
 
     init(viewModel: LaunchpadViewModel) {
         self.viewModel = viewModel
@@ -70,6 +74,8 @@ final class LaunchpadPanel: NSPanel {
     }
 
     func showPanel() {
+        pendingOrderOut?.cancel()
+        pendingOrderOut = nil
         // Re-resolve the screen at show-time so display unplug/replug or a
         // resolution change picks up the latest frame.
         let screen = NSScreen.main ?? NSScreen.screens[0]
@@ -94,14 +100,23 @@ final class LaunchpadPanel: NSPanel {
         stopEventMonitor()
         viewModel.hide()
         // Delay the actual `orderOut` (window removal) until AFTER the SwiftUI
-        // fade-out has finished. The `+ 0.1` is slack to avoid clipping the
-        // tail of the spring animation.
-        DispatchQueue.main.asyncAfter(deadline: .now() + AnimationDuration.hide + 0.1) {
+        // fade-out has finished. The slack avoids clipping the tail of the
+        // spring animation.
+        pendingOrderOut?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingOrderOut = nil
+            // `showPanel` cancels this item, but guard anyway in case it was
+            // already dequeued: never remove a window that is visible again.
+            guard !self.viewModel.isVisible else { return }
             self.orderOut(nil)
-            if !self.viewModel.isVisible {
-                self.pager.reset()
-            }
+            self.pager.reset()
         }
+        pendingOrderOut = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + AnimationDuration.hide + AnimationDuration.orderOutSlack,
+            execute: workItem
+        )
     }
 
     // `NSPanel` defaults to NOT becoming key/main (panels are usually auxiliary).

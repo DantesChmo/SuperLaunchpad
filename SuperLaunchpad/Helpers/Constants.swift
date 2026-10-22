@@ -19,6 +19,9 @@ enum FolderGrid {
 enum AnimationDuration {
     static let show: Double = 0.25
     static let hide: Double = 0.2
+    // Extra wait after the hide animation before `orderOut`, so the window is
+    // not removed while the tail of the spring is still on screen.
+    static let orderOutSlack: Double = 0.1
 }
 
 // Snapshot of layout numbers derived from the current screen size.
