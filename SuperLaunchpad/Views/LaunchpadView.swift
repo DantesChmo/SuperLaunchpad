@@ -31,9 +31,15 @@ struct LaunchpadView: View {
     var body: some View {
         // `GeometryReader` measures the available space; we use it to compute
         // screen-relative `LayoutMetrics`. Inside the panel it equals the
-        // screen frame, so the proportions match the system Launchpad.
+        // screen frame, so the proportions match the system Launchpad. The
+        // content goes in the part the Dock leaves free; the backgrounds
+        // still cover the whole screen.
         GeometryReader { geo in
-            let metrics = LayoutMetrics(screenWidth: geo.size.width, screenHeight: geo.size.height)
+            let dock = viewModel.dockInsets.edgeInsets
+            let metrics = LayoutMetrics(
+                screenWidth: geo.size.width - dock.leading - dock.trailing,
+                screenHeight: geo.size.height - dock.bottom
+            )
 
             // Layered composition — the visual stack from back to front:
             //   1. Frosted desktop background (NSVisualEffectView).
@@ -99,6 +105,7 @@ struct LaunchpadView: View {
                     Spacer().frame(height: metrics.bottomPadding)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(dock)
                 // Short crossfade between the grid and search results; no
                 // paging animation.
                 .animation(.easeInOut(duration: Search.resultsTransition), value: viewModel.isSearching)
@@ -173,6 +180,7 @@ struct LaunchpadView: View {
                     )
                     // A different folder gets fresh edit state.
                     .id(folder.id)
+                    .padding(dock)
                     // Pop-out animation: fade in + scale up from 85% (only
                     // the fade with Reduce Motion).
                     .opacity(folderIsOpen ? 1 : 0)
@@ -301,6 +309,12 @@ private struct CurrentPageIndicator: View {
         PageIndicatorView(totalPages: viewModel.displayedPageCount, currentPage: viewModel.currentPage) { delta in
             pager.step(by: delta)
         }
+    }
+}
+
+private extension DockInsets {
+    var edgeInsets: EdgeInsets {
+        EdgeInsets(top: 0, leading: left, bottom: bottom, trailing: right)
     }
 }
 

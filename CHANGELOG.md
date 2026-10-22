@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-22
+
+### Fixed
+
+- The Dock no longer covers the launcher: the search bar, grid, page
+  indicator and folders are laid out in the space beside the Dock, wherever
+  it sits (bottom, left or right).
+
+## [1.0.0] - 2026-10-22
+
 ### Added
 
 - **Keyboard search.** Typing in the open launcher filters all apps, including
@@ -74,5 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic detection of installed and removed apps; icons and layout cached in
   SQLite.
 
-[Unreleased]: https://github.com/DantesChmo/SuperLaunchpad/compare/0.0.1...HEAD
+[Unreleased]: https://github.com/DantesChmo/SuperLaunchpad/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/DantesChmo/SuperLaunchpad/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/DantesChmo/SuperLaunchpad/compare/0.0.1...v1.0.0
 [0.0.1]: https://github.com/DantesChmo/SuperLaunchpad/releases/tag/0.0.1

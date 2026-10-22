@@ -42,6 +42,9 @@ final class LaunchpadViewModel {
         }
     }
     var openFolderID: String?
+    // Edges of the launcher's screen covered by the Dock; the content is laid
+    // out beside them. Set by `LaunchpadPanel` when it is placed on a screen.
+    var dockInsets = DockInsets.zero
 
     // Search results for `searchText` (see `AppSearch`), capped at one page.
     // Stored for the same reason as `pages`.

@@ -152,6 +152,13 @@ final class LaunchpadPanel: NSPanel {
         // Window coordinates, not `screen.frame`: on a secondary display the
         // screen origin is non-zero and would push the grid off the panel.
         contentView?.frame = NSRect(origin: .zero, size: screen.frame.size)
+        // The panel covers the whole screen, but the Dock stays on top of it.
+        // Moving or resizing the Dock changes `visibleFrame` and posts a
+        // screen-parameters change, which lands here again.
+        let dockInsets = DockInsets(frame: screen.frame, visibleFrame: screen.visibleFrame)
+        if viewModel.dockInsets != dockInsets {
+            viewModel.dockInsets = dockInsets
+        }
     }
 
     // `NSPanel` defaults to NOT becoming key/main (panels are usually auxiliary).
