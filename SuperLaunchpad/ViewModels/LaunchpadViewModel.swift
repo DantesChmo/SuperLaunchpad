@@ -173,6 +173,7 @@ final class LaunchpadViewModel {
     private func startRescan() {
         // Captured once: the detached task must not read main-actor state.
         let database = database
+        let startRevision = layoutRevision
 
         // `Task.detached` runs outside the structured concurrency tree of the
         // caller — important here because `loadApps` is `@MainActor` and we
@@ -198,11 +199,13 @@ final class LaunchpadViewModel {
             } else {
                 // Existing DB → preserve user's existing positions, append
                 // any newly installed apps at the end.
+                let folderImportDone = (try? database?.setting(.folderImportDone)) != nil
                 (appsToSave, foldersToSave) = LaunchpadViewModel.mergeNewApps(
                     enumerated,
                     existingApps: (try? database?.fetchAllApps()) ?? [],
                     existingFolders: (try? database?.fetchAllFolders()) ?? [],
-                    systemOrdering: systemOrdering
+                    systemOrdering: systemOrdering,
+                    folderImportDone: folderImportDone
                 )
             }
 
@@ -210,6 +213,12 @@ final class LaunchpadViewModel {
             // to them are inserted. (FK constraint would otherwise fire.)
             try? database?.saveFolders(foldersToSave)
             try? database?.saveApps(appsToSave)
+
+            // With a system layout available, both paths above have imported
+            // its folders by now; never import them again.
+            if systemOrdering != nil {
+                try? database?.setSetting(.folderImportDone, "1")
+            }
 
             // Drop rows for apps that were uninstalled since the last scan.
             let validIDs = Set(enumerated.map(\.bundleIdentifier))
@@ -234,12 +243,21 @@ final class LaunchpadViewModel {
             // state updates. Mutating `@Observable` state off-main is a
             // compile-time error under strict concurrency.
             await MainActor.run {
-                self.updateContents {
-                    self.apps = sortedApps
-                    self.folders = sortedFolders
+                if self.layoutRevision == startRevision {
+                    self.updateContents {
+                        self.apps = sortedApps
+                        self.folders = sortedFolders
+                    }
+                    // Only icons that changed in the rescan are decoded again.
+                    Task { await IconCache.shared.prewarm(sortedApps) }
+                } else {
+                    // The user edited the layout while this scan ran on rows
+                    // read before the edit, and the scan's writes may have
+                    // undone it. Write the edited layout back and scan again so
+                    // new apps still arrive.
+                    try? database?.saveLayout(apps: self.apps, folders: self.folders)
+                    _ = self.rescanGate.request()
                 }
-                // Only icons that changed in the rescan are decoded again.
-                Task { await IconCache.shared.prewarm(sortedApps) }
                 if self.rescanGate.finish() {
                     self.startRescan()
                 }
@@ -327,15 +345,16 @@ final class LaunchpadViewModel {
 
     // Subsequent-launch merge. Preserve every existing position; append
     // newly-installed apps at the end. Re-import folders from the system DB
-    // only if we don't yet have any (recovery path).
+    // only if we don't yet have any and never imported them (recovery path).
     //
     // `nonisolated static` like `applyOrdering`; the caller passes in the rows
-    // currently in the DB.
+    // currently in the DB and the `folderImportDone` setting.
     nonisolated static func mergeNewApps(
         _ enumerated: [AppEntry],
         existingApps existing: [AppEntry],
         existingFolders: [FolderEntry],
-        systemOrdering: LaunchpadOrdering?
+        systemOrdering: LaunchpadOrdering?,
+        folderImportDone: Bool
     ) -> ([AppEntry], [FolderEntry]) {
         // O(1) bundleID lookup for the merge loop below.
         // `uniqueKeysWithValues` traps on duplicate keys — safe here because
@@ -346,9 +365,12 @@ final class LaunchpadViewModel {
         // Recovery path: a DB where folders were dropped (e.g. older app version
         // never imported them) should re-import on the next run. We detect this
         // by checking: do we have folder rows AND apps actually linked to them?
+        // Once the import happened (or the user edited the layout) an empty
+        // folder list is the user's choice: dissolving the last folder must not
+        // bring the system folders back.
         var folderAppPositions: [String: (folderID: String, folderOrderIndex: Int)] = [:]
         let hasFolderApps = existing.contains { $0.folderID != nil }
-        if (existingFolders.isEmpty || !hasFolderApps), let ordering = systemOrdering {
+        if !folderImportDone, existingFolders.isEmpty || !hasFolderApps, let ordering = systemOrdering {
             existingFolders = []
             for folderInfo in ordering.folders {
                 let folderID = UUID().uuidString
@@ -467,5 +489,71 @@ final class LaunchpadViewModel {
 
     func closeFolder() {
         openFolderID = nil
+    }
+
+    // MARK: - Editing
+    //
+    // Each edit runs one `GridLayout` operation on the current layout, writes
+    // the normalized result back into `apps`/`folders` and persists it in a
+    // single DB transaction. Every method returns false (and changes nothing)
+    // when the edit is not possible.
+
+    nonisolated static let defaultFolderTitle = "Folder"
+
+    // Bumped by every edit; a rescan that started before an edit must not
+    // overwrite it (see `startRescan`).
+    @ObservationIgnored private var layoutRevision = 0
+
+    @discardableResult
+    func moveItem(_ item: GridLayout.Item, toPage page: Int, slot: Int) -> Bool {
+        applyEdit { $0.move(item, toPage: page, slot: slot) }
+    }
+
+    // Returns the ID of the new folder, or nil when the merge is not possible.
+    @discardableResult
+    func mergeApps(_ appID: String, onto targetAppID: String, title: String = defaultFolderTitle) -> String? {
+        let folderID = UUID().uuidString
+        let merged = applyEdit { $0.merge(appID, onto: targetAppID, folderID: folderID, title: title) }
+        return merged ? folderID : nil
+    }
+
+    @discardableResult
+    func addApp(_ appID: String, toFolder folderID: String, at index: Int? = nil) -> Bool {
+        applyEdit { $0.add(appID, toFolder: folderID, at: index) }
+    }
+
+    // A folder left without apps is dissolved.
+    @discardableResult
+    func removeApp(_ appID: String, fromFolder folderID: String, toPage page: Int, slot: Int) -> Bool {
+        applyEdit { $0.remove(appID, fromFolder: folderID, toPage: page, slot: slot) }
+    }
+
+    @discardableResult
+    func renameFolder(_ folderID: String, to title: String) -> Bool {
+        var layout = GridLayout(apps: apps, folders: folders)
+        guard layout.rename(folder: folderID, to: title),
+              let newTitle = layout.folders[folderID]?.title,
+              let index = folders.firstIndex(where: { $0.id == folderID }) else { return false }
+        folders[index].title = newTitle
+        layoutRevision += 1
+        try? database?.renameFolder(id: folderID, title: newTitle)
+        return true
+    }
+
+    private func applyEdit(_ edit: (inout GridLayout) -> Bool) -> Bool {
+        var layout = GridLayout(apps: apps, folders: folders)
+        guard edit(&layout) else { return false }
+        layout.dissolveEmptyFolders()
+        let result = layout.apply(to: apps, folders: folders)
+        updateContents {
+            apps = result.apps
+            folders = result.folders
+        }
+        if let openFolderID, !result.folders.contains(where: { $0.id == openFolderID }) {
+            self.openFolderID = nil
+        }
+        layoutRevision += 1
+        try? database?.saveLayout(apps: result.apps, folders: result.folders)
+        return true
     }
 }
