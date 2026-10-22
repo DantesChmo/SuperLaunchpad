@@ -1,27 +1,38 @@
 import SwiftUI
 
-// Visual placeholder for a future search field. Filtering is intentionally
-// not wired (see AGENTS.md > "Known limitations"): adding it requires a
-// `TextField`, debounce, scope decisions, and ViewModel filtering — out of
-// scope for the current release.
+// The launcher's search field. It takes focus every time the launcher is
+// shown, so typing starts a query at once; a real `TextField` (rather than
+// collecting keyDown characters) keeps IME, dead keys and paste working.
 //
-// Kept as a `Text("Search")` "fake" so the layout reserves space and the UI
-// matches the design.
+// Arrow keys, Return and Escape never reach the field while the launcher is
+// open: `LaunchpadPanel` intercepts them for selection, paging and dismissal.
 struct SearchBarView: View {
+    @Bindable var viewModel: LaunchpadViewModel
+    @FocusState private var isFocused: Bool
+
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.white.opacity(0.6))
-                .font(.system(size: 14))
-            Text("Search")
-                .foregroundStyle(.white.opacity(0.4))
-                .font(.system(size: 14))
+                .font(.system(size: Search.fieldFontSize))
+            TextField(
+                "Search",
+                text: $viewModel.searchText,
+                prompt: Text("Search").foregroundStyle(.white.opacity(0.4))
+            )
+            .textFieldStyle(.plain)
+            .font(.system(size: Search.fieldFontSize))
+            .foregroundStyle(.white)
+            .focused($isFocused)
+            .accessibilityIdentifier("search-field")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         // `.background(_:in:)` is the modern API that lets you set both a
         // fill style AND a shape in one modifier.
-        .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
-        .frame(width: 200)
+        .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: Search.fieldCornerRadius))
+        .frame(width: Search.fieldWidth)
+        .onAppear { isFocused = true }
+        .onChange(of: viewModel.searchFocusRequest) { isFocused = true }
     }
 }

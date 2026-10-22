@@ -4,6 +4,8 @@ import SwiftUI
 struct AppGridPageView: View {
     let items: [LaunchpadItem]
     let metrics: LayoutMetrics
+    // The keyboard-selected app in search results; nil on the main grid.
+    var selectedID: String? = nil
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
 
@@ -31,7 +33,7 @@ struct AppGridPageView: View {
                         // gets compile-time exhaustiveness checking.
                         switch item {
                         case .app(let app):
-                            AppIconView(app: app, metrics: metrics) {
+                            AppIconView(app: app, metrics: metrics, isSelected: app.id == selectedID) {
                                 onLaunch(app)
                             }
                         case .folder(let folder, let apps):

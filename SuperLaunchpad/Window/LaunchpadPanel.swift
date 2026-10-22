@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
 
 // Fullscreen borderless window that hosts the SwiftUI launcher UI.
@@ -125,42 +126,62 @@ final class LaunchpadPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
-    // Hardware key code constants used below (from NSEvent / HIToolbox).
-    // We could use `event.charactersIgnoringModifiers` but key codes are
-    // layout-independent — arrow keys behave the same on AZERTY / Dvorak.
-    override func keyDown(with event: NSEvent) {
-        switch event.keyCode {
-        case 53: // Escape
-            // Escape acts on the innermost context: close the open folder if
-            // any, otherwise dismiss the launcher.
-            if viewModel.openFolderID != nil {
-                viewModel.closeFolder()
-            } else {
-                hidePanel()
-            }
-        case 123: // Left arrow
-            pager.step(by: -1)
-        case 124: // Right arrow
-            pager.step(by: 1)
-        default:
-            super.keyDown(with: event)
-        }
-    }
-
     // MARK: - Event Monitor
 
     // All main-grid paging input (trackpad and mouse wheel) goes through
     // `PagerController`. Events are swallowed so nothing else scrolls the grid;
     // while a folder is open they pass through to the folder's own ScrollView.
+    //
+    // Navigation keys are taken here too, before the focused search field's
+    // editor would consume them (see `handleKeyDown`).
     private func startEventMonitor() {
         stopEventMonitor()
         eventMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.scrollWheel]
+            matching: [.scrollWheel, .keyDown]
         ) { [weak self] event in
-            guard let self, self.viewModel.isVisible, self.viewModel.openFolderID == nil else { return event }
+            guard let self, self.viewModel.isVisible, event.window === self else { return event }
+            if event.type == .keyDown {
+                return self.handleKeyDown(event) ? nil : event
+            }
+            guard self.viewModel.openFolderID == nil, !self.viewModel.isSearching else { return event }
             self.pager.handleScroll(event)
             return nil
         }
+    }
+
+    // Returns true if the key was handled. Key codes are layout-independent,
+    // so arrows behave the same on AZERTY / Dvorak. Everything not handled
+    // (letters, modified keys, ↑/↓ outside search) goes on to the search field.
+    private func handleKeyDown(_ event: NSEvent) -> Bool {
+        // While an input method is composing, its candidate window owns the
+        // arrows, Return and Escape.
+        if let editor = firstResponder as? NSTextView, editor.hasMarkedText() { return false }
+        guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return false }
+
+        let searching = viewModel.isSearching
+        switch Int(event.keyCode) {
+        case kVK_Escape:
+            if viewModel.handleEscape() == .hideLauncher {
+                hidePanel()
+            }
+        case kVK_LeftArrow:
+            if searching { viewModel.moveSelection(by: -1) } else { pager.step(by: -1) }
+        case kVK_RightArrow:
+            if searching { viewModel.moveSelection(by: 1) } else { pager.step(by: 1) }
+        case kVK_UpArrow where searching:
+            viewModel.moveSelection(by: -Grid.columns)
+        case kVK_DownArrow where searching:
+            viewModel.moveSelection(by: Grid.columns)
+        case kVK_Return where searching, kVK_ANSI_KeypadEnter where searching:
+            guard let app = viewModel.selectedResult else { return true }
+            // Hide first: `launchApp` also hides the view model, after which
+            // `hidePanel` would skip the `orderOut`.
+            hidePanel()
+            viewModel.launchApp(app)
+        default:
+            return false
+        }
+        return true
     }
 
     private func stopEventMonitor() {

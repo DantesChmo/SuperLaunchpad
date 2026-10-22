@@ -29,6 +29,18 @@ enum AnimationDuration {
     static let orderOutSlack: Double = 0.1
 }
 
+enum Search {
+    static let fieldWidth: CGFloat = 200
+    static let fieldFontSize: CGFloat = 14
+    static let fieldCornerRadius: CGFloat = 8
+    // The selection highlight extends past the icon box by this share of the
+    // icon size on each side.
+    static let selectionOutsetRatio: CGFloat = 0.15
+    static let selectionCornerRadius: CGFloat = 14
+    static let selectionOpacity: Double = 0.22
+    static let resultsTransition: Double = 0.12
+}
+
 enum SettingsWindow {
     static let width: CGFloat = 420
 }
