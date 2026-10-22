@@ -110,8 +110,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: UserDefaults.standard,
             queue: .main
         ) { [weak self] _ in
-            self?.applyGesturePreference()
-            self?.applyHotKeyPreference()
+            MainActor.assumeIsolated {
+                self?.applyGesturePreference()
+                self?.applyHotKeyPreference()
+            }
         }
 
         // UI tests launch with `-UITestMode YES`. The launcher panel is normally
