@@ -8,7 +8,7 @@ import Sparkle
 // an error on each check.
 @MainActor
 @Observable
-final class Updater {
+final class UpdaterController {
     @ObservationIgnored private let controller: SPUStandardUpdaterController?
     @ObservationIgnored private var canCheckObservation: NSKeyValueObservation?
 

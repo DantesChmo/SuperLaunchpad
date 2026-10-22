@@ -18,13 +18,13 @@ struct SuperLaunchpadApp: App {
             Button("Show / Hide") {
                 appDelegate.toggleLaunchpad()
             }
-            SettingsMenuButton {
-                appDelegate.prepareForSettings()
-            }
             Button("Check for Updates…") {
                 appDelegate.checkForUpdates()
             }
             .disabled(!appDelegate.updater.canCheckForUpdates)
+            SettingsMenuButton {
+                appDelegate.prepareForSettings()
+            }
             Divider()
             Button("Quit") {
                 // `NSApp` is the shared `NSApplication` singleton.
@@ -76,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var watcher: AppDirectoryWatcher!
     private let gestureMonitor = GestureMonitor()
     let hotKeyMonitor = HotKeyMonitor()
-    let updater = Updater()
+    let updater = UpdaterController()
     private let preferences = Preferences()
     private var isGestureMonitorRunning = false
 

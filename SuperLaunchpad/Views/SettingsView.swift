@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     let hotKeyMonitor: HotKeyMonitor
-    @Bindable var updater: Updater
+    @Bindable var updater: UpdaterController
 
     @AppStorage(Preferences.Key.pinchGestureEnabled)
     private var pinchGestureEnabled = Preferences.Default.pinchGestureEnabled
