@@ -21,6 +21,7 @@ struct GridItemContainer<Icon: View, Label: View>: View {
     @State private var isHovering = false
     @Environment(\.isGridDragActive) private var isGridDragActive
     @Environment(\.enterEditMode) private var enterEditMode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,9 +32,10 @@ struct GridItemContainer<Icon: View, Label: View>: View {
             // Explicit inner frame = predictable hover/tap target.
             // Height = icon + spacing + room for up to 2 label lines.
             .frame(width: metrics.itemHitSize.width, height: metrics.itemHitSize.height)
-            // 1.08× scale on hover — matches macOS Launchpad's subtle bump.
-            // Icons sliding under a dragged one are not hovered.
-            .scaleEffect(isHovering && !isGridDragActive ? 1.08 : 1.0)
+            // 1.08× scale on hover — matches macOS Launchpad's subtle bump
+            // (none with Reduce Motion). Icons sliding under a dragged one
+            // are not hovered.
+            .scaleEffect(Motion(reduced: reduceMotion).hoverScale(isHovering: isHovering && !isGridDragActive))
             .animation(.easeInOut(duration: 0.15), value: isHovering && !isGridDragActive)
             // `onHover` is macOS-only (iOS has no cursor). Fires `true` on
             // mouse enter and `false` on exit.
@@ -115,7 +117,7 @@ private struct LauncherItemAccessibility: ViewModifier {
             .accessibilityAction {
                 onActivate()
             }
-            .accessibilityAction(named: "Edit Layout") {
+            .accessibilityAction(named: Text("Edit Layout")) {
                 enterEditMode()
             }
     }

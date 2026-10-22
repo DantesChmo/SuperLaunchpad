@@ -52,6 +52,13 @@ struct Motion: Equatable {
         reduced ? nil : .spring(duration: AnimationDuration.pageIndicator, bounce: AnimationDuration.pageIndicatorBounce)
     }
 
+    // MARK: - Hover
+
+    // The hovered icon bumps up slightly; with Reduce Motion it stays put.
+    func hoverScale(isHovering: Bool) -> CGFloat {
+        isHovering && !reduced ? AnimationDuration.hoverScale : 1
+    }
+
     // MARK: - Drag and edit mode
 
     // Reflow, lift and drop of a dragged icon.

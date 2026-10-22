@@ -106,7 +106,9 @@ struct FolderDetailView: View {
                     PageIndicatorView(
                         totalPages: folderPages.count,
                         currentPage: currentPage
-                    )
+                    ) { delta in
+                        currentPage = min(max(currentPage + delta, 0), folderPages.count - 1)
+                    }
                     // Swallow the tap on the indicator. Without this, the
                     // tap propagates up to the dimmed background and closes
                     // the folder — unwanted UX.
@@ -281,6 +283,7 @@ private struct FolderAppIconView: View {
     @State private var isHovering = false
     @Environment(\.enterEditMode) private var enterEditMode
     @Environment(\.isEditing) private var isEditing
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         // Same outer/inner VStack pattern as `GridItemContainer` — see the
@@ -298,7 +301,7 @@ private struct FolderAppIconView: View {
                     .frame(width: labelWidth)
             }
             .frame(width: iconSize, height: iconSize + 6 + labelFont * 3)
-            .scaleEffect(isHovering ? 1.08 : 1.0)
+            .scaleEffect(Motion(reduced: reduceMotion).hoverScale(isHovering: isHovering))
             .animation(.easeInOut(duration: 0.15), value: isHovering)
             .onHover { hovering in
                 isHovering = hovering
@@ -310,7 +313,7 @@ private struct FolderAppIconView: View {
         }
         .launcherItemAccessibility(
             label: app.displayName,
-            hint: isEditing ? "Drag to move" : "Opens the app",
+            hint: isEditing ? String(localized: "Drag to move") : String(localized: "Opens the app"),
             onActivate: onTap
         )
         .accessibilityAddTraits(.isButton)

@@ -54,6 +54,15 @@ struct MotionTests {
         #expect(full.dragAnimation == .spring(duration: Drag.springDuration, bounce: 0))
     }
 
+    // MARK: - Hover
+
+    @Test func hoverBumpsOnlyWithoutReduceMotion() {
+        #expect(full.hoverScale(isHovering: true) == AnimationDuration.hoverScale)
+        #expect(full.hoverScale(isHovering: false) == 1)
+        #expect(reduced.hoverScale(isHovering: true) == 1)
+        #expect(reduced.hoverScale(isHovering: false) == 1)
+    }
+
     // MARK: - Edit mode
 
     @Test func iconsWiggleOnlyWhenEditingWithoutReduceMotion() {

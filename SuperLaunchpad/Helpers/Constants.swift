@@ -34,6 +34,8 @@ enum AnimationDuration {
     static let orderOutSlack: Double = 0.1
     // The hidden launcher is zoomed in this much, so showing it zooms out.
     static let launcherHiddenScale: CGFloat = 1.05
+    // A hovered icon grows this much.
+    static let hoverScale: CGFloat = 1.08
     // Folder popup open / close, and the closed popup's scale it pops from.
     static let folder: Double = 0.25
     static let folderClosedScale: CGFloat = 0.85

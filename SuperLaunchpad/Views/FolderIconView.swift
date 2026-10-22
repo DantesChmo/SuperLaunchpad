@@ -29,7 +29,9 @@ struct FolderIconView: View {
         }
         .launcherItemAccessibility(
             label: folder.title,
-            hint: apps.count == 1 ? "Folder with 1 app. Opens the folder" : "Folder with \(apps.count) apps. Opens the folder",
+            hint: apps.count == 1
+                ? String(localized: "Folder with 1 app. Opens the folder")
+                : String(localized: "Folder with \(apps.count) apps. Opens the folder"),
             onActivate: onTap
         )
         .accessibilityIdentifier("folder-icon")

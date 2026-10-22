@@ -93,7 +93,7 @@ struct LaunchpadView: View {
 
                         Spacer().frame(height: 12)
 
-                        CurrentPageIndicator(viewModel: viewModel)
+                        CurrentPageIndicator(viewModel: viewModel, pager: pager)
                     }
 
                     Spacer().frame(height: metrics.bottomPadding)
@@ -295,9 +295,12 @@ struct LaunchpadView: View {
 // dots, not the whole launcher with its pages.
 private struct CurrentPageIndicator: View {
     let viewModel: LaunchpadViewModel
+    let pager: PagerController
 
     var body: some View {
-        PageIndicatorView(totalPages: viewModel.displayedPageCount, currentPage: viewModel.currentPage)
+        PageIndicatorView(totalPages: viewModel.displayedPageCount, currentPage: viewModel.currentPage) { delta in
+            pager.step(by: delta)
+        }
     }
 }
 

@@ -48,7 +48,7 @@ struct AppIconView: View {
         .launcherItemAccessibility(
             label: app.displayName,
             // Clicks don't launch in edit mode.
-            hint: isEditing ? "Drag to move" : "Opens the app",
+            hint: isEditing ? String(localized: "Drag to move") : String(localized: "Opens the app"),
             onActivate: onTap
         )
         .accessibilityIdentifier("app-icon")

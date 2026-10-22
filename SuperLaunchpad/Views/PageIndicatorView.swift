@@ -1,10 +1,12 @@
 import SwiftUI
 
 // Dots at the bottom indicating the current page. Tap interactions are
-// intentionally not wired (matches macOS Launchpad — the dots are passive).
+// intentionally not wired (matches macOS Launchpad — the dots are passive),
+// but VoiceOver can page with them: `onStep` gets -1 / +1.
 struct PageIndicatorView: View {
     let totalPages: Int
     let currentPage: Int
+    var onStep: (Int) -> Void = { _ in }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -22,10 +24,18 @@ struct PageIndicatorView: View {
                     .animation(Motion(reduced: reduceMotion).pageIndicatorAnimation, value: currentPage)
             }
         }
-        // One element for VoiceOver: "Page 2 of 5" instead of a row of
-        // unlabeled dots.
+        // One adjustable element for VoiceOver ("Page 2 of 5"; VO-arrows
+        // page) instead of a row of unlabeled dots.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Page \(currentPage + 1) of \(totalPages)")
+        .accessibilityLabel(String(localized: "Page"))
+        .accessibilityValue(String(localized: "Page \(currentPage + 1) of \(totalPages)"))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: onStep(1)
+            case .decrement: onStep(-1)
+            @unknown default: break
+            }
+        }
         .accessibilityIdentifier("page-indicator")
     }
 }
