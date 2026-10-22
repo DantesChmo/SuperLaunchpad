@@ -12,8 +12,14 @@ import SwiftUI
 // state changes back via `await MainActor.run { ... }`.
 @Observable
 final class LaunchpadViewModel {
-    var apps: [AppEntry] = []
-    var folders: [FolderEntry] = []
+    // Every write to `apps` or `folders` rebuilds `pages`, unless it happens
+    // inside `updateContents { ... }`, which rebuilds once at the end.
+    var apps: [AppEntry] = [] {
+        didSet { rebuildPagesUnlessBatching() }
+    }
+    var folders: [FolderEntry] = [] {
+        didSet { rebuildPagesUnlessBatching() }
+    }
     var currentPage: Int = 0
     var isVisible: Bool = false
     // Exists for future search support; intentionally not wired up.
@@ -24,20 +30,45 @@ final class LaunchpadViewModel {
     // Derived view of `apps` + `folders` shaped for the UI:
     //   pages[i] = the items shown on page i, in display order.
     //
-    // Recomputed on every access (cheap — ~200 items max). `@Observable`
-    // re-runs this when the views that read `pages` re-render and the
-    // dependencies have changed.
-    var pages: [[LaunchpadItem]] {
-        // 1. Apps shown directly on the grid (not nested in a folder).
-        let topLevelApps = apps.filter { $0.folderID == nil }
+    // Stored, not computed: views read `pages` several times per render, and
+    // rebuilding the grouping on each read made every re-render mid-swipe hand
+    // a brand-new array to every page view. It is rebuilt only when `apps` or
+    // `folders` change. Being a stored property of an `@Observable` class, it
+    // is still tracked, so views reading it re-render when it is reassigned.
+    private(set) var pages: [[LaunchpadItem]] = []
 
-        // 2. Bucket folder apps by their folder. `Dictionary(grouping:by:)`
-        //    is the idiomatic Swift "group-by" — produces [folderID: [apps]].
-        //    `$0.folderID!` is safe because we've already filtered to apps
-        //    that have a non-nil folderID.
-        let folderAppsGrouped = Dictionary(grouping: apps.filter { $0.folderID != nil }) { $0.folderID! }
+    // True while `updateContents` is assigning `apps` and `folders`, so the
+    // `didSet`s skip their rebuild and `updateContents` does one at the end.
+    // Ignored by observation: no view should re-render because of it.
+    @ObservationIgnored private var isBatchingContentUpdates = false
 
-        // 3. Wrap everything in the `LaunchpadItem` sum type so a page can
+    // Assign `apps` and/or `folders` together with a single `pages` rebuild.
+    private func updateContents(_ body: () -> Void) {
+        isBatchingContentUpdates = true
+        body()
+        isBatchingContentUpdates = false
+        rebuildPages()
+    }
+
+    private func rebuildPagesUnlessBatching() {
+        guard !isBatchingContentUpdates else { return }
+        rebuildPages()
+    }
+
+    private func rebuildPages() {
+        // 1. Split apps into those shown directly on the grid and those nested
+        //    in a folder, bucketed by folder ID.
+        var topLevelApps: [AppEntry] = []
+        var folderAppsGrouped: [String: [AppEntry]] = [:]
+        for app in apps {
+            if let folderID = app.folderID {
+                folderAppsGrouped[folderID, default: []].append(app)
+            } else {
+                topLevelApps.append(app)
+            }
+        }
+
+        // 2. Wrap everything in the `LaunchpadItem` sum type so a page can
         //    contain a heterogeneous list of apps and folders.
         var items: [LaunchpadItem] = topLevelApps.map { .app($0) }
 
@@ -48,12 +79,11 @@ final class LaunchpadViewModel {
             items.append(.folder(folder, apps: folderApps))
         }
 
-        // 4. Group items by page index, then sort each page by order index.
-        //    `grouped[key]!` is safe — `key` came from `grouped.keys`.
+        // 3. Group items by page index, then sort each page by order index.
         let grouped = Dictionary(grouping: items) { $0.pageIndex }
-        return grouped.keys.sorted().map { key in
-            grouped[key]!.sorted { $0.orderIndex < $1.orderIndex }
-        }
+        pages = grouped
+            .sorted { $0.key < $1.key }
+            .map { $0.value.sorted { $0.orderIndex < $1.orderIndex } }
     }
 
     // The currently expanded folder (or nil). Derived from `openFolderID` — we
@@ -99,11 +129,13 @@ final class LaunchpadViewModel {
     func loadApps() {
         // Phase 1: cache repaint. `try?` + non-empty guard means we only
         // overwrite UI state if the read actually returned something.
-        if let cached = try? database?.fetchAllApps(), !cached.isEmpty {
-            apps = cached
-        }
-        if let cachedFolders = try? database?.fetchAllFolders(), !cachedFolders.isEmpty {
-            folders = cachedFolders
+        updateContents {
+            if let cached = try? database?.fetchAllApps(), !cached.isEmpty {
+                apps = cached
+            }
+            if let cachedFolders = try? database?.fetchAllFolders(), !cachedFolders.isEmpty {
+                folders = cachedFolders
+            }
         }
 
         // Phase 2: background rescan.
@@ -163,8 +195,10 @@ final class LaunchpadViewModel {
             // state updates. Mutating `@Observable` state off-main is a
             // compile-time error under strict concurrency.
             await MainActor.run {
-                self.apps = sortedApps
-                self.folders = sortedFolders
+                self.updateContents {
+                    self.apps = sortedApps
+                    self.folders = sortedFolders
+                }
             }
         }
     }
