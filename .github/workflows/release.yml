@@ -2,7 +2,8 @@ name: Release
 
 # Signing and notarization are optional: when the MACOS_* / APPLE_* /
 # APPSTORE_* secrets are configured the DMG is signed with Developer ID,
-# notarized and stapled; otherwise an unsigned DMG is built as before.
+# notarized and stapled; otherwise the app is ad-hoc signed (the project's
+# default, no Apple account needed) and users allow it once with Open Anyway.
 # See docs/RELEASING.md for how to create the secrets.
 #
 # Sparkle auto-updates are optional too: with the SPARKLE_PUBLIC_ED_KEY
@@ -69,7 +70,7 @@ jobs:
             echo "Signing secrets found: building a signed and notarized DMG"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Unsigned build::Missing secrets:$MISSING. Building an UNSIGNED DMG (Gatekeeper will block it). See docs/RELEASING.md."
+            echo "::warning title=Ad-hoc signed build::Missing secrets:$MISSING. Building an ad-hoc signed, not notarized DMG (users allow it once with Open Anyway). See docs/RELEASING.md."
           fi
 
       - name: Check Sparkle keys
@@ -130,13 +131,15 @@ jobs:
             exit 1
           fi
 
-      - name: Build (unsigned)
+      - name: Build (ad-hoc signed)
         if: steps.signing.outputs.enabled != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
         run: |
           set -euo pipefail
+          # Ad-hoc signing ("-") comes from the project; a fully unsigned bundle
+          # is more often reported as "damaged" on Apple silicon.
           xcodebuild \
             -project SuperLaunchpad.xcodeproj \
             -scheme SuperLaunchpad \
@@ -146,9 +149,6 @@ jobs:
             MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION="$VERSION" \
             SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
             build
 
       - name: Build (signed)
@@ -196,6 +196,15 @@ jobs:
           set -euo pipefail
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           codesign --display --verbose=2 "$APP_PATH" 2>&1 | grep -E '^(Authority|TeamIdentifier|Timestamp|Runtime Version|flags)='
+
+      - name: Verify ad-hoc signature
+        if: steps.signing.outputs.enabled != 'true'
+        env:
+          APP_PATH: ${{ steps.app.outputs.path }}
+        run: |
+          set -euo pipefail
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign --display --verbose=2 "$APP_PATH" 2>&1 | grep -E '^Signature=adhoc$'
 
       - name: Create DMG
         env:

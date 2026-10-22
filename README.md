@@ -96,7 +96,7 @@ Each optional part turns on when its secrets exist; without them the workflow st
 
 | Part | Repository secrets / variables | Without them |
 |------|--------------------------------|--------------|
-| Developer ID signing and notarization | secrets `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_KEYCHAIN_PASSWORD`, `APPLE_TEAM_ID`, `APPSTORE_API_KEY_P8_BASE64`, `APPSTORE_API_KEY_ID`, `APPSTORE_API_ISSUER_ID` | unsigned DMG |
+| Developer ID signing and notarization | secrets `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_KEYCHAIN_PASSWORD`, `APPLE_TEAM_ID`, `APPSTORE_API_KEY_P8_BASE64`, `APPSTORE_API_KEY_ID`, `APPSTORE_API_ISSUER_ID` | ad-hoc signed, not notarized DMG (users allow it once with Open Anyway) |
 | Sparkle updates (`appcast.xml` attached to the release) | secret `SPARKLE_ED_PRIVATE_KEY` and variable `SPARKLE_PUBLIC_ED_KEY` (set both or neither: one alone fails the build) | updater off, Check for Updates… disabled |
 | Homebrew cask in `DantesChmo/homebrew-tap` ([`.github/workflows/homebrew.yml`](.github/workflows/homebrew.yml), template in [`packaging/homebrew/`](packaging/homebrew/)) | secret `HOMEBREW_TAP_TOKEN`: a fine-grained token with Contents read/write on the tap repository only | cask not updated |
 
