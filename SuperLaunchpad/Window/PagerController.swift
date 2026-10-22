@@ -8,6 +8,7 @@ import QuartzCore
 // but is read solely by the offset modifier in `PagingGridView`, so a frame
 // never re-renders the pages. `viewModel.currentPage` is written only when a
 // page is decided (release, key press, wheel burst), never per frame.
+@MainActor
 @Observable
 final class PagerController {
     private(set) var position: Double = 0
@@ -196,6 +197,7 @@ private enum TrackpadGesture {
 
 // The display link retains its target; this proxy holds the controller weakly
 // so an invalidated-late link can't keep it alive.
+@MainActor
 private final class DisplayLinkTarget: NSObject {
     private weak var owner: PagerController?
 

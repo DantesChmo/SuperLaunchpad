@@ -7,9 +7,10 @@ import SwiftUI
 // stored property on this class is automatically tracked — SwiftUI views that
 // read a property re-render when only that property changes.
 //
-// Threading: this class is meant to be mutated only from the main thread.
-// Background work (file scan, DB I/O) runs in `Task.detached` and marshals
-// state changes back via `await MainActor.run { ... }`.
+// Threading: isolated to the main actor. Background work (file scan, DB I/O)
+// runs in `Task.detached` and marshals state changes back via
+// `await MainActor.run { ... }`.
+@MainActor
 @Observable
 final class LaunchpadViewModel {
     // Every write to `apps` or `folders` rebuilds `pages`, unless it happens
@@ -125,7 +126,8 @@ final class LaunchpadViewModel {
     //      frame so the launcher doesn't appear empty during the rescan.
     //   2. Asynchronously rescan `/Applications`, sync to disk, and update UI.
     //
-    // Called on first launch and whenever `AppDirectoryWatcher` fires.
+    // Called on first launch; `AppDirectoryWatcher` goes through
+    // `scheduleRescan()` instead.
     func loadApps() {
         // Phase 1: cache repaint. `try?` + non-empty guard means we only
         // overwrite UI state if the read actually returned something.
@@ -143,10 +145,38 @@ final class LaunchpadViewModel {
         Task { await IconCache.shared.prewarm(cachedApps) }
 
         // Phase 2: background rescan.
+        requestRescan()
+    }
+
+    // MARK: - Rescan
+
+    // At most one rescan runs at a time; see `RescanGate`.
+    @ObservationIgnored private var rescanGate = RescanGate()
+    @ObservationIgnored private var pendingRescan: Task<Void, Never>?
+
+    // Directory events arrive in bursts (an install touches the folder several
+    // times). Each call restarts the wait, so a burst ends in a single rescan.
+    func scheduleRescan() {
+        pendingRescan?.cancel()
+        pendingRescan = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Rescan.debounceInterval))
+            guard !Task.isCancelled else { return }
+            self?.requestRescan()
+        }
+    }
+
+    private func requestRescan() {
+        guard rescanGate.request() else { return }
+        startRescan()
+    }
+
+    private func startRescan() {
+        // Captured once: the detached task must not read main-actor state.
+        let database = database
+
         // `Task.detached` runs outside the structured concurrency tree of the
-        // caller — important here because `loadApps` is `@MainActor` (the
-        // ViewModel is `@Observable`-isolated to main) and we explicitly want
-        // file-system work OFF the main thread.
+        // caller — important here because `loadApps` is `@MainActor` and we
+        // explicitly want file-system work OFF the main thread.
         Task.detached { [weak self] in
             // `AppEnumerator.enumerate()` is the slow part (icon extraction).
             // Runs on the detached task's background executor.
@@ -155,7 +185,7 @@ final class LaunchpadViewModel {
 
             // First launch heuristic: if no app has a pageIndex yet, we treat
             // this as a fresh install and import ordering from macOS Launchpad.
-            let hasOrdering = (try? self.database?.hasOrderingData()) ?? false
+            let hasOrdering = (try? database?.hasOrderingData()) ?? false
             let systemOrdering = SystemLaunchpadDB.readOrdering()
 
             let appsToSave: [AppEntry]
@@ -164,21 +194,26 @@ final class LaunchpadViewModel {
             if !hasOrdering {
                 // Fresh DB → apply system Launchpad layout (or alphabetical
                 // fallback if the system DB is empty).
-                (appsToSave, foldersToSave) = self.applyOrdering(systemOrdering, to: enumerated)
+                (appsToSave, foldersToSave) = LaunchpadViewModel.applyOrdering(systemOrdering, to: enumerated)
             } else {
                 // Existing DB → preserve user's existing positions, append
                 // any newly installed apps at the end.
-                (appsToSave, foldersToSave) = self.mergeNewApps(enumerated, systemOrdering: systemOrdering)
+                (appsToSave, foldersToSave) = LaunchpadViewModel.mergeNewApps(
+                    enumerated,
+                    existingApps: (try? database?.fetchAllApps()) ?? [],
+                    existingFolders: (try? database?.fetchAllFolders()) ?? [],
+                    systemOrdering: systemOrdering
+                )
             }
 
             // Order matters: folders must exist before apps with FK references
             // to them are inserted. (FK constraint would otherwise fire.)
-            try? self.database?.saveFolders(foldersToSave)
-            try? self.database?.saveApps(appsToSave)
+            try? database?.saveFolders(foldersToSave)
+            try? database?.saveApps(appsToSave)
 
             // Drop rows for apps that were uninstalled since the last scan.
             let validIDs = Set(enumerated.map(\.bundleIdentifier))
-            try? self.database?.deleteStale(validIdentifiers: validIDs)
+            try? database?.deleteStale(validIdentifiers: validIDs)
 
             // After deleting stale apps, some folders may now be empty —
             // remove those too so they don't appear as ghost tiles.
@@ -186,14 +221,14 @@ final class LaunchpadViewModel {
             let staleFolderIDs = Set(foldersToSave.map(\.id)).subtracting(folderIDsWithApps)
             if !staleFolderIDs.isEmpty {
                 let validFolderIDs = Set(foldersToSave.map(\.id)).subtracting(staleFolderIDs)
-                try? self.database?.deleteStaleFolders(validIDs: validFolderIDs)
+                try? database?.deleteStaleFolders(validIDs: validFolderIDs)
             }
 
             // Re-read from DB so we get rows sorted by the canonical SQL
             // ordering (with locale-aware collation). Falls back to the
             // in-memory list if the read fails.
-            let sortedApps = (try? self.database?.fetchAllApps()) ?? appsToSave
-            let sortedFolders = (try? self.database?.fetchAllFolders()) ?? foldersToSave
+            let sortedApps = (try? database?.fetchAllApps()) ?? appsToSave
+            let sortedFolders = (try? database?.fetchAllFolders()) ?? foldersToSave
 
             // `MainActor.run` is the bridge back to the main thread for UI
             // state updates. Mutating `@Observable` state off-main is a
@@ -205,14 +240,22 @@ final class LaunchpadViewModel {
                 }
                 // Only icons that changed in the rescan are decoded again.
                 Task { await IconCache.shared.prewarm(sortedApps) }
+                if self.rescanGate.finish() {
+                    self.startRescan()
+                }
             }
         }
     }
 
+    // MARK: - Ordering
+
     // First-launch ordering. Take the freshly enumerated apps and assign
     // positions based on the system Launchpad layout. Falls back to
     // alphabetical when the system DB is empty.
-    func applyOrdering(_ ordering: LaunchpadOrdering?, to apps: [AppEntry]) -> ([AppEntry], [FolderEntry]) {
+    //
+    // `nonisolated static`: runs inside the detached rescan, so it must not
+    // touch main-actor state.
+    nonisolated static func applyOrdering(_ ordering: LaunchpadOrdering?, to apps: [AppEntry]) -> ([AppEntry], [FolderEntry]) {
         guard let ordering else {
             // No system DB — alphabetical fallback, no folders.
             // `localizedCaseInsensitiveCompare` gives correct ordering for
@@ -285,13 +328,20 @@ final class LaunchpadViewModel {
     // Subsequent-launch merge. Preserve every existing position; append
     // newly-installed apps at the end. Re-import folders from the system DB
     // only if we don't yet have any (recovery path).
-    func mergeNewApps(_ enumerated: [AppEntry], systemOrdering: LaunchpadOrdering?) -> ([AppEntry], [FolderEntry]) {
-        let existing = (try? database?.fetchAllApps()) ?? []
+    //
+    // `nonisolated static` like `applyOrdering`; the caller passes in the rows
+    // currently in the DB.
+    nonisolated static func mergeNewApps(
+        _ enumerated: [AppEntry],
+        existingApps existing: [AppEntry],
+        existingFolders: [FolderEntry],
+        systemOrdering: LaunchpadOrdering?
+    ) -> ([AppEntry], [FolderEntry]) {
         // O(1) bundleID lookup for the merge loop below.
         // `uniqueKeysWithValues` traps on duplicate keys — safe here because
         // bundleIdentifier is the primary key.
         let existingByID = Dictionary(uniqueKeysWithValues: existing.map { ($0.bundleIdentifier, $0) })
-        var existingFolders = (try? database?.fetchAllFolders()) ?? []
+        var existingFolders = existingFolders
 
         // Recovery path: a DB where folders were dropped (e.g. older app version
         // never imported them) should re-import on the next run. We detect this

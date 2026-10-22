@@ -21,16 +21,28 @@ struct LaunchpadViewModelOrderingTests {
         return (try AppDatabase(path: path), dir)
     }
 
+    private func merge(
+        _ enumerated: [AppEntry],
+        in db: AppDatabase,
+        systemOrdering: LaunchpadOrdering?
+    ) throws -> ([AppEntry], [FolderEntry]) {
+        LaunchpadViewModel.mergeNewApps(
+            enumerated,
+            existingApps: try db.fetchAllApps(),
+            existingFolders: try db.fetchAllFolders(),
+            systemOrdering: systemOrdering
+        )
+    }
+
     // MARK: - applyOrdering
 
     @Test func applyOrderingWithNilSortsAlphabeticallyAndPaginates() {
-        let vm = LaunchpadViewModel(database: nil)
         let apps = [
             app("com.c", name: "Charlie"),
             app("com.a", name: "Alpha"),
             app("com.b", name: "Bravo")
         ]
-        let (ordered, folders) = vm.applyOrdering(nil, to: apps)
+        let (ordered, folders) = LaunchpadViewModel.applyOrdering(nil, to: apps)
         #expect(folders.isEmpty)
         #expect(ordered.map(\.displayName) == ["Alpha", "Bravo", "Charlie"])
         #expect(ordered.allSatisfy { $0.pageIndex == 0 })
@@ -38,14 +50,13 @@ struct LaunchpadViewModelOrderingTests {
     }
 
     @Test func applyOrderingWithNilPaginatesAcrossPages() {
-        let vm = LaunchpadViewModel(database: nil)
         // Create Grid.appsPerPage + 2 apps, sorted alphabetically by name
         let apps = (0..<(Grid.appsPerPage + 2)).map { i -> AppEntry in
             // Names like "App 00", "App 01", ... ensure deterministic alphabetical order
             let label = String(format: "App %02d", i)
             return app("com.x.\(i)", name: label)
         }
-        let (ordered, _) = vm.applyOrdering(nil, to: apps)
+        let (ordered, _) = LaunchpadViewModel.applyOrdering(nil, to: apps)
         #expect(ordered.count == Grid.appsPerPage + 2)
         // Last two should be on page 1
         let lastTwo = ordered.suffix(2)
@@ -57,7 +68,6 @@ struct LaunchpadViewModelOrderingTests {
     }
 
     @Test func applyOrderingAssignsAppPositionsAndDropsUnordered() {
-        let vm = LaunchpadViewModel(database: nil)
         let apps = [
             app("com.a"),
             app("com.b"),
@@ -70,7 +80,7 @@ struct LaunchpadViewModelOrderingTests {
             ],
             folders: []
         )
-        let (ordered, folders) = vm.applyOrdering(ordering, to: apps)
+        let (ordered, folders) = LaunchpadViewModel.applyOrdering(ordering, to: apps)
         #expect(folders.isEmpty)
         #expect(ordered.count == 2)
         let byID = Dictionary(uniqueKeysWithValues: ordered.map { ($0.bundleIdentifier, $0) })
@@ -82,7 +92,6 @@ struct LaunchpadViewModelOrderingTests {
     }
 
     @Test func applyOrderingCreatesFoldersAndAssignsMembership() {
-        let vm = LaunchpadViewModel(database: nil)
         let apps = [app("com.x"), app("com.y"), app("com.z")]
         let ordering = LaunchpadOrdering(
             appPositions: ["com.z": (pageIndex: 0, orderIndex: 5)],
@@ -98,7 +107,7 @@ struct LaunchpadViewModelOrderingTests {
                 )
             ]
         )
-        let (ordered, folders) = vm.applyOrdering(ordering, to: apps)
+        let (ordered, folders) = LaunchpadViewModel.applyOrdering(ordering, to: apps)
         #expect(folders.count == 1)
         #expect(folders[0].title == "Utilities")
         #expect(folders[0].pageIndex == 0)
@@ -120,7 +129,6 @@ struct LaunchpadViewModelOrderingTests {
     }
 
     @Test func applyOrderingFolderTakesPriorityOverAppPosition() {
-        let vm = LaunchpadViewModel(database: nil)
         let apps = [app("com.x")]
         let ordering = LaunchpadOrdering(
             appPositions: ["com.x": (pageIndex: 2, orderIndex: 4)],
@@ -133,7 +141,7 @@ struct LaunchpadViewModelOrderingTests {
                 )
             ]
         )
-        let (ordered, folders) = vm.applyOrdering(ordering, to: apps)
+        let (ordered, folders) = LaunchpadViewModel.applyOrdering(ordering, to: apps)
         #expect(ordered.count == 1)
         #expect(ordered[0].folderID == folders[0].id)
         #expect(ordered[0].pageIndex == nil)
@@ -153,13 +161,12 @@ struct LaunchpadViewModelOrderingTests {
         existing.orderIndex = 5
         try db.saveApps([existing])
 
-        let vm = LaunchpadViewModel(database: db)
 
         var fresh = app("com.a", name: "NewName")
         fresh.appPath = "/New/Path.app"
         fresh.iconData = Data([0x01])
 
-        let (result, _) = vm.mergeNewApps([fresh], systemOrdering: nil)
+        let (result, _) = try merge([fresh], in: db, systemOrdering: nil)
         #expect(result.count == 1)
         #expect(result[0].bundleIdentifier == "com.a")
         #expect(result[0].displayName == "NewName")
@@ -179,10 +186,9 @@ struct LaunchpadViewModelOrderingTests {
         existingA.orderIndex = 3
         try db.saveApps([existingA])
 
-        let vm = LaunchpadViewModel(database: db)
 
         let newApp = app("com.b")
-        let (result, _) = vm.mergeNewApps([existingA, newApp], systemOrdering: nil)
+        let (result, _) = try merge([existingA, newApp], in: db, systemOrdering: nil)
         let byID = Dictionary(uniqueKeysWithValues: result.map { ($0.bundleIdentifier, $0) })
         #expect(byID["com.a"]?.orderIndex == 3)
         #expect(byID["com.b"]?.pageIndex == 0)
@@ -203,12 +209,11 @@ struct LaunchpadViewModelOrderingTests {
         }
         try db.saveApps(seeded)
 
-        let vm = LaunchpadViewModel(database: db)
 
         let newApp = app("com.new")
         // enumerate must include the seeded apps too
         let enumerated = seeded + [newApp]
-        let (result, _) = vm.mergeNewApps(enumerated, systemOrdering: nil)
+        let (result, _) = try merge(enumerated, in: db, systemOrdering: nil)
         let byID = Dictionary(uniqueKeysWithValues: result.map { ($0.bundleIdentifier, $0) })
         #expect(byID["com.new"]?.pageIndex == 1)
         #expect(byID["com.new"]?.orderIndex == 0)
@@ -218,14 +223,13 @@ struct LaunchpadViewModelOrderingTests {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let vm = LaunchpadViewModel(database: db)
 
         let newApp = app("com.new")
         let ordering = LaunchpadOrdering(
             appPositions: ["com.new": (pageIndex: 2, orderIndex: 7)],
             folders: []
         )
-        let (result, _) = vm.mergeNewApps([newApp], systemOrdering: ordering)
+        let (result, _) = try merge([newApp], in: db, systemOrdering: ordering)
         #expect(result.count == 1)
         #expect(result[0].pageIndex == 2)
         #expect(result[0].orderIndex == 7)
@@ -236,7 +240,6 @@ struct LaunchpadViewModelOrderingTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         // DB is empty — no folders, no folder apps
-        let vm = LaunchpadViewModel(database: db)
 
         let newApp = app("com.x")
         let ordering = LaunchpadOrdering(
@@ -250,7 +253,7 @@ struct LaunchpadViewModelOrderingTests {
                 )
             ]
         )
-        let (result, folders) = vm.mergeNewApps([newApp], systemOrdering: ordering)
+        let (result, folders) = try merge([newApp], in: db, systemOrdering: ordering)
         #expect(folders.count == 1)
         #expect(folders[0].title == "Imported")
         #expect(result.count == 1)
@@ -270,7 +273,6 @@ struct LaunchpadViewModelOrderingTests {
         existing.orderIndex = 0
         try db.saveApps([existing])
 
-        let vm = LaunchpadViewModel(database: db)
 
         let ordering = LaunchpadOrdering(
             appPositions: [:],
@@ -283,7 +285,7 @@ struct LaunchpadViewModelOrderingTests {
                 )
             ]
         )
-        let (result, folders) = vm.mergeNewApps([existing], systemOrdering: ordering)
+        let (result, folders) = try merge([existing], in: db, systemOrdering: ordering)
         #expect(folders.count == 1)
         #expect(result.count == 1)
         #expect(result[0].folderID == folders[0].id)
