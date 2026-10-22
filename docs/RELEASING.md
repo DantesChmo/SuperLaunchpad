@@ -10,7 +10,7 @@ The workflow works in two modes:
 | Mode | When | Result |
 |---|---|---|
 | **Signed** | all seven secrets below are set | app signed with Developer ID + hardened runtime, DMG signed, notarized by Apple and stapled. Opens without Gatekeeper warnings. |
-| **Unsigned** | any secret is missing | same DMG as before, unsigned; the run shows an "Unsigned build" warning. macOS blocks it on first launch (users must right-click → Open, or allow it in System Settings → Privacy & Security). |
+| **Unsigned** | any secret is missing | same DMG as before, unsigned; the run shows an "Unsigned build" warning. macOS blocks it on first launch; users allow it once with **Open Anyway** in System Settings → Privacy & Security (see the README). This is the project's current mode: the maintainer has no Apple Developer account. |
 
 Signed mode needs a paid [Apple Developer Program](https://developer.apple.com/programs/)
 membership (99 USD/year). Only the Account Holder can create Developer ID certificates.

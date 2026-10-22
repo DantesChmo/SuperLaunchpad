@@ -49,11 +49,15 @@ The app updates itself through Sparkle, so `brew upgrade` skips it unless you pa
 
 Download the latest `SuperLaunchpad-X.Y.Z.dmg` from the [Releases](../../releases) page, open it and drag **SuperLaunchpad** into `Applications`.
 
-Releases are signed and notarized when the maintainer's signing secrets are set up. If a build is not, Gatekeeper blocks the first launch. To run it, right-click **SuperLaunchpad.app** in `/Applications` → **Open** and confirm, or allow it in System Settings → Privacy & Security. For a copy installed with Homebrew, remove the quarantine flag instead:
+### First launch: allowing the app
 
-```bash
-xattr -dr com.apple.quarantine /Applications/SuperLaunchpad.app
-```
+SuperLaunchpad is not notarized by Apple, so macOS blocks it the first time you open it, whether it came from the DMG or Homebrew. Allow it once:
+
+1. Open **SuperLaunchpad**. When macOS says it can't verify the developer, click **Done**.
+2. Open **System Settings → Privacy & Security** and scroll down to the **Security** section.
+3. Next to the message about SuperLaunchpad, click **Open Anyway**, then confirm with your password or Touch ID.
+
+After that it opens normally. (Right-click → **Open** no longer bypasses this on macOS 15 Sequoia and later.)
 
 To build from source, open `SuperLaunchpad.xcodeproj` in Xcode and press **⌘R**.
 
