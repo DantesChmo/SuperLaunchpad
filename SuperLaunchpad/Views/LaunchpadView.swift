@@ -2,10 +2,8 @@ import SwiftUI
 
 // Root SwiftUI view rendered inside the NSPanel.
 struct LaunchpadView: View {
-    // `@Bindable` (Swift 5.9+) creates two-way bindings into an `@Observable`
-    // model — e.g. `$viewModel.currentPage` produces a `Binding<Int>` for the
-    // pager. Use this instead of the older `@ObservedObject`.
-    @Bindable var viewModel: LaunchpadViewModel
+    let viewModel: LaunchpadViewModel
+    let pager: PagerController
 
     // Local view state that only this view needs. Keeping it as `@State`
     // (rather than on the ViewModel) is intentional: this is purely UI
@@ -53,9 +51,7 @@ struct LaunchpadView: View {
                     } else {
                         PagingGridView(
                             pages: viewModel.pages,
-                            // `$viewModel.currentPage` produces a Binding<Int>
-                            // thanks to `@Bindable` — the pager can write back.
-                            currentPage: $viewModel.currentPage,
+                            pager: pager,
                             metrics: metrics,
                             onLaunch: { app in
                                 viewModel.launchApp(app)
@@ -84,10 +80,7 @@ struct LaunchpadView: View {
 
                         Spacer().frame(height: 12)
 
-                        PageIndicatorView(
-                            totalPages: viewModel.pages.count,
-                            currentPage: viewModel.currentPage
-                        )
+                        CurrentPageIndicator(viewModel: viewModel)
                     }
 
                     Spacer().frame(height: metrics.bottomPadding)
@@ -202,6 +195,16 @@ struct LaunchpadView: View {
             displayedFolder = nil
             displayedFolderApps = []
         }
+    }
+}
+
+// Reads `currentPage` in its own body so a page change re-renders only the
+// dots, not the whole launcher with its pages.
+private struct CurrentPageIndicator: View {
+    let viewModel: LaunchpadViewModel
+
+    var body: some View {
+        PageIndicatorView(totalPages: viewModel.pages.count, currentPage: viewModel.currentPage)
     }
 }
 

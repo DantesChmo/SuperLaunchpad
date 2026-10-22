@@ -57,3 +57,29 @@ struct LayoutMetrics {
         rowSpacing = itemHeight * 0.05
     }
 }
+
+// Tuning for the main-grid pager. Positions and velocities are in "pages"
+// (1.0 = one screen width), so the numbers are independent of display size.
+enum Paging {
+    // Response of the critically damped settle spring, like
+    // `.spring(duration:bounce: 0)`.
+    static let springResponse: Double = 0.3
+    // Release velocity (pages/s) above which a swipe counts as a flick and
+    // moves to the neighbouring page regardless of how far it was dragged.
+    static let flickVelocity: Double = 0.5
+    // Classic UIScrollView rubber-band coefficient.
+    static let rubberBandCoefficient: Double = 0.55
+    // The banded overshoot approaches one page asymptotically; clamp before
+    // inverting so the inverse stays finite.
+    static let rubberBandInverseLimit: Double = 0.999
+    // Weight of the newest sample in the exponentially smoothed drag velocity.
+    static let velocitySmoothing: Double = 0.5
+    // If the fingers rested this long before lifting, the release is not a flick.
+    static let velocityStaleInterval: Double = 0.08
+    static let settleDistance: Double = 0.0005
+    static let settleVelocity: Double = 0.005
+    // Accumulated wheel delta (lines) needed to turn a burst into a page step.
+    static let wheelThreshold: Double = 0.5
+    // Wheel ticks closer together than this belong to the same burst.
+    static let wheelBurstGap: Double = 0.15
+}
