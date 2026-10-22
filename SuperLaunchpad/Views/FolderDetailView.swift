@@ -8,8 +8,24 @@ struct FolderDetailView: View {
     let metrics: LayoutMetrics
     let onLaunch: (AppEntry) -> Void
     let onClose: () -> Void
+    let onRename: (String) -> Void
+    // A freshly created folder opens with its title already in edit mode.
+    var startsRenaming = false
+    // Reports when the title edit starts and ends.
+    var onRenamingChange: (Bool) -> Void = { _ in }
+    // App currently lifted by a drag: it keeps its cell but is drawn by the
+    // lifted copy.
+    var hiddenAppID: String? = nil
+    // Where the card and its grid are (in `Drag.coordinateSpace`) and which
+    // page is shown, for the drag gesture on the launcher root.
+    var onFramesChange: (GridDragController.FolderFrames?) -> Void = { _ in }
 
     @State private var currentPage: Int = 0
+    @State private var isRenaming = false
+    @State private var draftTitle = ""
+    @FocusState private var titleFieldFocused: Bool
+    @State private var cardFrame: CGRect = .zero
+    @State private var gridFrame: CGRect = .zero
 
     // Splits the flat `apps` array into pages of `FolderGrid.appsPerPage`
     // (12). `stride(from:to:by:)` walks indices in steps; for each step we
@@ -22,28 +38,35 @@ struct FolderDetailView: View {
         }
     }
 
-    // Width of the popup card. `+ 60` is the horizontal padding budget
-    // (30 left + 30 right). Sized to make 4 columns of `itemWidth` fit cleanly.
+    // Slot math shared with the drag gesture: 4 columns of `itemWidth`.
+    private var geometry: GridGeometry {
+        .folder(metrics: metrics)
+    }
+
+    // Width of the popup card: the grid plus the horizontal padding on both
+    // sides.
     private var containerWidth: CGFloat {
-        metrics.itemWidth * CGFloat(FolderGrid.columns) + 60
+        gridWidth + FolderGrid.cardHorizontalPadding * 2
+    }
+
+    private var gridWidth: CGFloat {
+        geometry.gridSize.width
     }
 
     // Icons inside the popup are a touch smaller than on the main grid
-    // (0.85×) so a 4-column folder doesn't look like an oversized clone of
-    // the 7-column main grid.
+    // (`FolderGrid.iconScale`) so a 4-column folder doesn't look like an
+    // oversized clone of the 7-column main grid.
     private var folderIconSize: CGFloat {
-        metrics.iconSize * 0.85
+        geometry.hitSize.width
     }
 
     private var folderItemWidth: CGFloat {
-        (containerWidth - 60) / CGFloat(FolderGrid.columns)
+        geometry.cellSize.width
     }
 
     var body: some View {
         VStack(spacing: 16) {
-            Text(folder.title)
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(.white)
+            title
 
             if folderPages.isEmpty {
                 Text("Empty Folder")
@@ -56,7 +79,7 @@ struct FolderDetailView: View {
                     LazyHStack(spacing: 0) {
                         ForEach(Array(folderPages.enumerated()), id: \.offset) { index, page in
                             folderPageGrid(page)
-                                .frame(width: containerWidth - 60, height: folderGridHeight)
+                                .frame(width: gridWidth, height: folderGridHeight)
                                 .containerRelativeFrame(.horizontal)
                                 .id(index)
                         }
@@ -71,7 +94,13 @@ struct FolderDetailView: View {
                     get: { currentPage },
                     set: { if let v = $0 { currentPage = v } }
                 ))
-                .frame(width: containerWidth - 60, height: folderGridHeight)
+                .frame(width: gridWidth, height: folderGridHeight)
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .named(Drag.coordinateSpace))
+                } action: { frame in
+                    gridFrame = frame
+                    reportFrames()
+                }
 
                 if folderPages.count > 1 {
                     PageIndicatorView(
@@ -86,7 +115,7 @@ struct FolderDetailView: View {
                 }
             }
         }
-        .padding(.horizontal, 30)
+        .padding(.horizontal, FolderGrid.cardHorizontalPadding)
         .padding(.vertical, 24)
         .frame(width: containerWidth)
         .background(
@@ -94,38 +123,135 @@ struct FolderDetailView: View {
                 .fill(.ultraThinMaterial)
                 .shadow(color: .black.opacity(0.3), radius: 20)
         )
+        .onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: .named(Drag.coordinateSpace))
+        } action: { frame in
+            cardFrame = frame
+            reportFrames()
+        }
+        .onChange(of: currentPage) {
+            reportFrames()
+        }
         // Same swallow-the-tap trick: tapping anywhere inside the popup card
         // must NOT close the folder. Only taps on the surrounding dim layer
-        // (in LaunchpadView) should close it.
+        // (in LaunchpadView) should close it. Clicking a non-focusable area
+        // does not take focus from the title field, so end the edit here.
         .onTapGesture {
+            commitRename()
         }
+        // `.contain` keeps the card one container element; otherwise the
+        // identifier below would be stamped onto every child, title included.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("folder-detail")
         .accessibilityLabel(folder.title)
+        .onAppear {
+            if startsRenaming {
+                beginRename()
+            }
+        }
+        // The folder also closes while editing (backdrop click, launcher
+        // hidden): the edit still counts.
+        .onDisappear {
+            commitRename()
+            onFramesChange(nil)
+        }
+        .onChange(of: isRenaming) { _, renaming in
+            onRenamingChange(renaming)
+        }
+    }
+
+    @ViewBuilder
+    private var title: some View {
+        if isRenaming {
+            TextField("", text: $draftTitle)
+                .textFieldStyle(.plain)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .frame(width: gridWidth)
+                .focused($titleFieldFocused)
+                .onSubmit {
+                    commitRename()
+                }
+                // Escape cancels only the edit: the field editor consumes it,
+                // so it never reaches `LaunchpadPanel.keyDown`, which would
+                // close the folder.
+                .onExitCommand {
+                    cancelRename()
+                }
+                .onChange(of: titleFieldFocused) { _, focused in
+                    if !focused {
+                        commitRename()
+                    }
+                }
+                .accessibilityIdentifier("folder-title-field")
+        } else {
+            Text(folder.title)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+                .onTapGesture {
+                    beginRename()
+                }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("folder-title")
+        }
+    }
+
+    private func reportFrames() {
+        onFramesChange(GridDragController.FolderFrames(card: cardFrame, grid: gridFrame, page: currentPage))
+    }
+
+    private func beginRename() {
+        draftTitle = folder.title
+        isRenaming = true
+        titleFieldFocused = true
+    }
+
+    private func commitRename() {
+        guard isRenaming else { return }
+        isRenaming = false
+        if let title = FolderRename.committedTitle(draft: draftTitle, current: folder.title) {
+            onRename(title)
+        }
+    }
+
+    private func cancelRename() {
+        isRenaming = false
     }
 
     private var folderGridHeight: CGFloat {
-        let itemHeight = folderIconSize + 6 + metrics.labelFont * 3
-        return itemHeight * CGFloat(FolderGrid.rows) + CGFloat(FolderGrid.rows - 1) * 8
+        geometry.gridSize.height
     }
 
     private func folderPageGrid(_ page: [AppEntry]) -> some View {
         let columns = Array(repeating: GridItem(.fixed(folderItemWidth), spacing: 0), count: FolderGrid.columns)
 
         return VStack {
-            LazyVGrid(columns: columns, alignment: .center, spacing: 8) {
+            LazyVGrid(columns: columns, alignment: .center, spacing: FolderGrid.rowSpacing) {
                 ForEach(page) { app in
                     FolderAppIconView(
                         app: app,
                         iconSize: folderIconSize,
                         labelFont: metrics.labelFont,
-                        labelWidth: folderItemWidth * 0.85
+                        labelWidth: folderItemWidth * FolderGrid.iconScale
                     ) {
                         onLaunch(app)
                     }
+                    .opacity(app.id == hiddenAppID ? 0 : 1)
                 }
             }
             Spacer(minLength: 0)
         }
+    }
+}
+
+// What committing an inline title edit renames the folder to: nil when the
+// draft is blank or unchanged, so the title simply reverts.
+enum FolderRename {
+    static func committedTitle(draft: String, current: String) -> String? {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != current else { return nil }
+        return trimmed
     }
 }
 
@@ -142,6 +268,7 @@ private struct FolderAppIconView: View {
     let onTap: () -> Void
 
     @State private var isHovering = false
+    @Environment(\.enterEditMode) private var enterEditMode
 
     var body: some View {
         // Same outer/inner VStack pattern as `GridItemContainer` — see the
@@ -167,6 +294,7 @@ private struct FolderAppIconView: View {
             .onTapGesture {
                 onTap()
             }
+            .editModeGestures(enterEditMode)
         }
     }
 

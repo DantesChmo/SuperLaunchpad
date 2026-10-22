@@ -30,7 +30,8 @@ struct LaunchpadViewModelOrderingTests {
             enumerated,
             existingApps: try db.fetchAllApps(),
             existingFolders: try db.fetchAllFolders(),
-            systemOrdering: systemOrdering
+            systemOrdering: systemOrdering,
+            folderImportDone: try db.setting(.folderImportDone) != nil
         )
     }
 
@@ -291,5 +292,55 @@ struct LaunchpadViewModelOrderingTests {
         #expect(result[0].folderID == folders[0].id)
         #expect(result[0].pageIndex == nil)
         #expect(result[0].orderIndex == nil)
+    }
+
+    // MARK: - Folder import flag
+
+    private var systemFolderOrdering: LaunchpadOrdering {
+        LaunchpadOrdering(
+            appPositions: [:],
+            folders: [
+                FolderInfo(
+                    title: "System",
+                    pageIndex: 0,
+                    orderIndex: 1,
+                    appBundleIDs: [(bundleID: "com.x", orderIndex: 0)]
+                )
+            ]
+        )
+    }
+
+    @Test func mergeNewAppsSkipsFolderImportOnceDone() throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var existing = app("com.x")
+        existing.pageIndex = 0
+        existing.orderIndex = 0
+        try db.saveApps([existing])
+        try db.setSetting(.folderImportDone, "1")
+
+        let (result, folders) = try merge([existing], in: db, systemOrdering: systemFolderOrdering)
+        #expect(folders.isEmpty)
+        #expect(result.count == 1)
+        #expect(result[0].folderID == nil)
+        #expect(result[0].pageIndex == 0)
+        #expect(result[0].orderIndex == 0)
+    }
+
+    @Test func mergeNewAppsDoesNotPutNewAppIntoSkippedSystemFolder() throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var existing = app("com.a")
+        existing.pageIndex = 0
+        existing.orderIndex = 0
+        try db.saveApps([existing])
+        try db.setSetting(.folderImportDone, "1")
+
+        let (result, folders) = try merge([existing, app("com.x")], in: db, systemOrdering: systemFolderOrdering)
+        #expect(folders.isEmpty)
+        let newApp = try #require(result.first { $0.bundleIdentifier == "com.x" })
+        #expect(newApp.folderID == nil)
+        #expect(newApp.pageIndex == 0)
+        #expect(newApp.orderIndex == 1)
     }
 }

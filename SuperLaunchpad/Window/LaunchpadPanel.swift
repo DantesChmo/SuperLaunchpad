@@ -133,13 +133,19 @@ final class LaunchpadPanel: NSPanel {
     // while a folder is open they pass through to the folder's own ScrollView.
     //
     // Navigation keys are taken here too, before the focused search field's
-    // editor would consume them (see `handleKeyDown`).
+    // editor would consume them (see `handleKeyDown`). Holding ⌥ shows edit
+    // mode; the event still goes on, so the field editor sees the modifier.
     private func startEventMonitor() {
         stopEventMonitor()
         eventMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.scrollWheel, .keyDown]
+            matching: [.scrollWheel, .keyDown, .flagsChanged]
         ) { [weak self] event in
             guard let self, self.viewModel.isVisible, event.window === self else { return event }
+            if event.type == .flagsChanged {
+                let option = event.modifierFlags.intersection([.command, .option, .control, .shift]) == .option
+                self.viewModel.setOptionHeld(option)
+                return event
+            }
             if event.type == .keyDown {
                 return self.handleKeyDown(event) ? nil : event
             }
@@ -156,6 +162,8 @@ final class LaunchpadPanel: NSPanel {
         // While an input method is composing, its candidate window owns the
         // arrows, Return and Escape.
         if let editor = firstResponder as? NSTextView, editor.hasMarkedText() { return false }
+        // The folder title field handles its own Escape (cancel the edit) and arrows.
+        guard !viewModel.isRenamingFolder else { return false }
         guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return false }
 
         let searching = viewModel.isSearching
@@ -172,6 +180,8 @@ final class LaunchpadPanel: NSPanel {
             viewModel.moveSelection(by: -Grid.columns)
         case kVK_DownArrow where searching:
             viewModel.moveSelection(by: Grid.columns)
+        case kVK_Return where viewModel.isEditing, kVK_ANSI_KeypadEnter where viewModel.isEditing:
+            viewModel.exitEditMode()
         case kVK_Return where searching, kVK_ANSI_KeypadEnter where searching:
             guard let app = viewModel.selectedResult else { return true }
             // Hide first: `launchApp` also hides the view model, after which

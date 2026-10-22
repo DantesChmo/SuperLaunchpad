@@ -8,6 +8,10 @@ struct AppGridPageView: View {
     var selectedID: String? = nil
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
+    // Item currently lifted by a drag, if it is on this page.
+    var hiddenItemID: String? = nil
+    // Icon the lifted app would merge into on drop.
+    var mergeTargetID: String? = nil
 
     var body: some View {
         VStack {
@@ -23,29 +27,17 @@ struct AppGridPageView: View {
                 rowSpacing: metrics.rowSpacing
             ) {
                 ForEach(items) { item in
-                    // Cell layout trick: wrap each icon in a VStack with
-                    // top/bottom Spacers. The Spacers absorb leftover vertical
-                    // space, so the icon centers vertically within `itemHeight`
-                    // regardless of label line count (1 vs. 2 lines).
-                    VStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        // `switch` over the LaunchpadItem sum type — each case
-                        // gets compile-time exhaustiveness checking.
-                        switch item {
-                        case .app(let app):
-                            AppIconView(app: app, metrics: metrics, isSelected: app.id == selectedID) {
-                                onLaunch(app)
-                            }
-                        case .folder(let folder, let apps):
-                            FolderIconView(folder: folder, apps: apps, metrics: metrics) {
-                                onOpenFolder(folder)
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    // Full column width centers the icon in its column, as the
-                    // `.fixed` columns of the old `LazyVGrid` did.
-                    .frame(width: metrics.itemWidth, height: metrics.itemHeight)
+                    GridCellView(
+                        item: item,
+                        metrics: metrics,
+                        isSelected: item.id == selectedID,
+                        isMergeTarget: item.id == mergeTargetID,
+                        onLaunch: onLaunch,
+                        onOpenFolder: onOpenFolder
+                    )
+                        // The dragged item keeps its slot (so the reflow
+                        // around it is right) but is drawn by the lifted copy.
+                        .opacity(item.id == hiddenItemID ? 0 : 1)
                 }
             }
             .padding(.horizontal, metrics.horizontalPadding)
@@ -53,6 +45,44 @@ struct AppGridPageView: View {
             // top edge instead of floating in the middle of the page.
             Spacer(minLength: 0)
         }
+    }
+}
+
+// One grid cell: the icon centered in an `itemWidth` × `itemHeight` box.
+// Also drawn by the lifted copy of a dragged icon.
+struct GridCellView: View {
+    let item: LaunchpadItem
+    let metrics: LayoutMetrics
+    var isSelected = false
+    var isMergeTarget = false
+    let onLaunch: (AppEntry) -> Void
+    let onOpenFolder: (FolderEntry) -> Void
+
+    var body: some View {
+        // Cell layout trick: wrap each icon in a VStack with top/bottom
+        // Spacers. The Spacers absorb leftover vertical space, so the icon
+        // centers vertically within `itemHeight` regardless of label line
+        // count (1 vs. 2 lines).
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            // `switch` over the LaunchpadItem sum type — each case gets
+            // compile-time exhaustiveness checking.
+            switch item {
+            case .app(let app):
+                AppIconView(app: app, metrics: metrics, isSelected: isSelected, isMergeTarget: isMergeTarget) {
+                    onLaunch(app)
+                }
+            case .folder(let folder, let apps):
+                FolderIconView(folder: folder, apps: apps, metrics: metrics) {
+                    onOpenFolder(folder)
+                }
+                .scaleEffect(isMergeTarget ? Drag.mergeTargetScale : 1)
+            }
+            Spacer(minLength: 0)
+        }
+        // Full column width centers the icon in its column, as the `.fixed`
+        // columns of the old `LazyVGrid` did.
+        .frame(width: metrics.itemWidth, height: metrics.itemHeight)
     }
 }
 

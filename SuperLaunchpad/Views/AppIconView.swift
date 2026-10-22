@@ -6,6 +6,9 @@ struct AppIconView: View {
     let app: AppEntry
     let metrics: LayoutMetrics
     var isSelected = false
+    // A lifted app rests on this one: a drop makes a folder of the two, so
+    // the icon grows and gets a folder-style backplate.
+    var isMergeTarget = false
     let onTap: () -> Void
 
     var body: some View {
@@ -16,6 +19,14 @@ struct AppIconView: View {
         GridItemContainer(metrics: metrics, onTap: onTap) {
             iconImage
                 .frame(width: metrics.iconSize, height: metrics.iconSize)
+                .background {
+                    if isMergeTarget {
+                        RoundedRectangle(cornerRadius: metrics.iconSize * 0.2)
+                            .fill(.white.opacity(Drag.mergeBackplateOpacity))
+                            .padding(-metrics.iconSize * Drag.mergeBackplateOutset)
+                    }
+                }
+                .scaleEffect(isMergeTarget ? Drag.mergeTargetScale : 1)
         } label: {
             Text(app.displayName)
                 .font(.system(size: metrics.labelFont))

@@ -33,7 +33,10 @@ final class LaunchpadViewModel {
             // Assigned only on change, so views reading it are not
             // re-rendered on every keystroke.
             if isSearching != searching { isSearching = searching }
-            if isSearching { openFolderID = nil }
+            if isSearching {
+                openFolderID = nil
+                exitEditMode()
+            }
             rebuildSearchResults()
             selectedResultIndex = 0
         }
@@ -127,8 +130,7 @@ final class LaunchpadViewModel {
     // Apps inside the open folder, sorted by `folderOrderIndex`.
     var openFolderApps: [AppEntry] {
         guard let id = openFolderID else { return [] }
-        return apps.filter { $0.folderID == id }
-            .sorted { ($0.folderOrderIndex ?? 0) < ($1.folderOrderIndex ?? 0) }
+        return folderApps(id)
     }
 
     // Optional because the DB may fail to open (disk full, sandbox issue).
@@ -202,6 +204,7 @@ final class LaunchpadViewModel {
     private func startRescan() {
         // Captured once: the detached task must not read main-actor state.
         let database = database
+        let startRevision = layoutRevision
 
         // `Task.detached` runs outside the structured concurrency tree of the
         // caller — important here because `loadApps` is `@MainActor` and we
@@ -227,11 +230,13 @@ final class LaunchpadViewModel {
             } else {
                 // Existing DB → preserve user's existing positions, append
                 // any newly installed apps at the end.
+                let folderImportDone = (try? database?.setting(.folderImportDone)) != nil
                 (appsToSave, foldersToSave) = LaunchpadViewModel.mergeNewApps(
                     enumerated,
                     existingApps: (try? database?.fetchAllApps()) ?? [],
                     existingFolders: (try? database?.fetchAllFolders()) ?? [],
-                    systemOrdering: systemOrdering
+                    systemOrdering: systemOrdering,
+                    folderImportDone: folderImportDone
                 )
             }
 
@@ -239,6 +244,12 @@ final class LaunchpadViewModel {
             // to them are inserted. (FK constraint would otherwise fire.)
             try? database?.saveFolders(foldersToSave)
             try? database?.saveApps(appsToSave)
+
+            // With a system layout available, both paths above have imported
+            // its folders by now; never import them again.
+            if systemOrdering != nil {
+                try? database?.setSetting(.folderImportDone, "1")
+            }
 
             // Drop rows for apps that were uninstalled since the last scan.
             let validIDs = Set(enumerated.map(\.bundleIdentifier))
@@ -263,15 +274,35 @@ final class LaunchpadViewModel {
             // state updates. Mutating `@Observable` state off-main is a
             // compile-time error under strict concurrency.
             await MainActor.run {
-                self.updateContents {
-                    self.apps = sortedApps
-                    self.folders = sortedFolders
-                }
-                // Only icons that changed in the rescan are decoded again.
-                Task { await IconCache.shared.prewarm(sortedApps) }
+                self.receiveRescanResult(apps: sortedApps, folders: sortedFolders, startRevision: startRevision)
                 if self.rescanGate.finish() {
                     self.startRescan()
                 }
+            }
+        }
+    }
+
+    // A rescan that finishes mid-drag would swap `pages` under the dragged
+    // icon; its result is parked until the drag ends.
+    func receiveRescanResult(apps scannedApps: [AppEntry], folders scannedFolders: [FolderEntry], startRevision: Int) {
+        guard !isDragSessionActive else {
+            parkedRescan = ParkedRescan(apps: scannedApps, folders: scannedFolders, startRevision: startRevision)
+            return
+        }
+        if layoutRevision == startRevision {
+            updateContents {
+                apps = scannedApps
+                folders = scannedFolders
+            }
+            // Only icons that changed in the rescan are decoded again.
+            Task { await IconCache.shared.prewarm(scannedApps) }
+        } else {
+            // The user edited the layout while this scan ran on rows read
+            // before the edit, and the scan's writes may have undone it. Write
+            // the edited layout back and scan again so new apps still arrive.
+            try? database?.saveLayout(apps: apps, folders: folders)
+            if rescanGate.request() {
+                startRescan()
             }
         }
     }
@@ -356,15 +387,16 @@ final class LaunchpadViewModel {
 
     // Subsequent-launch merge. Preserve every existing position; append
     // newly-installed apps at the end. Re-import folders from the system DB
-    // only if we don't yet have any (recovery path).
+    // only if we don't yet have any and never imported them (recovery path).
     //
     // `nonisolated static` like `applyOrdering`; the caller passes in the rows
-    // currently in the DB.
+    // currently in the DB and the `folderImportDone` setting.
     nonisolated static func mergeNewApps(
         _ enumerated: [AppEntry],
         existingApps existing: [AppEntry],
         existingFolders: [FolderEntry],
-        systemOrdering: LaunchpadOrdering?
+        systemOrdering: LaunchpadOrdering?,
+        folderImportDone: Bool
     ) -> ([AppEntry], [FolderEntry]) {
         // O(1) bundleID lookup for the merge loop below.
         // `uniqueKeysWithValues` traps on duplicate keys — safe here because
@@ -375,9 +407,12 @@ final class LaunchpadViewModel {
         // Recovery path: a DB where folders were dropped (e.g. older app version
         // never imported them) should re-import on the next run. We detect this
         // by checking: do we have folder rows AND apps actually linked to them?
+        // Once the import happened (or the user edited the layout) an empty
+        // folder list is the user's choice: dissolving the last folder must not
+        // bring the system folders back.
         var folderAppPositions: [String: (folderID: String, folderOrderIndex: Int)] = [:]
         let hasFolderApps = existing.contains { $0.folderID != nil }
-        if (existingFolders.isEmpty || !hasFolderApps), let ordering = systemOrdering {
+        if !folderImportDone, existingFolders.isEmpty || !hasFolderApps, let ordering = systemOrdering {
             existingFolders = []
             for folderInfo in ordering.folders {
                 let folderID = UUID().uuidString
@@ -468,16 +503,23 @@ final class LaunchpadViewModel {
     // `NSWorkspace.open(_:)` launches the app at the given URL via Launch
     // Services — the same mechanism Finder uses on double-click. We hide
     // the launcher straight after so the user lands on the launched app.
-    func launchApp(_ app: AppEntry) {
+    //
+    // Does nothing in edit mode, where a click on an app only selects it for
+    // dragging. Returns whether the app was launched.
+    @discardableResult
+    func launchApp(_ app: AppEntry) -> Bool {
+        guard !isEditing else { return false }
         let url = URL(fileURLWithPath: app.appPath)
         NSWorkspace.shared.open(url)
         hide()
+        return true
     }
 
     func show() {
         // Always reset to the first page on show — matches macOS Launchpad UX.
         currentPage = 0
         isVisible = true
+        isOptionHeld = false
         searchFocusRequest += 1
     }
 
@@ -486,6 +528,7 @@ final class LaunchpadViewModel {
         // in a clean state.
         openFolderID = nil
         searchText = ""
+        exitEditMode()
         isVisible = false
     }
 
@@ -501,17 +544,258 @@ final class LaunchpadViewModel {
         openFolderID = nil
     }
 
+    // MARK: - Editing
+    //
+    // Each edit runs one `GridLayout` operation on the current layout, writes
+    // the normalized result back into `apps`/`folders` and persists it in a
+    // single DB transaction. Every method returns false (and changes nothing)
+    // when the edit is not possible.
+
+    nonisolated static let defaultFolderTitle = "Folder"
+
+    // Bumped by every edit; a rescan that started before an edit must not
+    // overwrite it (see `startRescan`).
+    @ObservationIgnored private var layoutRevision = 0
+
+    @discardableResult
+    func moveItem(_ item: GridLayout.Item, toPage page: Int, slot: Int) -> Bool {
+        applyEdit { $0.move(item, toPage: page, slot: slot) }
+    }
+
+    // Returns the ID of the new folder, or nil when the merge is not possible.
+    @discardableResult
+    func mergeApps(_ appID: String, onto targetAppID: String, title: String = defaultFolderTitle) -> String? {
+        let folderID = UUID().uuidString
+        let merged = applyEdit { $0.merge(appID, onto: targetAppID, folderID: folderID, title: title) }
+        return merged ? folderID : nil
+    }
+
+    @discardableResult
+    func addApp(_ appID: String, toFolder folderID: String, at index: Int? = nil) -> Bool {
+        applyEdit { $0.add(appID, toFolder: folderID, at: index) }
+    }
+
+    // A folder left without apps is dissolved.
+    @discardableResult
+    func removeApp(_ appID: String, fromFolder folderID: String, toPage page: Int, slot: Int) -> Bool {
+        applyEdit { $0.remove(appID, fromFolder: folderID, toPage: page, slot: slot) }
+    }
+
+    // Drop app `appID` on app `targetAppID`: a new folder titled after the
+    // target app's category. Returns the folder's ID.
+    @discardableResult
+    func createFolder(dropping appID: String, onto targetAppID: String) -> String? {
+        guard let target = apps.first(where: { $0.bundleIdentifier == targetAppID }) else { return nil }
+        let title = AppCategory.folderTitle(forAppAt: target.appPath, fallback: Self.defaultFolderTitle)
+        return mergeApps(appID, onto: targetAppID, title: title)
+    }
+
+    // Where a finished drag left the item: page + slot on the grid, or the
+    // index in the folder it was reordered within. `createdFolderID` is set
+    // when the drop made a new folder (opened in rename mode by the view).
+    struct DropOutcome: Equatable {
+        var page: Int
+        var slot: Int
+        var createdFolderID: String?
+    }
+
+    // Persists a drag: reorder within its folder, merge into the target icon,
+    // take an app out of its folder, or move an item on the grid. Returns
+    // nil (and changes nothing) when the edit is not possible.
+    func commitDrop(_ session: DragSession) -> DropOutcome? {
+        if session.isInFolder, let folderID = session.sourceFolderID {
+            guard addApp(session.itemID, toFolder: folderID, at: session.targetSlot),
+                  let index = folderApps(folderID).firstIndex(where: { $0.id == session.itemID }) else { return nil }
+            return DropOutcome(page: 0, slot: index)
+        }
+        if let targetID = session.mergeTargetID {
+            guard case .app(let appID) = session.item else { return nil }
+            // Back onto its own folder: it stays where it was.
+            if targetID == session.sourceFolderID {
+                return gridLocation(of: targetID).map { DropOutcome(page: $0.page, slot: $0.slot) }
+            }
+            if folders.contains(where: { $0.id == targetID }) {
+                guard addApp(appID, toFolder: targetID) else { return nil }
+                return gridLocation(of: targetID).map { DropOutcome(page: $0.page, slot: $0.slot) }
+            }
+            guard let folderID = createFolder(dropping: appID, onto: targetID),
+                  let location = gridLocation(of: folderID) else { return nil }
+            return DropOutcome(page: location.page, slot: location.slot, createdFolderID: folderID)
+        }
+        if let folderID = session.sourceFolderID {
+            guard removeApp(session.itemID, fromFolder: folderID, toPage: session.page, slot: session.targetSlot) else { return nil }
+        } else {
+            guard moveItem(session.item, toPage: session.page, slot: session.targetSlot) else { return nil }
+        }
+        return gridLocation(of: session.itemID).map { DropOutcome(page: $0.page, slot: $0.slot) }
+    }
+
+    // Where a top-level item sits on the grid.
+    func gridLocation(of itemID: String) -> (page: Int, slot: Int)? {
+        for (page, items) in pages.enumerated() {
+            if let slot = items.firstIndex(where: { $0.id == itemID }) {
+                return (page, slot)
+            }
+        }
+        return nil
+    }
+
+    // Apps of folder `folderID`, in folder order.
+    func folderApps(_ folderID: String) -> [AppEntry] {
+        apps.filter { $0.folderID == folderID }
+            .sorted { ($0.folderOrderIndex ?? 0) < ($1.folderOrderIndex ?? 0) }
+    }
+
+    @discardableResult
+    func renameFolder(_ folderID: String, to title: String) -> Bool {
+        var layout = GridLayout(apps: apps, folders: folders)
+        guard layout.rename(folder: folderID, to: title),
+              let newTitle = layout.folders[folderID]?.title,
+              let index = folders.firstIndex(where: { $0.id == folderID }) else { return false }
+        folders[index].title = newTitle
+        layoutRevision += 1
+        try? database?.renameFolder(id: folderID, title: newTitle)
+        return true
+    }
+
+    // MARK: - Drag session
+
+    private struct ParkedRescan {
+        let apps: [AppEntry]
+        let folders: [FolderEntry]
+        let startRevision: Int
+    }
+
+    // True while an icon is dragged on the grid. Set by the grid view.
+    @ObservationIgnored private(set) var isDragSessionActive = false
+    @ObservationIgnored private var parkedRescan: ParkedRescan?
+
+    // An empty page after the last one, shown while a dragged icon is held
+    // past the last page so it can be dropped there. Dropping on it creates
+    // the page (`moveItem` to `pages.count`); ending the drag removes it.
+    private(set) var hasTrailingDragPage = false
+    // Bumped by `cancelDrag()`; the grid observes it.
+    private(set) var dragCancelRequest = 0
+
+    // True while a folder title is being edited. The panel's key monitor then
+    // leaves Escape and the arrows to the title field.
+    @ObservationIgnored var isRenamingFolder = false
+
+    // Pages the pager shows: the stored ones plus the trailing drag page.
+    var displayedPageCount: Int {
+        pages.count + (hasTrailingDragPage ? 1 : 0)
+    }
+
+    // Starting a drag also enters edit mode, which stays on after the drop.
+    func beginDragSession() {
+        isDragSessionActive = true
+        enterEditMode()
+    }
+
+    // Returns false when there is no drag or the page is already shown.
+    @discardableResult
+    func openTrailingDragPage() -> Bool {
+        guard isDragSessionActive, !hasTrailingDragPage else { return false }
+        hasTrailingDragPage = true
+        return true
+    }
+
+    // Esc: asks the grid to drop the dragged icon back where it came from.
+    // Returns false when no icon is being dragged.
+    @discardableResult
+    func cancelDrag() -> Bool {
+        guard isDragSessionActive else { return false }
+        dragCancelRequest += 1
+        return true
+    }
+
+    // Safe to call more than once per drag.
+    func endDragSession() {
+        guard isDragSessionActive else { return }
+        isDragSessionActive = false
+        hasTrailingDragPage = false
+        guard let parked = parkedRescan else { return }
+        parkedRescan = nil
+        receiveRescanResult(apps: parked.apps, folders: parked.folders, startRevision: parked.startRevision)
+    }
+
+    private func applyEdit(_ edit: (inout GridLayout) -> Bool) -> Bool {
+        var layout = GridLayout(apps: apps, folders: folders)
+        guard edit(&layout) else { return false }
+        layout.dissolveEmptyFolders()
+        let result = layout.apply(to: apps, folders: folders)
+        updateContents {
+            apps = result.apps
+            folders = result.folders
+        }
+        if let openFolderID, !result.folders.contains(where: { $0.id == openFolderID }) {
+            self.openFolderID = nil
+        }
+        layoutRevision += 1
+        try? database?.saveLayout(apps: result.apps, folders: result.folders)
+        return true
+    }
+
+    // MARK: - Edit mode
+    //
+    // Icons wiggle and clicks don't launch apps. Entered by a long press, by
+    // starting a drag (both stay on until dismissed), or while ⌥ is held.
+
+    private(set) var isEditing = false
+    // Entered by a long press or a drag: stays on when ⌥ is released.
+    @ObservationIgnored private var isEditingSticky = false
+    @ObservationIgnored private var isOptionHeld = false
+
+    func enterEditMode() {
+        guard !isSearching else { return }
+        isEditingSticky = true
+        updateEditing()
+    }
+
+    // Returns false when edit mode was already off.
+    @discardableResult
+    func exitEditMode() -> Bool {
+        let wasEditing = isEditing
+        isEditingSticky = false
+        // A still-held ⌥ no longer counts; pressing it again re-enters.
+        isOptionHeld = false
+        updateEditing()
+        return wasEditing
+    }
+
+    // ⌥ pressed or released. A press is ignored while typing a query or a
+    // folder title, where ⌥ types characters.
+    func setOptionHeld(_ held: Bool) {
+        guard held != isOptionHeld else { return }
+        if held, isSearching || isRenamingFolder || !isVisible { return }
+        isOptionHeld = held
+        updateEditing()
+    }
+
+    private func updateEditing() {
+        let editing = isEditingSticky || isOptionHeld
+        if isEditing != editing { isEditing = editing }
+    }
+
     // MARK: - Search
 
     enum EscapeAction: Equatable {
+        case cancelledDrag
+        case exitedEditMode
         case clearedSearch
         case closedFolder
         case hideLauncher
     }
 
-    // Escape acts on the innermost context: the query, then an open folder,
-    // then the launcher itself (which the caller hides).
+    // Escape acts on the innermost context: a dragged icon, edit mode, the query, then an
+    // open folder, then the launcher itself (which the caller hides).
     func handleEscape() -> EscapeAction {
+        if cancelDrag() {
+            return .cancelledDrag
+        }
+        if exitEditMode() {
+            return .exitedEditMode
+        }
         if !searchText.isEmpty {
             searchText = ""
             return .clearedSearch

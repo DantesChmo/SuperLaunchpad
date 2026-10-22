@@ -14,6 +14,11 @@ enum FolderGrid {
     static let columns = 4
     static let rows = 3
     static let appsPerPage = columns * rows
+    // Icons in the folder popup are a touch smaller than on the main grid.
+    static let iconScale: CGFloat = 0.85
+    static let rowSpacing: CGFloat = 8
+    // Padding between the popup card's edge and its grid.
+    static let cardHorizontalPadding: CGFloat = 30
 }
 
 enum Rescan {
@@ -67,6 +72,15 @@ struct LayoutMetrics {
     let bottomPadding: CGFloat
     let rowSpacing: CGFloat
 
+    // Vertical gap between an icon and its label.
+    static let iconLabelSpacing: CGFloat = 6
+
+    // Hover / tap / drag target of a cell: the icon plus room for two label
+    // lines, centered in the cell (see `GridItemContainer`).
+    var itemHitSize: CGSize {
+        CGSize(width: iconSize, height: iconSize + Self.iconLabelSpacing + labelFont * 3)
+    }
+
     init(screenWidth: CGFloat, screenHeight: CGFloat) {
         // All numbers are screen-relative so the grid looks proportionally the
         // same on a 13" MacBook and a 6K Pro Display. Hard-coded pixel sizes
@@ -88,6 +102,61 @@ struct LayoutMetrics {
         itemHeight = availableHeight / CGFloat(Grid.rows)
         rowSpacing = itemHeight * 0.05
     }
+}
+
+// Drag-to-reorder on the main grid.
+enum Drag {
+    // Pointer travel (pt) before a press on an icon becomes a drag; shorter
+    // movements stay a click.
+    static let threshold: CGFloat = 6
+    // Scale of the lifted icon that follows the pointer.
+    static let liftScale: CGFloat = 1.1
+    static let shadowRadius: CGFloat = 12
+    static let shadowOpacity: Double = 0.4
+    // The pointer must rest over a new slot this long before the neighbours
+    // reflow, so sweeping across the grid doesn't shuffle every icon it passes.
+    static let dwell: Double = 0.15
+    // Spring used for the reflow, the lift and the drop.
+    static let springDuration: Double = 0.25
+    // The pointer must rest in the margin beside the grid this long before
+    // the grid flips to the neighbouring page…
+    static let edgeDwell: Double = 0.5
+    // …and then flips again this often while it stays there.
+    static let edgeRepeat: Double = 0.8
+    // Merge zone: the middle of an icon, this share of its side. Dropping an
+    // app there makes a folder (or adds to one); elsewhere it inserts.
+    static let mergeZoneRatio: CGFloat = 0.5
+    // The lifted app must rest on a merge zone this long before the target
+    // is highlighted and the reflow pauses.
+    static let mergeDwell: Double = 0.4
+    // Highlighted merge target: scaled up, with a folder-style backplate
+    // around an app's icon.
+    static let mergeTargetScale: CGFloat = 1.15
+    static let mergeBackplateOutset: CGFloat = 0.12
+    static let mergeBackplateOpacity: Double = 0.25
+    // The lifted icon shrinks into the folder it is dropped on.
+    static let mergeDropScale: CGFloat = 0.4
+    // Share of the label room (two lines plus slack) one label line takes;
+    // used to place the icon inside its vertically centered hit box.
+    static let oneLineLabelShare: CGFloat = 0.4
+    // Named coordinate space of the launcher root, where the drag gesture
+    // and the lifted icon live.
+    static let coordinateSpace = "launchpad"
+}
+
+// Edit (jiggle) mode, as in macOS Launchpad.
+enum Edit {
+    // Holding an icon this long without moving past `Drag.threshold` enters
+    // edit mode.
+    static let longPressDuration: Double = 0.6
+    // Icons rock by up to this angle (degrees) either way…
+    static let wiggleAngle: Double = 1.5
+    // …once per this period (s). Each icon starts at a random phase so they
+    // don't move in lockstep.
+    static let wigglePeriod: Double = 0.25
+    // With Reduce Motion icons don't rock; they shrink this much instead.
+    static let reducedMotionScale: CGFloat = 0.94
+    static let reducedMotionAnimation: Double = 0.15
 }
 
 // Tuning for the main-grid pager. Positions and velocities are in "pages"
