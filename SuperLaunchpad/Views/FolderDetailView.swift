@@ -223,18 +223,13 @@ struct FolderDetailView: View {
     private func commitRename() {
         guard isRenaming else { return }
         isRenaming = false
-        titleFieldFocused = false
         if let title = FolderRename.committedTitle(draft: draftTitle, current: folder.title) {
             onRename(title)
         }
     }
 
-    // Focus is cleared with the edit: a `titleFieldFocused` left at true makes
-    // the next `beginRename()` a no-op write, and the new field drops focus
-    // and commits right away.
     private func cancelRename() {
         isRenaming = false
-        titleFieldFocused = false
     }
 
     private var folderGridHeight: CGFloat {
