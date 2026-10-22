@@ -74,7 +74,7 @@ struct MergeZoneTests {
     }
 }
 
-struct AppCategoryTests {
+struct AppCategoryTitleTests {
 
     @Test(arguments: [
         ("public.app-category.developer-tools", "Developer Tools"),
@@ -88,12 +88,12 @@ struct AppCategoryTests {
         ("public.app-category.Utilities", "Utilities")
     ])
     func readableTitle(type: String, expected: String) {
-        #expect(AppCategory.title(forCategoryType: type) == expected)
+        #expect(AppCategoryTitle.title(forCategoryType: type) == expected)
     }
 
     @Test(arguments: [nil, "", "com.example.thing", "public.app-category."] as [String?])
     func noTitleForMissingOrMalformedTypes(type: String?) {
-        #expect(AppCategory.title(forCategoryType: type) == nil)
+        #expect(AppCategoryTitle.title(forCategoryType: type) == nil)
     }
 
     @Test func titleComesFromTheBundlesInfoPlist() throws {
@@ -101,9 +101,9 @@ struct AppCategoryTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let path = try makeBundle(in: dir, category: "public.app-category.developer-tools")
 
-        #expect(AppCategory.folderTitle(forAppAt: path, fallback: "Folder") == "Developer Tools")
-        #expect(AppCategory.folderTitle(forAppAt: try makeBundle(in: dir, name: "Plain", category: nil), fallback: "Folder") == "Folder")
-        #expect(AppCategory.folderTitle(forAppAt: dir.appendingPathComponent("Missing.app").path, fallback: "Folder") == "Folder")
+        #expect(AppCategoryTitle.folderTitle(forAppAt: path, fallback: "Folder") == "Developer Tools")
+        #expect(AppCategoryTitle.folderTitle(forAppAt: try makeBundle(in: dir, name: "Plain", category: nil), fallback: "Folder") == "Folder")
+        #expect(AppCategoryTitle.folderTitle(forAppAt: dir.appendingPathComponent("Missing.app").path, fallback: "Folder") == "Folder")
     }
 }
 
@@ -114,7 +114,7 @@ func makeBundle(in dir: URL, name: String = "Target", category: String?) throws 
     try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
     var info: [String: Any] = ["CFBundleIdentifier": "com.test.\(name)", "CFBundlePackageType": "APPL"]
     if let category {
-        info[AppCategory.typeKey] = category
+        info[AppCategoryTitle.typeKey] = category
     }
     let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
     try data.write(to: contents.appendingPathComponent("Info.plist"))

@@ -2,7 +2,7 @@ import Foundation
 
 // Readable names for an app's `LSApplicationCategoryType`, used to title the
 // folder made by dropping one app on another (named after the target app).
-enum AppCategory {
+enum AppCategoryTitle {
     static let typeKey = "LSApplicationCategoryType"
     private static let prefix = "public.app-category."
 

@@ -574,7 +574,7 @@ final class LaunchpadViewModel {
     @discardableResult
     func createFolder(dropping appID: String, onto targetAppID: String) -> String? {
         guard let target = apps.first(where: { $0.bundleIdentifier == targetAppID }) else { return nil }
-        let title = AppCategory.folderTitle(forAppAt: target.appPath, fallback: Self.defaultFolderTitle)
+        let title = AppCategoryTitle.folderTitle(forAppAt: target.appPath, fallback: Self.defaultFolderTitle)
         return mergeApps(appID, onto: targetAppID, title: title)
     }
 
