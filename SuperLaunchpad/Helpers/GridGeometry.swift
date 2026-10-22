@@ -5,8 +5,17 @@ import CoreGraphics
 // the page and hugging its top edge, `rowSpacing` between rows, and an icon +
 // label hit box centered in each cell (see `GridItemContainer`).
 //
-// Points are page-local: (0, 0) is the top-left corner of the page.
+// Points are page-local: (0, 0) is the top-left corner of the page. The
+// folder popup's 4×3 grid uses the same math with points local to its grid
+// (see `folder(metrics:)`).
 struct GridGeometry: Equatable {
+    // Where a lifted app is over a cell: the middle of the icon merges into
+    // it (new folder / add to folder), anywhere else inserts before it.
+    enum Zone: Equatable {
+        case center
+        case gap
+    }
+
     let columns: Int
     let rows: Int
     let cellSize: CGSize
@@ -24,6 +33,15 @@ struct GridGeometry: Equatable {
         origin = CGPoint(x: (pageWidth - CGFloat(columns) * cellSize.width) / 2, y: 0)
     }
 
+    init(columns: Int, rows: Int, cellSize: CGSize, rowSpacing: CGFloat, hitSize: CGSize, origin: CGPoint) {
+        self.columns = columns
+        self.rows = rows
+        self.cellSize = cellSize
+        self.rowSpacing = rowSpacing
+        self.hitSize = hitSize
+        self.origin = origin
+    }
+
     init(metrics: LayoutMetrics, pageWidth: CGFloat) {
         self.init(
             columns: Grid.columns,
@@ -35,7 +53,31 @@ struct GridGeometry: Equatable {
         )
     }
 
+    // One page of an open folder, as `FolderDetailView` lays it out: fixed
+    // `itemWidth` columns and smaller icons, points local to the grid's
+    // top-left corner.
+    static func folder(metrics: LayoutMetrics) -> GridGeometry {
+        let iconSize = metrics.iconSize * FolderGrid.iconScale
+        let itemHeight = iconSize + LayoutMetrics.iconLabelSpacing + metrics.labelFont * 3
+        return GridGeometry(
+            columns: FolderGrid.columns,
+            rows: FolderGrid.rows,
+            cellSize: CGSize(width: metrics.itemWidth, height: itemHeight),
+            rowSpacing: FolderGrid.rowSpacing,
+            hitSize: CGSize(width: iconSize, height: itemHeight),
+            origin: .zero
+        )
+    }
+
     var capacity: Int { columns * rows }
+
+    // Size of the grid's cells and gaps, without trailing row spacing.
+    var gridSize: CGSize {
+        CGSize(
+            width: CGFloat(columns) * cellSize.width,
+            height: CGFloat(rows) * cellSize.height + CGFloat(max(rows - 1, 0)) * rowSpacing
+        )
+    }
 
     func cellFrame(slot: Int) -> CGRect {
         let column = slot % columns
@@ -56,6 +98,30 @@ struct GridGeometry: Equatable {
             width: hitSize.width,
             height: hitSize.height
         )
+    }
+
+    // The icon square of a cell. The hit box is as wide as the icon and
+    // centers icon + label vertically, so the icon sits above the middle by
+    // half the label's height (taken as one line).
+    func iconFrame(slot: Int) -> CGRect {
+        let hit = hitFrame(slot: slot)
+        let iconSide = hitSize.width
+        let labelRoom = max(hitSize.height - iconSide - LayoutMetrics.iconLabelSpacing, 0)
+        let content = iconSide + LayoutMetrics.iconLabelSpacing + labelRoom * Drag.oneLineLabelShare
+        return CGRect(x: hit.minX, y: hit.midY - content / 2, width: iconSide, height: iconSide)
+    }
+
+    // `.center` within the middle `Drag.mergeZoneRatio` of the slot's icon.
+    func zone(at point: CGPoint, slot: Int) -> Zone {
+        let icon = iconFrame(slot: slot)
+        let inset = icon.width * (1 - Drag.mergeZoneRatio) / 2
+        return icon.insetBy(dx: inset, dy: inset).contains(point) ? .center : .gap
+    }
+
+    // The occupied slot whose merge zone contains `point`, if any.
+    func mergeSlot(at point: CGPoint, itemCount: Int) -> Int? {
+        guard let slot = nearestSlot(to: point), slot < itemCount else { return nil }
+        return zone(at: point, slot: slot) == .center ? slot : nil
     }
 
     // The occupied slot whose icon + label box contains `point`; nil over a

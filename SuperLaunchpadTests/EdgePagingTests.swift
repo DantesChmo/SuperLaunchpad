@@ -184,6 +184,16 @@ struct GridDragControllerEdgeTests {
         var now: TimeInterval = 100
     }
 
+    private func context(page: Int) -> GridDragController.GridContext {
+        GridDragController.GridContext(
+            pages: pages,
+            page: page,
+            geometry: geometry(),
+            frame: CGRect(x: 0, y: 0, width: 1000, height: 600),
+            pagerPosition: Double(page)
+        )
+    }
+
     private func drag(
         _ controller: GridDragController,
         to pointer: CGPoint,
@@ -193,11 +203,7 @@ struct GridDragControllerEdgeTests {
         controller.update(
             start: CGPoint(x: 200, y: 40),
             pointer: pointer,
-            pages: pages,
-            page: page,
-            geometry: geometry(),
-            pagerPosition: Double(page),
-            pageWidth: 1000,
+            grid: context(page: page),
             flipPage: flipPage
         )
     }
@@ -266,11 +272,7 @@ struct GridDragControllerEdgeTests {
         let lifted = controller.update(
             start: CGPoint(x: 50, y: 40),
             pointer: CGPoint(x: 950, y: 40),
-            pages: pages,
-            page: 0,
-            geometry: geometry(),
-            pagerPosition: 0,
-            pageWidth: 1000,
+            grid: context(page: 0),
             flipPage: flipPage
         )
         clock.now += Drag.edgeDwell * 4

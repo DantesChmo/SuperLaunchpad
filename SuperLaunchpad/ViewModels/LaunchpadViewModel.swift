@@ -127,8 +127,7 @@ final class LaunchpadViewModel {
     // Apps inside the open folder, sorted by `folderOrderIndex`.
     var openFolderApps: [AppEntry] {
         guard let id = openFolderID else { return [] }
-        return apps.filter { $0.folderID == id }
-            .sorted { ($0.folderOrderIndex ?? 0) < ($1.folderOrderIndex ?? 0) }
+        return folderApps(id)
     }
 
     // Optional because the DB may fail to open (disk full, sandbox issue).
@@ -569,6 +568,71 @@ final class LaunchpadViewModel {
     @discardableResult
     func removeApp(_ appID: String, fromFolder folderID: String, toPage page: Int, slot: Int) -> Bool {
         applyEdit { $0.remove(appID, fromFolder: folderID, toPage: page, slot: slot) }
+    }
+
+    // Drop app `appID` on app `targetAppID`: a new folder titled after the
+    // target app's category. Returns the folder's ID.
+    @discardableResult
+    func createFolder(dropping appID: String, onto targetAppID: String) -> String? {
+        guard let target = apps.first(where: { $0.bundleIdentifier == targetAppID }) else { return nil }
+        let title = AppCategory.folderTitle(forAppAt: target.appPath, fallback: Self.defaultFolderTitle)
+        return mergeApps(appID, onto: targetAppID, title: title)
+    }
+
+    // Where a finished drag left the item: page + slot on the grid, or the
+    // index in the folder it was reordered within. `createdFolderID` is set
+    // when the drop made a new folder (opened in rename mode by the view).
+    struct DropOutcome: Equatable {
+        var page: Int
+        var slot: Int
+        var createdFolderID: String?
+    }
+
+    // Persists a drag: reorder within its folder, merge into the target icon,
+    // take an app out of its folder, or move an item on the grid. Returns
+    // nil (and changes nothing) when the edit is not possible.
+    func commitDrop(_ session: DragSession) -> DropOutcome? {
+        if session.isInFolder, let folderID = session.sourceFolderID {
+            guard addApp(session.itemID, toFolder: folderID, at: session.targetSlot),
+                  let index = folderApps(folderID).firstIndex(where: { $0.id == session.itemID }) else { return nil }
+            return DropOutcome(page: 0, slot: index)
+        }
+        if let targetID = session.mergeTargetID {
+            guard case .app(let appID) = session.item else { return nil }
+            // Back onto its own folder: it stays where it was.
+            if targetID == session.sourceFolderID {
+                return gridLocation(of: targetID).map { DropOutcome(page: $0.page, slot: $0.slot) }
+            }
+            if folders.contains(where: { $0.id == targetID }) {
+                guard addApp(appID, toFolder: targetID) else { return nil }
+                return gridLocation(of: targetID).map { DropOutcome(page: $0.page, slot: $0.slot) }
+            }
+            guard let folderID = createFolder(dropping: appID, onto: targetID),
+                  let location = gridLocation(of: folderID) else { return nil }
+            return DropOutcome(page: location.page, slot: location.slot, createdFolderID: folderID)
+        }
+        if let folderID = session.sourceFolderID {
+            guard removeApp(session.itemID, fromFolder: folderID, toPage: session.page, slot: session.targetSlot) else { return nil }
+        } else {
+            guard moveItem(session.item, toPage: session.page, slot: session.targetSlot) else { return nil }
+        }
+        return gridLocation(of: session.itemID).map { DropOutcome(page: $0.page, slot: $0.slot) }
+    }
+
+    // Where a top-level item sits on the grid.
+    func gridLocation(of itemID: String) -> (page: Int, slot: Int)? {
+        for (page, items) in pages.enumerated() {
+            if let slot = items.firstIndex(where: { $0.id == itemID }) {
+                return (page, slot)
+            }
+        }
+        return nil
+    }
+
+    // Apps of folder `folderID`, in folder order.
+    func folderApps(_ folderID: String) -> [AppEntry] {
+        apps.filter { $0.folderID == folderID }
+            .sorted { ($0.folderOrderIndex ?? 0) < ($1.folderOrderIndex ?? 0) }
     }
 
     @discardableResult

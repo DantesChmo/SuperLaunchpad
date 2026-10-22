@@ -16,6 +16,11 @@ struct LaunchpadView: View {
     @State private var displayedFolder: FolderEntry?
     @State private var displayedFolderApps: [AppEntry] = []
     @State private var folderIsOpen = false
+    // A folder just made by a drop opens with its title in edit mode.
+    @State private var folderStartsRenaming = false
+    // Icon drags on the grid and in the folder popup. Lives here, not in the
+    // grid, so a drag out of a folder survives the popup closing.
+    @State private var drag = GridDragController()
 
     var body: some View {
         // `GeometryReader` measures the available space; we use it to compute
@@ -63,6 +68,7 @@ struct LaunchpadView: View {
                             viewModel: viewModel,
                             pages: viewModel.pages,
                             pager: pager,
+                            drag: drag,
                             metrics: metrics,
                             onLaunch: { app in
                                 viewModel.launchApp(app)
@@ -72,20 +78,7 @@ struct LaunchpadView: View {
                                 NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                             },
                             onOpenFolder: { folder in
-                                // Snapshot the folder + its apps into local
-                                // @State so the close animation has stable
-                                // data even after ViewModel changes.
-                                displayedFolder = folder
-                                displayedFolderApps = viewModel.apps
-                                    .filter { $0.folderID == folder.id }
-                                    .sorted { ($0.folderOrderIndex ?? 0) < ($1.folderOrderIndex ?? 0) }
-                                // `withAnimation` makes the opacity/scale
-                                // changes that depend on `folderIsOpen`
-                                // animate together.
-                                withAnimation(.spring(duration: 0.25, bounce: 0)) {
-                                    folderIsOpen = true
-                                }
-                                viewModel.openFolder(folder)
+                                openFolder(folder)
                             }
                         )
 
@@ -136,9 +129,10 @@ struct LaunchpadView: View {
                 if let folder = displayedFolder {
                     FolderDetailView(
                         folder: folder,
-                        apps: displayedFolderApps,
+                        apps: folderPreviewApps,
                         metrics: metrics,
                         onLaunch: { app in
+                            guard !drag.isTapSuppressed else { return }
                             viewModel.launchApp(app)
                             NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                         },
@@ -154,8 +148,13 @@ struct LaunchpadView: View {
                                   let renamed = viewModel.folders.first(where: { $0.id == folder.id }) else { return }
                             displayedFolder = renamed
                         },
+                        startsRenaming: folderStartsRenaming,
                         onRenamingChange: { renaming in
                             viewModel.isRenamingFolder = renaming
+                        },
+                        hiddenAppID: drag.session?.sourceFolderID == folder.id ? drag.session?.itemID : nil,
+                        onFramesChange: { frames in
+                            drag.folderFrames = frames
                         }
                     )
                     // A different folder gets fresh edit state.
@@ -165,6 +164,23 @@ struct LaunchpadView: View {
                     .scaleEffect(folderIsOpen ? 1 : 0.85)
                 }
             }
+            .modifier(LaunchpadDragGesture(
+                viewModel: viewModel,
+                pager: pager,
+                drag: drag,
+                metrics: metrics,
+                folderApps: folderIsOpen && displayedFolder?.id == viewModel.openFolderID ? displayedFolderApps : nil,
+                onLeaveFolder: {
+                    closeFolder()
+                },
+                onLayoutChange: {
+                    refreshFolderSnapshot()
+                },
+                onFolderCreated: { folderID in
+                    guard let folder = viewModel.folders.first(where: { $0.id == folderID }) else { return }
+                    openFolder(folder, renaming: true)
+                }
+            ))
             // Whole-launcher show/hide animation:
             //   • fade from 0 → 1
             //   • scale from 105% → 100% (slight zoom-in, like macOS).
@@ -214,6 +230,35 @@ struct LaunchpadView: View {
         }
     }
 
+    private func openFolder(_ folder: FolderEntry, renaming: Bool = false) {
+        // Snapshot the folder + its apps into local @State so the close
+        // animation has stable data even after ViewModel changes.
+        displayedFolder = folder
+        displayedFolderApps = viewModel.folderApps(folder.id)
+        folderStartsRenaming = renaming
+        // `withAnimation` makes the opacity/scale changes that depend on
+        // `folderIsOpen` animate together.
+        withAnimation(.spring(duration: 0.25, bounce: 0)) {
+            folderIsOpen = true
+        }
+        viewModel.openFolder(folder)
+    }
+
+    // The open folder's apps after an edit (a reorder inside it).
+    private func refreshFolderSnapshot() {
+        guard folderIsOpen, let id = displayedFolder?.id, id == viewModel.openFolderID else { return }
+        displayedFolderApps = viewModel.folderApps(id)
+    }
+
+    // The folder's apps as the popup shows them while an app is dragged
+    // inside it.
+    private var folderPreviewApps: [AppEntry] {
+        guard let session = drag.session, session.isInFolder, session.sourceFolderID == displayedFolder?.id else {
+            return displayedFolderApps
+        }
+        return session.preview(displayedFolderApps)
+    }
+
     private func closeFolder() {
         withAnimation(.spring(duration: 0.25, bounce: 0)) {
             folderIsOpen = false
@@ -235,7 +280,7 @@ private struct CurrentPageIndicator: View {
     let viewModel: LaunchpadViewModel
 
     var body: some View {
-        PageIndicatorView(totalPages: viewModel.pages.count, currentPage: viewModel.currentPage)
+        PageIndicatorView(totalPages: viewModel.displayedPageCount, currentPage: viewModel.currentPage)
     }
 }
 

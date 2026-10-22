@@ -14,6 +14,11 @@ enum FolderGrid {
     static let columns = 4
     static let rows = 3
     static let appsPerPage = columns * rows
+    // Icons in the folder popup are a touch smaller than on the main grid.
+    static let iconScale: CGFloat = 0.85
+    static let rowSpacing: CGFloat = 8
+    // Padding between the popup card's edge and its grid.
+    static let cardHorizontalPadding: CGFloat = 30
 }
 
 enum Rescan {
@@ -118,6 +123,25 @@ enum Drag {
     static let edgeDwell: Double = 0.5
     // …and then flips again this often while it stays there.
     static let edgeRepeat: Double = 0.8
+    // Merge zone: the middle of an icon, this share of its side. Dropping an
+    // app there makes a folder (or adds to one); elsewhere it inserts.
+    static let mergeZoneRatio: CGFloat = 0.5
+    // The lifted app must rest on a merge zone this long before the target
+    // is highlighted and the reflow pauses.
+    static let mergeDwell: Double = 0.4
+    // Highlighted merge target: scaled up, with a folder-style backplate
+    // around an app's icon.
+    static let mergeTargetScale: CGFloat = 1.15
+    static let mergeBackplateOutset: CGFloat = 0.12
+    static let mergeBackplateOpacity: Double = 0.25
+    // The lifted icon shrinks into the folder it is dropped on.
+    static let mergeDropScale: CGFloat = 0.4
+    // Share of the label room (two lines plus slack) one label line takes;
+    // used to place the icon inside its vertically centered hit box.
+    static let oneLineLabelShare: CGFloat = 0.4
+    // Named coordinate space of the launcher root, where the drag gesture
+    // and the lifted icon live.
+    static let coordinateSpace = "launchpad"
 }
 
 // Tuning for the main-grid pager. Positions and velocities are in "pages"

@@ -10,6 +10,8 @@ struct AppGridPageView: View {
     let onOpenFolder: (FolderEntry) -> Void
     // Item currently lifted by a drag, if it is on this page.
     var hiddenItemID: String? = nil
+    // Icon the lifted app would merge into on drop.
+    var mergeTargetID: String? = nil
 
     var body: some View {
         VStack {
@@ -25,7 +27,14 @@ struct AppGridPageView: View {
                 rowSpacing: metrics.rowSpacing
             ) {
                 ForEach(items) { item in
-                    GridCellView(item: item, metrics: metrics, isSelected: item.id == selectedID, onLaunch: onLaunch, onOpenFolder: onOpenFolder)
+                    GridCellView(
+                        item: item,
+                        metrics: metrics,
+                        isSelected: item.id == selectedID,
+                        isMergeTarget: item.id == mergeTargetID,
+                        onLaunch: onLaunch,
+                        onOpenFolder: onOpenFolder
+                    )
                         // The dragged item keeps its slot (so the reflow
                         // around it is right) but is drawn by the lifted copy.
                         .opacity(item.id == hiddenItemID ? 0 : 1)
@@ -45,6 +54,7 @@ struct GridCellView: View {
     let item: LaunchpadItem
     let metrics: LayoutMetrics
     var isSelected = false
+    var isMergeTarget = false
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
 
@@ -59,13 +69,14 @@ struct GridCellView: View {
             // compile-time exhaustiveness checking.
             switch item {
             case .app(let app):
-                AppIconView(app: app, metrics: metrics, isSelected: isSelected) {
+                AppIconView(app: app, metrics: metrics, isSelected: isSelected, isMergeTarget: isMergeTarget) {
                     onLaunch(app)
                 }
             case .folder(let folder, let apps):
                 FolderIconView(folder: folder, apps: apps, metrics: metrics) {
                     onOpenFolder(folder)
                 }
+                .scaleEffect(isMergeTarget ? Drag.mergeTargetScale : 1)
             }
             Spacer(minLength: 0)
         }
