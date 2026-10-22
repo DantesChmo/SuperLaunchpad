@@ -140,6 +140,10 @@ jobs:
           set -euo pipefail
           # Ad-hoc signing ("-") comes from the project; a fully unsigned bundle
           # is more often reported as "damaged" on Apple silicon.
+          # Hardened runtime is off: its library validation needs a Team ID,
+          # which ad-hoc code has none of, so dyld would refuse to load
+          # Sparkle.framework and the app would crash on launch. It is only
+          # required for notarization, which an ad-hoc build skips anyway.
           xcodebuild \
             -project SuperLaunchpad.xcodeproj \
             -scheme SuperLaunchpad \
@@ -149,6 +153,7 @@ jobs:
             MARKETING_VERSION="$VERSION" \
             CURRENT_PROJECT_VERSION="$VERSION" \
             SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY" \
+            ENABLE_HARDENED_RUNTIME=NO \
             build
 
       - name: Build (signed)
@@ -205,6 +210,11 @@ jobs:
           set -euo pipefail
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           codesign --display --verbose=2 "$APP_PATH" 2>&1 | grep -E '^Signature=adhoc$'
+          # Ad-hoc + hardened runtime crashes on launch (see the build step).
+          if codesign --display --verbose=2 "$APP_PATH" 2>&1 | grep -E '^CodeDirectory .*flags=.*runtime'; then
+            echo "::error::Ad-hoc signed app has the hardened runtime flag; it would fail to load Sparkle.framework" >&2
+            exit 1
+          fi
 
       - name: Create DMG
         env:
