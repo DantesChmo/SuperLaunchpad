@@ -122,6 +122,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // panel immediately so `app.windows.firstMatch` resolves.
         if UserDefaults.standard.bool(forKey: "UITestMode") {
             panel.showPanel()
+            // XCUI cannot type Latin letters reliably (with a non-Latin keyboard
+            // layout it sends them as ⌘+key), so search tests pass the query in.
+            if let query = UserDefaults.standard.string(forKey: "UITestSearchQuery") {
+                viewModel.searchText = query
+            }
         }
 
         // SwiftUI views can't reach `panel.hidePanel()` directly without coupling
