@@ -5,6 +5,7 @@ import XCTest
 // swift-testing tests live in SuperLaunchpadTests/.
 
 final class SuperLaunchpadUITests: XCTestCase {
+    private static let maxPagesToSearch = 5
     private var app: XCUIApplication!
 
     override func setUpWithError() throws {
@@ -60,17 +61,20 @@ final class SuperLaunchpadUITests: XCTestCase {
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 5))
 
-        // Folders only exist if the system Launchpad DB was imported (first
-        // launch) or apps were assigned to folders by hand. On a fresh CI
-        // box `/Applications` is mostly system apps with no folder data, so
-        // the launcher may have zero folders — skip rather than fail in
-        // that environment.
+        // UI tests run on a fresh DB, so the first-launch layout applies and
+        // always produces folders (at least Apple's Utilities). They may sit
+        // on a later page, and off-screen pages are still in the
+        // accessibility tree, so page right until one is hittable.
         let folders = app.buttons.matching(identifier: "folder-icon")
-        guard folders.firstMatch.waitForExistence(timeout: 3) else {
-            throw XCTSkip("No folders present — system DB had no folder import.")
-        }
+        XCTAssertTrue(folders.firstMatch.waitForExistence(timeout: 5), "No folders in the first-launch layout.")
 
-        folders.firstMatch.tap()
+        var folder = folders.allElementsBoundByIndex.first(where: \.isHittable)
+        for _ in 0..<Self.maxPagesToSearch where folder == nil {
+            app.typeKey(.rightArrow, modifierFlags: [])
+            folder = folders.allElementsBoundByIndex.first(where: \.isHittable)
+        }
+        let target = try XCTUnwrap(folder, "No folder became hittable after paging.")
+        target.tap()
 
         let detail = app.descendants(matching: .any)
             .matching(identifier: "folder-detail").firstMatch
@@ -83,5 +87,163 @@ final class SuperLaunchpadUITests: XCTestCase {
         attachment.name = "folder-detail-open"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor
+    func testRenamingFolderInline() throws {
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+
+        // Same environment caveat as `testTappingFolderOpensFolderDetail`.
+        let folders = app.buttons.matching(identifier: "folder-icon")
+        guard folders.firstMatch.waitForExistence(timeout: 3) else {
+            throw XCTSkip("No folders present — system DB had no folder import.")
+        }
+        let detail = app.descendants(matching: .any).matching(identifier: "folder-detail").firstMatch
+        let title = app.descendants(matching: .any).matching(identifier: "folder-title").firstMatch
+        let field = app.textFields.matching(identifier: "folder-title-field").firstMatch
+        // Right after launch a click can land while the grid is still being
+        // rebuilt by the first rescan and get lost, so retry it.
+        for _ in 0..<3 where !detail.exists {
+            folders.firstMatch.tap()
+            _ = detail.waitForExistence(timeout: 2)
+        }
+        XCTAssertTrue(detail.exists, "Folder detail did not open.")
+        XCTAssertTrue(title.waitForExistence(timeout: 2))
+        let originalTitle = title.label
+
+        // Typed text sticks to digits and single spaces: XCUI drops letters
+        // the active keyboard layout cannot produce (e.g. a Cyrillic one), and
+        // macOS turns a double space into ". ".
+
+        // Escape cancels the edit but keeps the folder open.
+        title.tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 2))
+        field.typeText("123")
+        XCTAssertEqual(field.value as? String, "123", "The title was not selected when editing began.")
+        field.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(title.waitForExistence(timeout: 2))
+        XCTAssertEqual(title.label, originalTitle)
+        XCTAssertTrue(detail.exists, "Escape while renaming closed the folder.")
+
+        // Enter commits. Edits only append and delete, so the test ends with
+        // the original name in the real launcher DB.
+        let suffix = " 2026"
+        title.tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 2))
+        field.typeKey(.rightArrow, modifierFlags: [])
+        field.typeText(suffix)
+        field.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(title.waitForExistence(timeout: 2))
+        XCTAssertEqual(title.label, originalTitle + suffix)
+        XCTAssertTrue(
+            app.buttons.matching(NSPredicate(format: "identifier == 'folder-icon' AND label == %@", originalTitle + suffix))
+                .firstMatch.exists,
+            "The folder tile on the grid kept the old title."
+        )
+
+        let attachment = XCTAttachment(screenshot: window.screenshot())
+        attachment.name = "folder-renamed"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        // A blank title reverts.
+        title.tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 2))
+        field.typeKey(.delete, modifierFlags: [])
+        field.typeText(" ")
+        field.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(title.waitForExistence(timeout: 2))
+        XCTAssertEqual(title.label, originalTitle + suffix)
+
+        // Trailing whitespace is trimmed; clicking the card commits.
+        title.tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 2))
+        field.typeKey(.rightArrow, modifierFlags: [])
+        for _ in 0..<suffix.count {
+            field.typeKey(.delete, modifierFlags: [])
+        }
+        field.typeText(" ")
+        // The card's padding corner, away from any app icon.
+        detail.coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0.03)).click()
+        XCTAssertTrue(title.waitForExistence(timeout: 2))
+        XCTAssertEqual(title.label, originalTitle)
+    }
+
+    @MainActor
+    func testSearchQueryAndReturnLaunchesTopResult() throws {
+        let calculator = XCUIApplication(bundleIdentifier: "com.apple.calculator")
+        addTeardownBlock { @MainActor in calculator.terminate() }
+        // The bundle file name matches even under a non-English display name.
+        let field = try relaunchWithQuery("Calculator")
+
+        let results = app.descendants(matching: .any).matching(identifier: "search-results").firstMatch
+        XCTAssertTrue(results.waitForExistence(timeout: 5), "Search results did not replace the grid.")
+        // Each cell exposes its icon and its label as "app-icon" elements.
+        let labels = results.buttons.matching(identifier: "app-icon").allElementsBoundByIndex.map(\.label)
+        XCTAssertEqual(Set(labels).count, 1, "Expected exactly one matching app, got \(Set(labels)).")
+        XCTAssertEqual(field.value as? String, "Calculator")
+
+        let attachment = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        attachment.name = "search-results"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        app.typeKey(.return, modifierFlags: [])
+        // Running, not necessarily frontmost yet: activation can lag on a busy machine.
+        let launched = expectation(
+            for: NSPredicate(format: "state >= %d", XCUIApplication.State.runningBackground.rawValue),
+            evaluatedWith: calculator
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [launched], timeout: 15), .completed, "Return did not launch the selected result.")
+        XCTAssertTrue(waitForNonExistence(of: results), "Launcher did not hide after launching.")
+    }
+
+    @MainActor
+    func testEscapeClearsQueryThenHidesLauncher() throws {
+        let field = try relaunchWithQuery("Calculator")
+        let results = app.descendants(matching: .any).matching(identifier: "search-results").firstMatch
+        XCTAssertTrue(results.waitForExistence(timeout: 5))
+
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: results), "First Escape did not clear the query.")
+        XCTAssertEqual(field.value as? String, "")
+        XCTAssertTrue(
+            app.buttons.matching(identifier: "app-icon").firstMatch.waitForExistence(timeout: 2),
+            "Grid did not come back."
+        )
+
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(
+            waitForNonExistence(of: app.buttons.matching(identifier: "app-icon").firstMatch),
+            "Second Escape did not hide the launcher."
+        )
+    }
+
+    // MARK: - Helpers
+
+    // The query is passed in rather than typed: with a non-Latin keyboard
+    // layout (e.g. Russian only) XCUI sends Latin letters as ⌘+key, which the
+    // field treats as shortcuts. Returns the search field once it has focus
+    // (the user types straight away) and the scan has filled the results.
+    private func relaunchWithQuery(_ query: String) throws -> XCUIElement {
+        app.terminate()
+        app.launchArguments = ["-UITestMode", "YES", "-UITestSearchQuery", query]
+        app.launch()
+
+        let field = app.textFields["search-field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertEqual(field.value(forKey: "hasKeyboardFocus") as? Bool, true)
+        // Results appear once the background scan has delivered the apps.
+        XCTAssertTrue(app.buttons.matching(identifier: "app-icon").firstMatch.waitForExistence(timeout: 15))
+        // XCUI does not activate the launcher on its own; the click does, so
+        // the keys below reach it.
+        field.click()
+        return field
+    }
+
+    private func waitForNonExistence(of element: XCUIElement) -> Bool {
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
+        return XCTWaiter.wait(for: [gone], timeout: 3) == .completed
     }
 }

@@ -5,7 +5,13 @@ import SwiftUI
 struct AppIconView: View {
     let app: AppEntry
     let metrics: LayoutMetrics
+    var isSelected = false
+    // A lifted app rests on this one: a drop makes a folder of the two, so
+    // the icon grows and gets a folder-style backplate.
+    var isMergeTarget = false
     let onTap: () -> Void
+
+    @Environment(\.isEditing) private var isEditing
 
     var body: some View {
         // `GridItemContainer` is a generic view that takes two `@ViewBuilder`
@@ -15,22 +21,41 @@ struct AppIconView: View {
         GridItemContainer(metrics: metrics, onTap: onTap) {
             iconImage
                 .frame(width: metrics.iconSize, height: metrics.iconSize)
+                .background {
+                    if isMergeTarget {
+                        RoundedRectangle(cornerRadius: metrics.iconSize * 0.2)
+                            .fill(.white.opacity(Drag.mergeBackplateOpacity))
+                            .padding(-metrics.iconSize * Drag.mergeBackplateOutset)
+                    }
+                }
+                .scaleEffect(isMergeTarget ? Drag.mergeTargetScale : 1)
         } label: {
             Text(app.displayName)
                 .font(.system(size: metrics.labelFont))
                 .foregroundStyle(.white)
+                .launcherLabelShadow()
                 // Two-line cap matches Finder's icon labels — longer names
                 // are truncated with an ellipsis.
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(width: metrics.labelWidth)
         }
+        .background {
+            RoundedRectangle(cornerRadius: Search.selectionCornerRadius)
+                .fill(.white.opacity(isSelected ? Search.selectionOpacity : 0))
+                .padding(-metrics.iconSize * Search.selectionOutsetRatio)
+        }
+        .launcherItemAccessibility(
+            label: app.displayName,
+            // Clicks don't launch in edit mode.
+            hint: isEditing ? String(localized: "Drag to move") : String(localized: "Opens the app"),
+            onActivate: onTap
+        )
         .accessibilityIdentifier("app-icon")
-        .accessibilityLabel(app.displayName)
         // `GridItemContainer` is a `VStack` + `onTapGesture`, not a `Button`,
         // so XCUI's `app.buttons` query wouldn't match it without this trait.
         // Adding `.isButton` also gives VoiceOver the correct semantic role.
-        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     // `@ViewBuilder` lets us return different concrete view types from the
@@ -39,7 +64,8 @@ struct AppIconView: View {
     // parameters even though both are `Image`.
     @ViewBuilder
     private var iconImage: some View {
-        if let data = app.iconData, let nsImage = NSImage(data: data) {
+        // Decoded once and cached — see `IconCache`.
+        if let nsImage = IconCache.shared.image(for: app) {
             // `.resizable()` lets the image scale to fit `.frame(...)`. By
             // default, `Image` shows at its intrinsic (native) size — which
             // for a 128×128 PNG would always render at 128 pt regardless of

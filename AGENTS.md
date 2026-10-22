@@ -179,7 +179,8 @@ Things a new developer cannot guess from the code:
 - **Sort display names with `localizedCaseInsensitiveCompare`**, not `<`. Otherwise unicode/locale ordering goes wrong (e.g. `é` vs `e`).
 - **`FolderEntry.id` is generated in code** (`UUID().uuidString`), not by SQLite. Newly created folders need this set before `save(db)`.
 - **System Launchpad DB at `~/.com.apple.dock.launchpad/db/db`** — read-only import on first launch via `Services/SystemLaunchpadDB.swift`. Hierarchy is `Root → Page → Folder(type=2) → FolderPage(type=3) → App`; folder titles in `groups` table. Never write to this DB.
-- **`NSHostingView` needs explicit `frame = screen.frame`** on resize when embedded in `NSPanel` — SwiftUI doesn't propagate sizing to the AppKit host automatically here.
+- **`NSHostingView` needs an explicit frame of the screen's size at origin `.zero`** on resize when embedded in `NSPanel` — SwiftUI doesn't propagate sizing to the AppKit host automatically here. Not `screen.frame` itself: a secondary display has a non-zero origin.
+- **Multi-monitor:** `LaunchpadPanel` opens on the screen under the cursor (`Helpers/ScreenSelection.swift`, pure and tested). On `didChangeScreenParametersNotification` a visible panel stays on its display (by display ID) with the new frame, or moves under the cursor if that display was unplugged.
 - **`searchText` exists on the ViewModel but is not wired.** Don't add filtering downstream of it without also building the search UI and decide on debounce/scope first.
 
 ## Forbidden patterns
@@ -201,7 +202,6 @@ These are intentionally unimplemented. Don't half-implement them as a side effec
 - **Search** — `searchText` property exists, not wired. Requires a full UI before backend filtering.
 - **Drag-and-drop reorder** — not feasible inside SwiftUI `ScrollView` on macOS as of Sequoia. Several attempts have been ruled out; consult before re-attempting.
 - **Folder creation / renaming** — folders are read-only, imported once from the system DB. Adding mutation requires schema rework on `FolderEntry`.
-- **Multi-monitor** — only `NSScreen.main` is supported. Adding multi-screen requires rethinking `LaunchpadPanel` ownership.
 
 ## Workflow
 

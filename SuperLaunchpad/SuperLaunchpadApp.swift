@@ -18,8 +18,9 @@ struct SuperLaunchpadApp: App {
             Button("Show / Hide") {
                 appDelegate.toggleLaunchpad()
             }
-            // `⌥⌘L` global menu shortcut while this app is frontmost.
-            .keyboardShortcut("l", modifiers: [.command, .option])
+            SettingsMenuButton {
+                appDelegate.prepareForSettings()
+            }
             Divider()
             Button("Quit") {
                 // `NSApp` is the shared `NSApplication` singleton.
@@ -29,20 +30,50 @@ struct SuperLaunchpadApp: App {
             }
             .keyboardShortcut("q")
         }
+
+        Settings {
+            SettingsView(hotKeyMonitor: appDelegate.hotKeyMonitor)
+        }
+    }
+}
+
+// `SettingsLink` can't run code before opening the window, and the launcher panel
+// (`.screenSaver` level) must be hidden first or it covers Settings.
+// `openSettings` gives the same result with a hook.
+private struct SettingsMenuButton: View {
+    @Environment(\.openSettings) private var openSettings
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button("Settings…") {
+            onOpen()
+            openSettings()
+        }
+        .keyboardShortcut(",")
     }
 }
 
 // `NSApplicationDelegate` requires `NSObject` (it's an Objective-C protocol).
 // `final` — we never subclass this; the compiler can devirtualise method calls.
+// `@MainActor` because it owns and drives the main-actor `LaunchpadViewModel`.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     // Implicitly-unwrapped optional (`!`) is used here because `panel` is created
     // in `applicationDidFinishLaunching`, not in `init`. By the time any UI code
     // touches it, it is guaranteed to be non-nil. This is the one place AGENTS.md
     // allows `!` outside `lazy`.
     private var panel: LaunchpadPanel!
-    private let viewModel = LaunchpadViewModel()
+    // UI tests get a fresh throwaway DB so every run exercises the first-launch
+    // layout instead of whatever the user's real DB already holds.
+    private let viewModel = UserDefaults.standard.bool(forKey: "UITestMode")
+        ? LaunchpadViewModel(database: try? AppDatabase(path: FileManager.default.temporaryDirectory
+            .appendingPathComponent("SuperLaunchpad-UITest-\(UUID().uuidString).sqlite").path))
+        : LaunchpadViewModel()
     private var watcher: AppDirectoryWatcher!
     private let gestureMonitor = GestureMonitor()
+    let hotKeyMonitor = HotKeyMonitor()
+    private let preferences = Preferences()
+    private var isGestureMonitorRunning = false
 
     // Called once the AppKit framework has finished bootstrapping the app.
     // This is the right place to create top-level windows and start long-running
@@ -58,7 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Without it the AppDelegate would never deallocate (not fatal here since it
         // lives for the whole app session, but it's the correct habit).
         watcher = AppDirectoryWatcher { [weak self] in
-            self?.viewModel.loadApps()
+            self?.viewModel.scheduleRescan()
         }
         watcher.start()
 
@@ -73,7 +104,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.viewModel.isVisible else { return }
             self.panel.hidePanel()
         }
-        gestureMonitor.start()
+        gestureMonitor.isLauncherVisible = { [weak self] in
+            self?.viewModel.isVisible ?? false
+        }
+        applyGesturePreference()
+        hotKeyMonitor.onPress = { [weak self] in
+            self?.toggleLaunchpad()
+        }
+        applyHotKeyPreference()
+        // Settings writes through @AppStorage; re-apply on any defaults change.
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.applyGesturePreference()
+                self?.applyHotKeyPreference()
+            }
+        }
 
         // UI tests launch with `-UITestMode YES`. The launcher panel is normally
         // hidden until the user pinches or clicks the menu-bar item, neither of
@@ -81,6 +130,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // panel immediately so `app.windows.firstMatch` resolves.
         if UserDefaults.standard.bool(forKey: "UITestMode") {
             panel.showPanel()
+            // XCUI cannot type Latin letters reliably (with a non-Latin keyboard
+            // layout it sends them as ⌘+key), so search tests pass the query in.
+            if let query = UserDefaults.standard.string(forKey: "UITestSearchQuery") {
+                viewModel.searchText = query
+            }
         }
 
         // SwiftUI views can't reach `panel.hidePanel()` directly without coupling
@@ -92,7 +146,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.panel.hidePanel()
+            // Delivered on `.main`, but the closure type is not main-actor isolated.
+            MainActor.assumeIsolated {
+                self?.panel.hidePanel()
+            }
         }
     }
 
@@ -109,6 +166,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel.hidePanel()
         } else {
             panel.showPanel()
+        }
+    }
+
+    func prepareForSettings() {
+        panel.hidePanel()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // `GestureMonitor.start()` is not idempotent (it would add duplicate monitors),
+    // so track whether it is running.
+    private func applyGesturePreference() {
+        let enabled = preferences.pinchGestureEnabled
+        guard enabled != isGestureMonitorRunning else { return }
+        if enabled {
+            gestureMonitor.start()
+        } else {
+            gestureMonitor.stop()
+        }
+        isGestureMonitorRunning = enabled
+    }
+
+    // Any defaults write lands here, so skip re-registering an unchanged combo.
+    private func applyHotKeyPreference() {
+        let combo = preferences.hotKey
+        guard combo != hotKeyMonitor.combo else { return }
+        if let combo {
+            hotKeyMonitor.register(combo)
+        } else {
+            hotKeyMonitor.unregister()
         }
     }
 }

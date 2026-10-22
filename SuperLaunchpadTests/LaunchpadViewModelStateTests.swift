@@ -196,4 +196,81 @@ struct LaunchpadViewModelStateTests {
         }
         #expect(topLevelAppIDs == ["top"])
     }
+
+    // MARK: - pages stays in sync with apps / folders
+
+    @Test func pagesUpdateAfterAppsChange() {
+        let vm = makeVM()
+        vm.apps = [app("a", page: 0, order: 0)]
+        #expect(vm.pages.map { $0.map(\.id) } == [["a"]])
+
+        vm.apps = [
+            app("b", page: 0, order: 1),
+            app("c", page: 1, order: 0),
+            app("a", page: 0, order: 0)
+        ]
+        #expect(vm.pages.map { $0.map(\.id) } == [["a", "b"], ["c"]])
+
+        vm.apps = []
+        #expect(vm.pages.isEmpty)
+    }
+
+    @Test func pagesUpdateAfterInPlaceAppMutation() {
+        let vm = makeVM()
+        vm.apps = [app("a", page: 0, order: 0), app("b", page: 0, order: 1)]
+        vm.apps[1].pageIndex = 1
+        vm.apps[1].orderIndex = 0
+        #expect(vm.pages.map { $0.map(\.id) } == [["a"], ["b"]])
+    }
+
+    @Test func pagesUpdateAfterFoldersChange() {
+        let vm = makeVM()
+        vm.apps = [
+            app("top", page: 0, order: 0),
+            app("inner", folderID: "fld", folderOrder: 0)
+        ]
+        // An app whose folder isn't loaded yet isn't shown anywhere.
+        #expect(vm.pages.map { $0.map(\.id) } == [["top"]])
+
+        vm.folders = [FolderEntry(id: "fld", title: "F", pageIndex: 1, orderIndex: 0)]
+        #expect(vm.pages.map { $0.map(\.id) } == [["top"], ["fld"]])
+        guard case .folder(_, let folderApps) = vm.pages[1][0] else {
+            Issue.record("Expected a folder on page 1")
+            return
+        }
+        #expect(folderApps.map(\.bundleIdentifier) == ["inner"])
+
+        vm.folders = []
+        #expect(vm.pages.map { $0.map(\.id) } == [["top"]])
+    }
+
+    @Test func pagesUpdateAfterAppsAndFoldersChangeTogether() {
+        let vm = makeVM()
+        vm.apps = [app("old", page: 0, order: 0)]
+        vm.folders = [FolderEntry(id: "old-fld", title: "Old", pageIndex: 0, orderIndex: 1)]
+        #expect(vm.pages.map { $0.map(\.id) } == [["old", "old-fld"]])
+
+        vm.apps = [
+            app("new", page: 0, order: 1),
+            app("inner", folderID: "new-fld", folderOrder: 0)
+        ]
+        vm.folders = [FolderEntry(id: "new-fld", title: "New", pageIndex: 0, orderIndex: 0)]
+        #expect(vm.pages.map { $0.map(\.id) } == [["new-fld", "new"]])
+        guard case .folder(let folder, let folderApps) = vm.pages[0][0] else {
+            Issue.record("Expected the new folder first")
+            return
+        }
+        #expect(folder.title == "New")
+        #expect(folderApps.map(\.bundleIdentifier) == ["inner"])
+    }
+
+    @Test func pagesUnchangedWhenReadRepeatedly() {
+        let vm = makeVM()
+        vm.apps = [app("a", page: 0, order: 0), app("b", page: 1, order: 0)]
+        let first = vm.pages.map { $0.map(\.id) }
+        // Unrelated state changes must not alter the stored pages.
+        vm.currentPage = 1
+        vm.openFolderID = "x"
+        #expect(vm.pages.map { $0.map(\.id) } == first)
+    }
 }

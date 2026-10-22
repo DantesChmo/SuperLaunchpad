@@ -22,12 +22,19 @@ struct FolderIconView: View {
             Text(folder.title)
                 .font(.system(size: metrics.labelFont))
                 .foregroundStyle(.white)
+                .launcherLabelShadow()
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(width: metrics.labelWidth)
         }
+        .launcherItemAccessibility(
+            label: folder.title,
+            hint: apps.count == 1
+                ? String(localized: "Folder with 1 app. Opens the folder")
+                : String(localized: "Folder with \(apps.count) apps. Opens the folder"),
+            onActivate: onTap
+        )
         .accessibilityIdentifier("folder-icon")
-        .accessibilityLabel(folder.title)
         .accessibilityAddTraits(.isButton)
     }
 
@@ -56,8 +63,7 @@ struct FolderIconView: View {
                                 // app without iconData, or empty filler so
                                 // shorter folders still produce a square grid.
                                 if index < previewApps.count,
-                                   let data = previewApps[index].iconData,
-                                   let nsImage = NSImage(data: data) {
+                                   let nsImage = IconCache.shared.image(for: previewApps[index]) {
                                     Image(nsImage: nsImage)
                                         .resizable()
                                         .interpolation(.high)

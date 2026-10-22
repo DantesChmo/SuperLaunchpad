@@ -2,10 +2,8 @@ import SwiftUI
 
 // Root SwiftUI view rendered inside the NSPanel.
 struct LaunchpadView: View {
-    // `@Bindable` (Swift 5.9+) creates two-way bindings into an `@Observable`
-    // model — e.g. `$viewModel.currentPage` produces a `Binding<Int>` for the
-    // pager. Use this instead of the older `@ObservedObject`.
-    @Bindable var viewModel: LaunchpadViewModel
+    let viewModel: LaunchpadViewModel
+    let pager: PagerController
 
     // Local view state that only this view needs. Keeping it as `@State`
     // (rather than on the ViewModel) is intentional: this is purely UI
@@ -18,6 +16,17 @@ struct LaunchpadView: View {
     @State private var displayedFolder: FolderEntry?
     @State private var displayedFolderApps: [AppEntry] = []
     @State private var folderIsOpen = false
+    // A folder just made by a drop opens with its title in edit mode.
+    @State private var folderStartsRenaming = false
+    // Icon drags on the grid and in the folder popup. Lives here, not in the
+    // grid, so a drag out of a folder survives the popup closing.
+    @State private var drag = GridDragController()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private var motion: Motion {
+        Motion(reduced: reduceMotion)
+    }
 
     var body: some View {
         // `GeometryReader` measures the available space; we use it to compute
@@ -35,129 +44,177 @@ struct LaunchpadView: View {
                 VisualEffectBackground()
                     .ignoresSafeArea()
 
-                Color.black.opacity(0.3)
+                Color.black
+                    .opacity(contrast == .increased ? LabelContrast.increasedDimOpacity : LabelContrast.dimOpacity)
                     .ignoresSafeArea()
+                    .accessibilityHidden(true)
 
                 VStack(spacing: 0) {
                     Spacer().frame(height: metrics.topPadding)
 
-                    SearchBarView()
+                    SearchBarView(viewModel: viewModel)
 
                     Spacer().frame(height: metrics.topPadding * 0.5)
 
-                    if viewModel.pages.isEmpty {
-                        Spacer()
-                        Text("No applications found")
-                            .foregroundStyle(.white.opacity(0.6))
-                        Spacer()
-                    } else {
-                        PagingGridView(
-                            pages: viewModel.pages,
-                            // `$viewModel.currentPage` produces a Binding<Int>
-                            // thanks to `@Bindable` — the pager can write back.
-                            currentPage: $viewModel.currentPage,
+                    if viewModel.isSearching {
+                        SearchResultsView(
+                            viewModel: viewModel,
                             metrics: metrics,
                             onLaunch: { app in
                                 viewModel.launchApp(app)
+                                NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
+                            }
+                        )
+                        .transition(.opacity)
+                    } else if viewModel.pages.isEmpty {
+                        Spacer()
+                        Text("No applications found")
+                            .foregroundStyle(.white.opacity(contrast == .increased ? LabelContrast.increasedSecondaryOpacity : LabelContrast.secondaryOpacity))
+                        Spacer()
+                    } else {
+                        PagingGridView(
+                            viewModel: viewModel,
+                            pages: viewModel.pages,
+                            pager: pager,
+                            drag: drag,
+                            metrics: metrics,
+                            onLaunch: { app in
+                                // Edit mode: a click doesn't launch.
+                                guard viewModel.launchApp(app) else { return }
                                 // Notification → AppDelegate → hidePanel. We
                                 // don't call panel directly because views
                                 // shouldn't know about AppKit windows.
                                 NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                             },
                             onOpenFolder: { folder in
-                                // Snapshot the folder + its apps into local
-                                // @State so the close animation has stable
-                                // data even after ViewModel changes.
-                                displayedFolder = folder
-                                displayedFolderApps = viewModel.apps
-                                    .filter { $0.folderID == folder.id }
-                                    .sorted { ($0.folderOrderIndex ?? 0) < ($1.folderOrderIndex ?? 0) }
-                                // `withAnimation` makes the opacity/scale
-                                // changes that depend on `folderIsOpen`
-                                // animate together.
-                                withAnimation(.spring(duration: 0.25, bounce: 0)) {
-                                    folderIsOpen = true
-                                }
-                                viewModel.openFolder(folder)
+                                openFolder(folder)
                             }
                         )
 
                         Spacer().frame(height: 12)
 
-                        PageIndicatorView(
-                            totalPages: viewModel.pages.count,
-                            currentPage: viewModel.currentPage
-                        )
+                        CurrentPageIndicator(viewModel: viewModel, pager: pager)
                     }
 
                     Spacer().frame(height: metrics.bottomPadding)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Short crossfade between the grid and search results; no
+                // paging animation.
+                .animation(.easeInOut(duration: Search.resultsTransition), value: viewModel.isSearching)
                 // `.contentShape(Rectangle())` makes the otherwise transparent
                 // VStack area tappable — without this, taps would only hit the
                 // actual icon rects, not the gaps between them.
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    // Click outside any icon → hide the launcher.
+                    // Click outside any icon → leave edit mode, or hide the
+                    // launcher.
+                    guard !viewModel.exitEditMode() else { return }
                     NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                 }
 
-                // Folder overlay layer. We keep the dim/blur/detail views in
-                // the tree at all times (with opacity 0 when closed) instead
-                // of using `if folderIsOpen` because SwiftUI can animate
-                // opacity/scale changes — but it can't animate view insertion
-                // smoothly.
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .ignoresSafeArea()
-                    .opacity(folderIsOpen ? 1 : 0)
-                    .allowsHitTesting(false)
+                // Folder overlay layer. The blur and dim are inserted only
+                // while a folder is open: a full-screen material is a backdrop
+                // blur that keeps sampling the screen every frame even at
+                // opacity 0, which costs frame time while the grid pages.
+                // `folderIsOpen` flips inside `withAnimation`, so the
+                // `.opacity` transitions fade them in and out with the same
+                // spring; the instant reset on hide flips it without
+                // animation, so they disappear at once.
+                if folderIsOpen {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                        .transition(.opacity)
 
-                // Dark backdrop behind the folder popup. Tap to dismiss.
-                // `allowsHitTesting(folderIsOpen)` makes it inert when closed,
-                // so taps fall through to the grid underneath.
-                Color.black.opacity(folderIsOpen ? 0.4 : 0)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(folderIsOpen)
-                    .onTapGesture {
-                        closeFolder()
-                    }
+                    // Dark backdrop behind the folder popup. Tap to dismiss.
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            closeFolder()
+                        }
+                        // VoiceOver closes the folder with the card's escape
+                        // action instead.
+                        .accessibilityHidden(true)
+                        .transition(.opacity)
+                }
 
                 if let folder = displayedFolder {
                     FolderDetailView(
                         folder: folder,
-                        apps: displayedFolderApps,
+                        apps: folderPreviewApps,
                         metrics: metrics,
                         onLaunch: { app in
-                            viewModel.launchApp(app)
+                            guard !drag.isTapSuppressed, viewModel.launchApp(app) else { return }
                             NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                         },
                         onClose: {
                             closeFolder()
+                        },
+                        onRename: { title in
+                            // The popup shows the snapshot, so refresh it
+                            // unless it is already gone (a commit on close);
+                            // the grid tile follows `viewModel.folders`.
+                            guard viewModel.renameFolder(folder.id, to: title),
+                                  displayedFolder?.id == folder.id,
+                                  let renamed = viewModel.folders.first(where: { $0.id == folder.id }) else { return }
+                            displayedFolder = renamed
+                        },
+                        startsRenaming: folderStartsRenaming,
+                        onRenamingChange: { renaming in
+                            viewModel.isRenamingFolder = renaming
+                        },
+                        hiddenAppID: drag.session?.sourceFolderID == folder.id ? drag.session?.itemID : nil,
+                        onFramesChange: { frames in
+                            drag.folderFrames = frames
                         }
                     )
-                    // Pop-out animation: fade in + scale up from 85%.
+                    // A different folder gets fresh edit state.
+                    .id(folder.id)
+                    // Pop-out animation: fade in + scale up from 85% (only
+                    // the fade with Reduce Motion).
                     .opacity(folderIsOpen ? 1 : 0)
-                    .scaleEffect(folderIsOpen ? 1 : 0.85)
+                    .scaleEffect(motion.folderScale(isOpen: folderIsOpen))
                 }
             }
+            // Below the drag modifier, so the lifted icon doesn't wiggle.
+            .environment(\.isEditing, viewModel.isEditing)
+            .environment(\.enterEditMode, EnterEditModeAction(viewModel: viewModel))
+            .modifier(LaunchpadDragGesture(
+                viewModel: viewModel,
+                pager: pager,
+                drag: drag,
+                metrics: metrics,
+                folderApps: folderIsOpen && displayedFolder?.id == viewModel.openFolderID ? displayedFolderApps : nil,
+                onLeaveFolder: {
+                    closeFolder()
+                },
+                onLayoutChange: {
+                    refreshFolderSnapshot()
+                },
+                onFolderCreated: { folderID in
+                    guard let folder = viewModel.folders.first(where: { $0.id == folderID }) else { return }
+                    openFolder(folder, renaming: true)
+                }
+            ))
             // Whole-launcher show/hide animation:
             //   • fade from 0 → 1
-            //   • scale from 105% → 100% (slight zoom-in, like macOS).
+            //   • scale from 105% → 100% (slight zoom-in, like macOS);
+            //     Reduce Motion keeps only the fade.
             .opacity(viewModel.isVisible ? 1 : 0)
-            .scaleEffect(viewModel.isVisible ? 1 : 1.05)
+            .scaleEffect(motion.launcherScale(isVisible: viewModel.isVisible))
             // Don't capture clicks while invisible — they would otherwise hit
             // the fully-transparent panel and block desktop clicks.
             .allowsHitTesting(viewModel.isVisible)
             // `.animation(_:value:)` re-runs the animation whenever `value`
             // changes. Two different durations for show vs hide give the
             // hide a snappier feel.
-            .animation(
-                viewModel.isVisible
-                    ? .spring(duration: AnimationDuration.show, bounce: 0)
-                    : .spring(duration: AnimationDuration.hide, bounce: 0),
-                value: viewModel.isVisible
-            )
+            .animation(motion.launcherAnimation(isVisible: viewModel.isVisible), value: viewModel.isVisible)
+            .onChange(of: viewModel.isEditing) { _, editing in
+                AccessibilityNotification.Announcement(editing ? "Editing" : "Done editing").post()
+            }
             // React to programmatic folder dismissals (e.g. Escape key handled
             // in `LaunchpadPanel.keyDown`). The animations below mirror what
             // `closeFolder()` does locally.
@@ -173,11 +230,11 @@ struct LaunchpadView: View {
                     } else {
                         // User pressed Escape while launcher is still visible —
                         // play the close animation, then clear the snapshot
-                        // after the animation completes (~0.3s).
-                        withAnimation(.spring(duration: 0.25, bounce: 0)) {
+                        // after the animation completes.
+                        withAnimation(motion.folderAnimation) {
                             folderIsOpen = false
                         }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + AnimationDuration.folderCleanupDelay) {
                             // Guard: if the user re-opened the folder during
                             // the delay, don't blow away the freshly set data.
                             guard !folderIsOpen else { return }
@@ -190,17 +247,59 @@ struct LaunchpadView: View {
         }
     }
 
+    private func openFolder(_ folder: FolderEntry, renaming: Bool = false) {
+        // Snapshot the folder + its apps into local @State so the close
+        // animation has stable data even after ViewModel changes.
+        displayedFolder = folder
+        displayedFolderApps = viewModel.folderApps(folder.id)
+        folderStartsRenaming = renaming
+        // `withAnimation` makes the opacity/scale changes that depend on
+        // `folderIsOpen` animate together.
+        withAnimation(motion.folderAnimation) {
+            folderIsOpen = true
+        }
+        viewModel.openFolder(folder)
+    }
+
+    // The open folder's apps after an edit (a reorder inside it).
+    private func refreshFolderSnapshot() {
+        guard folderIsOpen, let id = displayedFolder?.id, id == viewModel.openFolderID else { return }
+        displayedFolderApps = viewModel.folderApps(id)
+    }
+
+    // The folder's apps as the popup shows them while an app is dragged
+    // inside it.
+    private var folderPreviewApps: [AppEntry] {
+        guard let session = drag.session, session.isInFolder, session.sourceFolderID == displayedFolder?.id else {
+            return displayedFolderApps
+        }
+        return session.preview(displayedFolderApps)
+    }
+
     private func closeFolder() {
-        withAnimation(.spring(duration: 0.25, bounce: 0)) {
+        withAnimation(motion.folderAnimation) {
             folderIsOpen = false
         }
         viewModel.closeFolder()
         // Same delayed cleanup as in `onChange` — keep the snapshot alive
         // until the close animation has visibly finished.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + AnimationDuration.folderCleanupDelay) {
             guard !folderIsOpen else { return }
             displayedFolder = nil
             displayedFolderApps = []
+        }
+    }
+}
+
+// Reads `currentPage` in its own body so a page change re-renders only the
+// dots, not the whole launcher with its pages.
+private struct CurrentPageIndicator: View {
+    let viewModel: LaunchpadViewModel
+    let pager: PagerController
+
+    var body: some View {
+        PageIndicatorView(totalPages: viewModel.displayedPageCount, currentPage: viewModel.currentPage) { delta in
+            pager.step(by: delta)
         }
     }
 }
