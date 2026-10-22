@@ -95,26 +95,29 @@ struct LaunchpadView: View {
                     NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                 }
 
-                // Folder overlay layer. We keep the dim/blur/detail views in
-                // the tree at all times (with opacity 0 when closed) instead
-                // of using `if folderIsOpen` because SwiftUI can animate
-                // opacity/scale changes — but it can't animate view insertion
-                // smoothly.
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .ignoresSafeArea()
-                    .opacity(folderIsOpen ? 1 : 0)
-                    .allowsHitTesting(false)
+                // Folder overlay layer. The blur and dim are inserted only
+                // while a folder is open: a full-screen material is a backdrop
+                // blur that keeps sampling the screen every frame even at
+                // opacity 0, which costs frame time while the grid pages.
+                // `folderIsOpen` flips inside `withAnimation`, so the
+                // `.opacity` transitions fade them in and out with the same
+                // spring; the instant reset on hide flips it without
+                // animation, so they disappear at once.
+                if folderIsOpen {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
 
-                // Dark backdrop behind the folder popup. Tap to dismiss.
-                // `allowsHitTesting(folderIsOpen)` makes it inert when closed,
-                // so taps fall through to the grid underneath.
-                Color.black.opacity(folderIsOpen ? 0.4 : 0)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(folderIsOpen)
-                    .onTapGesture {
-                        closeFolder()
-                    }
+                    // Dark backdrop behind the folder popup. Tap to dismiss.
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            closeFolder()
+                        }
+                        .transition(.opacity)
+                }
 
                 if let folder = displayedFolder {
                     FolderDetailView(
