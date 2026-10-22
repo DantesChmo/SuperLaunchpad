@@ -21,6 +21,10 @@ enum AnimationDuration {
     static let hide: Double = 0.2
 }
 
+enum SettingsWindow {
+    static let width: CGFloat = 420
+}
+
 // Snapshot of layout numbers derived from the current screen size.
 // Built from a SwiftUI `GeometryReader` — recompute on resize rather than caching,
 // because external display changes or stage-manager resizes invalidate the values.

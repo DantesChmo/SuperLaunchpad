@@ -20,6 +20,9 @@ struct SuperLaunchpadApp: App {
             }
             // `⌥⌘L` global menu shortcut while this app is frontmost.
             .keyboardShortcut("l", modifiers: [.command, .option])
+            SettingsMenuButton {
+                appDelegate.prepareForSettings()
+            }
             Divider()
             Button("Quit") {
                 // `NSApp` is the shared `NSApplication` singleton.
@@ -29,6 +32,26 @@ struct SuperLaunchpadApp: App {
             }
             .keyboardShortcut("q")
         }
+
+        Settings {
+            SettingsView()
+        }
+    }
+}
+
+// `SettingsLink` can't run code before opening the window, and the launcher panel
+// (`.screenSaver` level) must be hidden first or it covers Settings.
+// `openSettings` gives the same result with a hook.
+private struct SettingsMenuButton: View {
+    @Environment(\.openSettings) private var openSettings
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button("Settings…") {
+            onOpen()
+            openSettings()
+        }
+        .keyboardShortcut(",")
     }
 }
 
@@ -43,6 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let viewModel = LaunchpadViewModel()
     private var watcher: AppDirectoryWatcher!
     private let gestureMonitor = GestureMonitor()
+    private let preferences = Preferences()
+    private var isGestureMonitorRunning = false
 
     // Called once the AppKit framework has finished bootstrapping the app.
     // This is the right place to create top-level windows and start long-running
@@ -73,7 +98,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.viewModel.isVisible else { return }
             self.panel.hidePanel()
         }
-        gestureMonitor.start()
+        applyGesturePreference()
+        // Settings writes through @AppStorage; re-apply on any defaults change.
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyGesturePreference()
+        }
 
         // UI tests launch with `-UITestMode YES`. The launcher panel is normally
         // hidden until the user pinches or clicks the menu-bar item, neither of
@@ -110,5 +143,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             panel.showPanel()
         }
+    }
+
+    func prepareForSettings() {
+        panel.hidePanel()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // `GestureMonitor.start()` is not idempotent (it would add duplicate monitors),
+    // so track whether it is running.
+    private func applyGesturePreference() {
+        let enabled = preferences.pinchGestureEnabled
+        guard enabled != isGestureMonitorRunning else { return }
+        if enabled {
+            gestureMonitor.start()
+        } else {
+            gestureMonitor.stop()
+        }
+        isGestureMonitorRunning = enabled
     }
 }
