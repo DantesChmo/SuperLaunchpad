@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Without it the AppDelegate would never deallocate (not fatal here since it
         // lives for the whole app session, but it's the correct habit).
         watcher = AppDirectoryWatcher { [weak self] in
-            self?.viewModel.loadApps()
+            self?.viewModel.scheduleRescan()
         }
         watcher.start()
 

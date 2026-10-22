@@ -126,11 +126,9 @@ final class LaunchpadViewModel {
     //      frame so the launcher doesn't appear empty during the rescan.
     //   2. Asynchronously rescan `/Applications`, sync to disk, and update UI.
     //
-    // Called on first launch and whenever `AppDirectoryWatcher` fires.
+    // Called on first launch; `AppDirectoryWatcher` goes through
+    // `scheduleRescan()` instead.
     func loadApps() {
-        // Captured once: the detached rescan below must not read main-actor state.
-        let database = database
-
         // Phase 1: cache repaint. `try?` + non-empty guard means we only
         // overwrite UI state if the read actually returned something.
         updateContents {
@@ -147,6 +145,35 @@ final class LaunchpadViewModel {
         Task { await IconCache.shared.prewarm(cachedApps) }
 
         // Phase 2: background rescan.
+        requestRescan()
+    }
+
+    // MARK: - Rescan
+
+    // At most one rescan runs at a time; see `RescanGate`.
+    @ObservationIgnored private var rescanGate = RescanGate()
+    @ObservationIgnored private var pendingRescan: Task<Void, Never>?
+
+    // Directory events arrive in bursts (an install touches the folder several
+    // times). Each call restarts the wait, so a burst ends in a single rescan.
+    func scheduleRescan() {
+        pendingRescan?.cancel()
+        pendingRescan = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Rescan.debounceInterval))
+            guard !Task.isCancelled else { return }
+            self?.requestRescan()
+        }
+    }
+
+    private func requestRescan() {
+        guard rescanGate.request() else { return }
+        startRescan()
+    }
+
+    private func startRescan() {
+        // Captured once: the detached task must not read main-actor state.
+        let database = database
+
         // `Task.detached` runs outside the structured concurrency tree of the
         // caller — important here because `loadApps` is `@MainActor` and we
         // explicitly want file-system work OFF the main thread.
@@ -213,9 +240,14 @@ final class LaunchpadViewModel {
                 }
                 // Only icons that changed in the rescan are decoded again.
                 Task { await IconCache.shared.prewarm(sortedApps) }
+                if self.rescanGate.finish() {
+                    self.startRescan()
+                }
             }
         }
     }
+
+    // MARK: - Ordering
 
     // First-launch ordering. Take the freshly enumerated apps and assign
     // positions based on the system Launchpad layout. Falls back to

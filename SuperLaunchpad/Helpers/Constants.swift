@@ -16,6 +16,11 @@ enum FolderGrid {
     static let appsPerPage = columns * rows
 }
 
+enum Rescan {
+    // Directory events closer together than this collapse into one rescan.
+    static let debounceInterval: Double = 0.5
+}
+
 enum AnimationDuration {
     static let show: Double = 0.25
     static let hide: Double = 0.2
