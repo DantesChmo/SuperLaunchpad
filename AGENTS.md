@@ -207,7 +207,8 @@ These are intentionally unimplemented. Don't half-implement them as a side effec
 
 - **Commits:** short, lowercase, imperative. Match the style in `git log` (`init`, etc.). Keep PR titles ≤ 70 chars; put detail in the body.
 - **Branches:** feature branches off `main`; PRs target `main`.
-- **CI:** `.github/workflows/release.yml` builds an unsigned `.dmg` on tag `v*` and publishes a GitHub Release. Runs on `macos-15`. To trigger: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+- **CI:** `.github/workflows/release.yml` builds a `.dmg` on tag `v*` and publishes a GitHub Release. Runs on `macos-15`. To trigger: `git tag vX.Y.Z && git push origin vX.Y.Z`. Optional parts switch on by secrets: Developer ID signing + notarization, and a Sparkle `appcast.xml` (variable `SPARKLE_PUBLIC_ED_KEY` + secret `SPARKLE_ED_PRIVATE_KEY`); `.github/workflows/homebrew.yml` then bumps the cask in `DantesChmo/homebrew-tap`. Setup: `docs/RELEASING.md`.
+- **Changelog:** add user-facing changes to `CHANGELOG.md` under `[Unreleased]`.
 - **Versioning:** version comes from the git tag via `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` xcodebuild flags. Don't bump version in `project.pbxproj` manually.
 
 ## Context economy — delegate to Explore
