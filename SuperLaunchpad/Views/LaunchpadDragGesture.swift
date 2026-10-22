@@ -68,7 +68,7 @@ struct LaunchpadDragGesture: ViewModifier {
                 state = true
             }
             .onChanged { value in
-                guard !viewModel.isSearching else { return }
+                guard !viewModel.isSearching, viewModel.pendingRemoval == nil else { return }
                 let lifted = drag.update(
                     start: value.startLocation,
                     pointer: value.location,

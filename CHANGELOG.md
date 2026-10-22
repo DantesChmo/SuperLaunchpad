@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Move apps to the Trash from the launcher: in edit mode every app that
+  isn't part of macOS gets a × badge; after a confirmation the app goes to
+  the Trash and leaves the grid. Apps that need an administrator password
+  (App Store and installer packages) are moved by Finder, which asks for it;
+  the first time, macOS asks to let SuperLaunchpad control Finder. An app
+  that is open has to be quit first.
+
 ## [1.0.2] - 2026-10-22
 
 ### Fixed

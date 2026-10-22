@@ -190,7 +190,8 @@ final class LaunchpadPanel: NSPanel {
             if event.type == .keyDown {
                 return self.handleKeyDown(event) ? nil : event
             }
-            guard self.viewModel.openFolderID == nil, !self.viewModel.isSearching else { return event }
+            guard self.viewModel.openFolderID == nil, !self.viewModel.isSearching,
+                  self.viewModel.pendingRemoval == nil else { return event }
             self.pager.handleScroll(event)
             return nil
         }
@@ -205,6 +206,22 @@ final class LaunchpadPanel: NSPanel {
         if let editor = firstResponder as? NSTextView, editor.hasMarkedText() { return false }
         // The folder title field handles its own Escape (cancel the edit) and arrows.
         guard !viewModel.isRenamingFolder else { return false }
+        // The Trash dialog takes Escape and Return; other keys must not page
+        // or start a search behind it.
+        if viewModel.pendingRemoval != nil {
+            guard !event.modifierFlags.contains(.command) else { return false }
+            switch Int(event.keyCode) {
+            case kVK_Escape:
+                viewModel.cancelRemoval()
+            case kVK_Return, kVK_ANSI_KeypadEnter:
+                Task { [weak self] in
+                    await self?.viewModel.confirmRemoval { self?.hidePanel() }
+                }
+            default:
+                break
+            }
+            return true
+        }
         guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return false }
 
         let searching = viewModel.isSearching

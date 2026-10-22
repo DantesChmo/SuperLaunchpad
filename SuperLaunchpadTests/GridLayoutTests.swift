@@ -271,6 +271,41 @@ struct GridLayoutTests {
         #expect(layout == before)
     }
 
+    // MARK: - Delete
+
+    @Test func deleteClosesGapAndPullsNextPageForward() {
+        var layout = layout([["a", "b"], ["c"]], capacity: 2)
+        let deleted = layout.delete("a")
+        #expect(deleted)
+        #expect(names(layout) == [["b"], ["c"]])
+    }
+
+    @Test func deleteDropsPageLeftEmpty() {
+        var layout = layout([["a"], ["b"]])
+        let deleted = layout.delete("b")
+        #expect(deleted)
+        #expect(names(layout) == [["a"]])
+    }
+
+    @Test func deleteFromFolderKeepsEmptyFolderForDissolve() {
+        var layout = layout([["#F", "a"]], folders: ["F": ["x"]])
+        let deleted = layout.delete("x")
+        #expect(deleted)
+        #expect(layout.folders["F"]?.appIDs == [])
+        layout.dissolveEmptyFolders()
+        #expect(names(layout) == [["a"]])
+    }
+
+    @Test func deleteRejectsUnknownAppAndFolders() {
+        var layout = layout([["#F", "a"]], folders: ["F": ["x"]])
+        let before = layout
+        let deletedMissing = layout.delete("missing")
+        let deletedFolder = layout.delete("F")
+        #expect(!deletedMissing)
+        #expect(!deletedFolder)
+        #expect(layout == before)
+    }
+
     // MARK: - Dissolve / rename
 
     @Test func dissolveEmptyFoldersClosesGapsAndDropsEmptyPages() {
