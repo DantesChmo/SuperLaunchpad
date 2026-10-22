@@ -228,8 +228,19 @@ struct FolderDetailView: View {
         }
     }
 
+    // Escape does not end editing the way Return does: removing the field
+    // while it is still focused leaves its field editor as first responder,
+    // and the next click only clears that (a second click was needed to
+    // rename again). So the draft is reverted and focus dropped, and the
+    // field closes through the usual focus-loss commit, which is a no-op for
+    // an unchanged title.
     private func cancelRename() {
-        isRenaming = false
+        draftTitle = folder.title
+        guard titleFieldFocused else {
+            isRenaming = false
+            return
+        }
+        titleFieldFocused = false
     }
 
     private var folderGridHeight: CGFloat {
