@@ -8,8 +8,14 @@ struct FolderDetailView: View {
     let metrics: LayoutMetrics
     let onLaunch: (AppEntry) -> Void
     let onClose: () -> Void
+    let onRename: (String) -> Void
+    // A freshly created folder opens with its title already in edit mode.
+    var startsRenaming = false
 
     @State private var currentPage: Int = 0
+    @State private var isRenaming = false
+    @State private var draftTitle = ""
+    @FocusState private var titleFieldFocused: Bool
 
     // Splits the flat `apps` array into pages of `FolderGrid.appsPerPage`
     // (12). `stride(from:to:by:)` walks indices in steps; for each step we
@@ -41,9 +47,7 @@ struct FolderDetailView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Text(folder.title)
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(.white)
+            title
 
             if folderPages.isEmpty {
                 Text("Empty Folder")
@@ -96,11 +100,81 @@ struct FolderDetailView: View {
         )
         // Same swallow-the-tap trick: tapping anywhere inside the popup card
         // must NOT close the folder. Only taps on the surrounding dim layer
-        // (in LaunchpadView) should close it.
+        // (in LaunchpadView) should close it. Clicking a non-focusable area
+        // does not take focus from the title field, so end the edit here.
         .onTapGesture {
+            commitRename()
         }
+        // `.contain` keeps the card one container element; otherwise the
+        // identifier below would be stamped onto every child, title included.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("folder-detail")
         .accessibilityLabel(folder.title)
+        .onAppear {
+            if startsRenaming {
+                beginRename()
+            }
+        }
+        // The folder also closes while editing (backdrop click, launcher
+        // hidden): the edit still counts.
+        .onDisappear {
+            commitRename()
+        }
+    }
+
+    @ViewBuilder
+    private var title: some View {
+        if isRenaming {
+            TextField("", text: $draftTitle)
+                .textFieldStyle(.plain)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .frame(width: containerWidth - 60)
+                .focused($titleFieldFocused)
+                .onSubmit {
+                    commitRename()
+                }
+                // Escape cancels only the edit: the field editor consumes it,
+                // so it never reaches `LaunchpadPanel.keyDown`, which would
+                // close the folder.
+                .onExitCommand {
+                    cancelRename()
+                }
+                .onChange(of: titleFieldFocused) { _, focused in
+                    if !focused {
+                        commitRename()
+                    }
+                }
+                .accessibilityIdentifier("folder-title-field")
+        } else {
+            Text(folder.title)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+                .onTapGesture {
+                    beginRename()
+                }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("folder-title")
+        }
+    }
+
+    private func beginRename() {
+        draftTitle = folder.title
+        isRenaming = true
+        titleFieldFocused = true
+    }
+
+    private func commitRename() {
+        guard isRenaming else { return }
+        isRenaming = false
+        if let title = FolderRename.committedTitle(draft: draftTitle, current: folder.title) {
+            onRename(title)
+        }
+    }
+
+    private func cancelRename() {
+        isRenaming = false
     }
 
     private var folderGridHeight: CGFloat {
@@ -126,6 +200,16 @@ struct FolderDetailView: View {
             }
             Spacer(minLength: 0)
         }
+    }
+}
+
+// What committing an inline title edit renames the folder to: nil when the
+// draft is blank or unchanged, so the title simply reverts.
+enum FolderRename {
+    static func committedTitle(draft: String, current: String) -> String? {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != current else { return nil }
+        return trimmed
     }
 }
 

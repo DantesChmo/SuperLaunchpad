@@ -131,8 +131,19 @@ struct LaunchpadView: View {
                         },
                         onClose: {
                             closeFolder()
+                        },
+                        onRename: { title in
+                            // The popup shows the snapshot, so refresh it
+                            // unless it is already gone (a commit on close);
+                            // the grid tile follows `viewModel.folders`.
+                            guard viewModel.renameFolder(folder.id, to: title),
+                                  displayedFolder?.id == folder.id,
+                                  let renamed = viewModel.folders.first(where: { $0.id == folder.id }) else { return }
+                            displayedFolder = renamed
                         }
                     )
+                    // A different folder gets fresh edit state.
+                    .id(folder.id)
                     // Pop-out animation: fade in + scale up from 85%.
                     .opacity(folderIsOpen ? 1 : 0)
                     .scaleEffect(folderIsOpen ? 1 : 0.85)
