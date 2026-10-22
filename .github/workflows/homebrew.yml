@@ -1,0 +1,153 @@
+name: Homebrew
+
+# Updates Casks/superlaunchpad.rb in DantesChmo/homebrew-tap after a release.
+#
+# release.yml publishes the GitHub release with GITHUB_TOKEN, and events
+# created by GITHUB_TOKEN never start other workflows, so `release: published`
+# alone would not fire for our own releases. `workflow_run` on "Release" does
+# fire (that run was started by the tag push), so it is the main trigger.
+# `release: published` still covers releases created by hand or with a PAT.
+# If both fire for one version, the second run finds no diff and commits nothing.
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Released version to publish to the tap (e.g. 1.0.0)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homebrew-tap
+  cancel-in-progress: false
+
+env:
+  TAP_REPO: DantesChmo/homebrew-tap
+  CASK_PATH: Casks/superlaunchpad.rb
+
+jobs:
+  update-cask:
+    # workflow_run: only successful Release runs started by a v* tag push
+    # (a manual Release run builds a DMG but publishes no release).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' && !github.event.release.prerelease) ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check tap token
+        id: token
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning title=Homebrew tap not updated::HOMEBREW_TAP_TOKEN secret is not set; skipping cask update."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve version
+        if: steps.token.outputs.present == 'true'
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          case "$EVENT" in
+            workflow_dispatch) VERSION="${INPUT_VERSION#v}" ;;
+            release)           VERSION="${RELEASE_TAG#v}" ;;
+            workflow_run)      VERSION="${RUN_TAG#v}" ;;
+          esac
+          if ! [[ "$VERSION" =~ ^[0-9A-Za-z.+-]+$ ]]; then
+            echo "Invalid version: '$VERSION'" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing version $VERSION"
+
+      - name: Check release
+        if: steps.token.outputs.present == 'true'
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          read -r DRAFT PRERELEASE < <(gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease --jq '"\(.isDraft) \(.isPrerelease)"')
+          if [ "$DRAFT" = "true" ] || [ "$PRERELEASE" = "true" ]; then
+            echo "::notice::v$VERSION is a draft or prerelease; not publishing to the tap."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.release.outputs.publish == 'true'
+        uses: actions/checkout@v4
+        with:
+          path: source
+          sparse-checkout: packaging/homebrew
+
+      - name: Download DMG and render cask
+        if: steps.release.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DMG="SuperLaunchpad-$VERSION.dmg"
+          mkdir -p dl
+          gh release download "v$VERSION" -R "$GITHUB_REPOSITORY" -p "$DMG" -D dl
+          SHA256=$(sha256sum "dl/$DMG" | cut -d ' ' -f 1)
+          echo "sha256 of $DMG: $SHA256"
+          sed -E \
+            -e "s/^  version \".*\"$/  version \"$VERSION\"/" \
+            -e "s/^  sha256 \".*\"$/  sha256 \"$SHA256\"/" \
+            source/packaging/homebrew/superlaunchpad.rb > superlaunchpad.rb
+          grep -qx "  version \"$VERSION\"" superlaunchpad.rb
+          grep -qx "  sha256 \"$SHA256\"" superlaunchpad.rb
+          cat superlaunchpad.rb
+
+      - name: Checkout tap
+        if: steps.release.outputs.publish == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TAP_REPO }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Commit and push cask
+        if: steps.release.outputs.publish == 'true'
+        working-directory: tap
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$CASK_PATH")"
+          cp ../superlaunchpad.rb "$CASK_PATH"
+          git add "$CASK_PATH"
+          if git diff --cached --quiet; then
+            echo "Cask already at $VERSION; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "superlaunchpad $VERSION"
+          git push origin HEAD
