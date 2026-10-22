@@ -18,17 +18,19 @@ final class LaunchpadPanel: NSPanel {
     // cancel it: otherwise a quick hide→show lets the stale `orderOut` remove
     // the window while `viewModel.isVisible` is already true again.
     private var pendingOrderOut: DispatchWorkItem?
+    // Display the panel was last placed on, so a display change can keep it
+    // there (resolution change) or tell that it was unplugged.
+    private var displayID: UInt32?
 
     init(viewModel: LaunchpadViewModel) {
         self.viewModel = viewModel
         pager = PagerController(viewModel: viewModel)
 
-        // Multi-monitor is intentionally out of scope (see AGENTS.md > known
-        // limitations); fall back to first screen if `.main` is nil during
-        // sleep/wake transitions.
-        let screen = NSScreen.main ?? NSScreen.screens[0]
+        // Placeholder frame: `showPanel` picks the screen under the cursor.
+        // `screens` can be empty during sleep/wake transitions.
+        let frame = (NSScreen.main ?? NSScreen.screens.first)?.frame ?? .zero
         super.init(
-            contentRect: screen.frame,
+            contentRect: frame,
             // `.borderless` removes the title bar; `.fullSizeContentView`
             // extends the content under the (invisible) title bar area.
             styleMask: [.borderless, .fullSizeContentView],
@@ -70,18 +72,25 @@ final class LaunchpadPanel: NSPanel {
         let hostingView = NSHostingView(rootView: LaunchpadView(viewModel: viewModel, pager: pager))
         // Explicit frame is required — `NSHostingView` does NOT auto-resize to
         // its parent panel in this configuration. AGENTS.md flags this.
-        hostingView.frame = screen.frame
+        hostingView.frame = NSRect(origin: .zero, size: frame.size)
         contentView = hostingView
+
+        pager.screen = { [weak self] in self?.screen }
+        // Selector-based: the observation goes away with the panel.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screenParametersDidChange),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
     }
 
     func showPanel() {
         pendingOrderOut?.cancel()
         pendingOrderOut = nil
-        // Re-resolve the screen at show-time so display unplug/replug or a
-        // resolution change picks up the latest frame.
-        let screen = NSScreen.main ?? NSScreen.screens[0]
-        setFrame(screen.frame, display: true)
-        (contentView as? NSHostingView<LaunchpadView>)?.frame = screen.frame
+        // Open on the screen under the cursor, like the system Launchpad.
+        // Resolved on every show, so plugged / unplugged displays need no bookkeeping.
+        placeOnScreen { mouse, displays in ScreenSelection.index(at: mouse, in: displays) }
         // Normally already done on hide; repeated here (before `show()`, while
         // still transparent) so the grid never slides back to page 0 on screen.
         pager.reset()
@@ -118,6 +127,31 @@ final class LaunchpadPanel: NSPanel {
             deadline: .now() + AnimationDuration.hide + AnimationDuration.orderOutSlack,
             execute: workItem
         )
+    }
+
+    // MARK: - Screens
+
+    // Display plugged in or out, resolution or arrangement changed. A hidden
+    // panel is re-placed by `showPanel`; a visible one stays on its display with
+    // the new frame, or moves under the cursor if its display is gone.
+    @objc private func screenParametersDidChange(_ notification: Notification) {
+        guard viewModel.isVisible else { return }
+        placeOnScreen { [displayID] mouse, displays in
+            ScreenSelection.indexAfterChange(currentID: displayID, point: mouse, in: displays)
+        }
+        pager.screenDidChange()
+    }
+
+    private func placeOnScreen(_ pick: (CGPoint, [ScreenSelection.Display]) -> Int?) {
+        let screens = NSScreen.screens
+        let displays = screens.map { ScreenSelection.Display(id: $0.displayID, frame: $0.frame) }
+        guard let index = pick(NSEvent.mouseLocation, displays) else { return }
+        let screen = screens[index]
+        displayID = displays[index].id
+        setFrame(screen.frame, display: true)
+        // Window coordinates, not `screen.frame`: on a secondary display the
+        // screen origin is non-zero and would push the grid off the panel.
+        contentView?.frame = NSRect(origin: .zero, size: screen.frame.size)
     }
 
     // `NSPanel` defaults to NOT becoming key/main (panels are usually auxiliary).
@@ -199,5 +233,12 @@ final class LaunchpadPanel: NSPanel {
             NSEvent.removeMonitor(eventMonitor)
         }
         eventMonitor = nil
+    }
+}
+
+private extension NSScreen {
+    // Stable while the display is connected, unlike the index in `screens`.
+    var displayID: UInt32 {
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
     }
 }

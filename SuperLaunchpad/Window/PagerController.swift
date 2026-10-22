@@ -16,6 +16,8 @@ final class PagerController {
 
     // Set by `PagingGridView` from its measured width.
     @ObservationIgnored var pageWidth: CGFloat = 0
+    // Screen whose refresh rate drives the settle spring. Set by `LaunchpadPanel`.
+    @ObservationIgnored var screen: () -> NSScreen? = { NSScreen.main }
 
     private let viewModel: LaunchpadViewModel
     @ObservationIgnored private var model = PagerModel(pageCount: 0)
@@ -55,6 +57,14 @@ final class PagerController {
         gesture = .idle
         publish()
         commit(0)
+    }
+
+    // The panel moved to another display or its display changed: a running
+    // display link may belong to a display that is gone, so start a new one.
+    func screenDidChange() {
+        guard displayLink != nil else { return }
+        stopDisplayLink()
+        startDisplayLink()
     }
 
     func syncPageCount() {
@@ -169,7 +179,7 @@ final class PagerController {
 
     private func startDisplayLink() {
         guard displayLink == nil else { return }
-        guard let screen = NSScreen.main else {
+        guard let screen = self.screen() else {
             model.settleImmediately()
             publish()
             return
