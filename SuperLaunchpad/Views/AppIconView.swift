@@ -5,6 +5,10 @@ import SwiftUI
 struct AppIconView: View {
     let app: AppEntry
     let metrics: LayoutMetrics
+    var isSelected = false
+    // A lifted app rests on this one: a drop makes a folder of the two, so
+    // the icon grows and gets a folder-style backplate.
+    var isMergeTarget = false
     let onTap: () -> Void
 
     var body: some View {
@@ -15,6 +19,14 @@ struct AppIconView: View {
         GridItemContainer(metrics: metrics, onTap: onTap) {
             iconImage
                 .frame(width: metrics.iconSize, height: metrics.iconSize)
+                .background {
+                    if isMergeTarget {
+                        RoundedRectangle(cornerRadius: metrics.iconSize * 0.2)
+                            .fill(.white.opacity(Drag.mergeBackplateOpacity))
+                            .padding(-metrics.iconSize * Drag.mergeBackplateOutset)
+                    }
+                }
+                .scaleEffect(isMergeTarget ? Drag.mergeTargetScale : 1)
         } label: {
             Text(app.displayName)
                 .font(.system(size: metrics.labelFont))
@@ -25,12 +37,17 @@ struct AppIconView: View {
                 .multilineTextAlignment(.center)
                 .frame(width: metrics.labelWidth)
         }
+        .background {
+            RoundedRectangle(cornerRadius: Search.selectionCornerRadius)
+                .fill(.white.opacity(isSelected ? Search.selectionOpacity : 0))
+                .padding(-metrics.iconSize * Search.selectionOutsetRatio)
+        }
         .accessibilityIdentifier("app-icon")
         .accessibilityLabel(app.displayName)
         // `GridItemContainer` is a `VStack` + `onTapGesture`, not a `Button`,
         // so XCUI's `app.buttons` query wouldn't match it without this trait.
         // Adding `.isButton` also gives VoiceOver the correct semantic role.
-        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     // `@ViewBuilder` lets us return different concrete view types from the

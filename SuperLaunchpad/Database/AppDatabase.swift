@@ -37,6 +37,12 @@ final class AppDatabase {
     // existing DBs won't re-run them. To change schema, add a new "vN+1" block.
     // See Database/CLAUDE.md.
     private func migrate() throws {
+        try Self.migrator.migrate(dbQueue)
+    }
+
+    // Exposed so tests can stop at an older version (`migrate(_:upTo:)`) and
+    // check what a later migration does to existing rows.
+    static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1") { db in
             try db.create(table: "appEntry") { t in
@@ -72,7 +78,20 @@ final class AppDatabase {
                 t.add(column: "folderOrderIndex", .integer)
             }
         }
-        try migrator.migrate(dbQueue)
+        migrator.registerMigration("v4") { db in
+            try db.create(table: "appSetting") { t in
+                t.primaryKey("key", .text)
+                t.column("value", .text).notNull()
+            }
+            // A DB that already has apps in folders has done its system import.
+            // Without folder apps the flag stays unset, so the recovery import in
+            // `mergeNewApps` still runs once for DBs that never imported folders.
+            let hasFolderApps = try AppEntry.filter(AppEntry.Columns.folderID != nil).fetchCount(db) > 0
+            if hasFolderApps {
+                try AppSetting(key: AppSetting.Key.folderImportDone.rawValue, value: "1").insert(db)
+            }
+        }
+        return migrator
     }
 
     // `dbQueue.write { db in ... }` wraps the closure in a single transaction.
@@ -148,6 +167,49 @@ final class AppDatabase {
     func deleteStaleFolders(validIDs: Set<String>) throws {
         try dbQueue.write { db in
             try FolderEntry.filter(!validIDs.contains(FolderEntry.Columns.id)).deleteAll(db)
+        }
+    }
+
+    // MARK: - Layout edits
+
+    // Persists a whole layout after an edit, in one transaction: upserts every
+    // folder and app passed in and deletes folders that are not in `folders`.
+    // Rewriting everything (not just the rows the edit touched) also repairs a
+    // layout that a concurrent rescan overwrote with rows read before the edit.
+    func saveLayout(apps: [AppEntry], folders: [FolderEntry]) throws {
+        try dbQueue.write { db in
+            // Folders first: apps reference them through the folderID FK.
+            for folder in folders {
+                try folder.save(db)
+            }
+            for app in apps {
+                try app.save(db)
+            }
+            let folderIDs = Set(folders.map(\.id))
+            try FolderEntry.filter(!folderIDs.contains(FolderEntry.Columns.id)).deleteAll(db)
+            try AppSetting(key: AppSetting.Key.folderImportDone.rawValue, value: "1").save(db)
+        }
+    }
+
+    func renameFolder(id: String, title: String) throws {
+        try dbQueue.write { db in
+            _ = try FolderEntry
+                .filter(FolderEntry.Columns.id == id)
+                .updateAll(db, FolderEntry.Columns.title.set(to: title))
+        }
+    }
+
+    // MARK: - Settings
+
+    func setting(_ key: AppSetting.Key) throws -> String? {
+        try dbQueue.read { db in
+            try AppSetting.fetchOne(db, key: key.rawValue)?.value
+        }
+    }
+
+    func setSetting(_ key: AppSetting.Key, _ value: String) throws {
+        try dbQueue.write { db in
+            try AppSetting(key: key.rawValue, value: value).save(db)
         }
     }
 }

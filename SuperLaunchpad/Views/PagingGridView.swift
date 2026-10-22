@@ -40,9 +40,17 @@ private extension Comparable {
 // Main-grid pager: all pages side by side in an HStack, shifted by
 // `-position * width`. Input and the settle spring live in `PagerController`;
 // there is no ScrollView, so nothing else competes for the offset.
+//
+// Drag-to-reorder: a click-drag on an icon lifts it. The gesture and the
+// lifted icon live on the launcher root (`LaunchpadDragGesture`), so a drag
+// out of a folder can continue here; this view draws the live preview of
+// `drag.session` and reports where it is. The pager only listens to scroll
+// events, so a mouse drag never pages and a trackpad swipe never reorders.
 struct PagingGridView: View {
+    let viewModel: LaunchpadViewModel
     let pages: [[LaunchpadItem]]
     let pager: PagerController
+    let drag: GridDragController
     let metrics: LayoutMetrics
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
@@ -52,23 +60,51 @@ struct PagingGridView: View {
             HStack(spacing: 0) {
                 // Index identity is fine: pages are reshuffled holistically
                 // rather than reordered.
-                ForEach(Array(pages.enumerated()), id: \.offset) { _, page in
-                    AppGridPageView(items: page, metrics: metrics, onLaunch: onLaunch, onOpenFolder: onOpenFolder)
-                        .contentShape(Rectangle())
-                        .frame(width: geo.size.width)
+                ForEach(Array(shownPages.enumerated()), id: \.offset) { index, page in
+                    AppGridPageView(
+                        items: previewItems(page, index: index),
+                        metrics: metrics,
+                        onLaunch: { app in
+                            guard !drag.isTapSuppressed else { return }
+                            onLaunch(app)
+                        },
+                        onOpenFolder: { folder in
+                            guard !drag.isTapSuppressed else { return }
+                            onOpenFolder(folder)
+                        },
+                        hiddenItemID: drag.session?.hidesItem(onPage: index) == true ? drag.session?.itemID : nil,
+                        mergeTargetID: drag.session?.page == index ? drag.session?.mergeTargetID : nil
+                    )
+                    .contentShape(Rectangle())
+                    .frame(width: geo.size.width)
                 }
             }
             .frame(width: geo.size.width, alignment: .leading)
             .modifier(PagerOffset(pager: pager, pageWidth: geo.size.width))
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
         } action: { width in
             pager.pageWidth = width
         }
-        .onChange(of: pages.count) {
+        .onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: .named(Drag.coordinateSpace))
+        } action: { frame in
+            drag.gridFrame = frame
+        }
+        .onChange(of: viewModel.displayedPageCount) {
             pager.syncPageCount()
         }
+    }
+
+    private var shownPages: [[LaunchpadItem]] {
+        viewModel.hasTrailingDragPage ? pages + [[]] : pages
+    }
+
+    private func previewItems(_ items: [LaunchpadItem], index: Int) -> [LaunchpadItem] {
+        guard let session = drag.session, let lifted = drag.liftedItem else { return items }
+        return session.preview(items, page: index, moved: lifted, capacity: Grid.appsPerPage)
     }
 }
 

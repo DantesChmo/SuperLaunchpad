@@ -59,7 +59,7 @@ final class PagerController {
 
     func syncPageCount() {
         let previous = model.page
-        model.setPageCount(viewModel.pages.count)
+        model.setPageCount(viewModel.displayedPageCount)
         guard model.page != previous else { return }
         commit(model.page)
         startSettling()
