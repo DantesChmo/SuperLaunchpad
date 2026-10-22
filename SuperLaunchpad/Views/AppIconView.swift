@@ -39,7 +39,8 @@ struct AppIconView: View {
     // parameters even though both are `Image`.
     @ViewBuilder
     private var iconImage: some View {
-        if let data = app.iconData, let nsImage = NSImage(data: data) {
+        // Decoded once and cached — see `IconCache`.
+        if let nsImage = IconCache.shared.image(for: app) {
             // `.resizable()` lets the image scale to fit `.frame(...)`. By
             // default, `Image` shows at its intrinsic (native) size — which
             // for a 128×128 PNG would always render at 128 pt regardless of

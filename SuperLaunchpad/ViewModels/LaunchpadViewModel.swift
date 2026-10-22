@@ -137,6 +137,10 @@ final class LaunchpadViewModel {
                 folders = cachedFolders
             }
         }
+        // Decode the cached icons off the main thread before the first swipe
+        // reaches them; `IconCache` would otherwise decode each one on first draw.
+        let cachedApps = apps
+        Task { await IconCache.shared.prewarm(cachedApps) }
 
         // Phase 2: background rescan.
         // `Task.detached` runs outside the structured concurrency tree of the
@@ -199,6 +203,8 @@ final class LaunchpadViewModel {
                     self.apps = sortedApps
                     self.folders = sortedFolders
                 }
+                // Only icons that changed in the rescan are decoded again.
+                Task { await IconCache.shared.prewarm(sortedApps) }
             }
         }
     }
