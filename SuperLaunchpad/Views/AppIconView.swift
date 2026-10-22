@@ -29,6 +29,7 @@ struct AppIconView: View {
                     }
                 }
                 .scaleEffect(isMergeTarget ? Drag.mergeTargetScale : 1)
+                .removeAppBadge(app, iconSize: metrics.iconSize)
         } label: {
             Text(app.displayName)
                 .font(.system(size: metrics.labelFont))
@@ -51,6 +52,7 @@ struct AppIconView: View {
             hint: isEditing ? String(localized: "Drag to move") : String(localized: "Opens the app"),
             onActivate: onTap
         )
+        .removeAppAccessibilityAction(app)
         .accessibilityIdentifier("app-icon")
         // `GridItemContainer` is a `VStack` + `onTapGesture`, not a `Button`,
         // so XCUI's `app.buttons` query wouldn't match it without this trait.

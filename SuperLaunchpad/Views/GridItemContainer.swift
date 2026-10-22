@@ -56,6 +56,21 @@ extension EnvironmentValues {
     // Edit mode: icons wiggle (see `WiggleEffect`).
     @Entry var isEditing = false
     @Entry var enterEditMode = EnterEditModeAction(viewModel: nil)
+    @Entry var removeApp = RemoveAppAction(viewModel: nil)
+}
+
+// What the × on an app in edit mode does. Compared by view model identity,
+// like `EnterEditModeAction`.
+struct RemoveAppAction: Equatable {
+    let viewModel: LaunchpadViewModel?
+
+    @MainActor func callAsFunction(_ app: AppEntry) {
+        viewModel?.requestRemoval(of: app)
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.viewModel === rhs.viewModel
+    }
 }
 
 // What a long press on an icon does. Compared by view model identity, so a
@@ -89,6 +104,16 @@ extension View {
         )
     }
 
+    // The × on an app icon in edit mode. Apps that are part of macOS have none.
+    func removeAppBadge(_ app: AppEntry, iconSize: CGFloat) -> some View {
+        modifier(RemoveAppBadge(app: app, iconSize: iconSize))
+    }
+
+    // The VoiceOver counterpart of the ×, on the icon's accessibility element.
+    func removeAppAccessibilityAction(_ app: AppEntry) -> some View {
+        modifier(RemoveAppAccessibilityAction(app: app))
+    }
+
     // Long press to enter edit mode, plus the wiggle while in it. Shared by
     // grid icons and the open folder's icons.
     func editModeGestures(_ enterEditMode: EnterEditModeAction) -> some View {
@@ -120,6 +145,60 @@ private struct LauncherItemAccessibility: ViewModifier {
             .accessibilityAction(named: Text("Edit Layout")) {
                 enterEditMode()
             }
+    }
+}
+
+private struct RemoveAppBadge: ViewModifier {
+    let app: AppEntry
+    let iconSize: CGFloat
+
+    @Environment(\.isEditing) private var isEditing
+    @Environment(\.removeApp) private var removeApp
+
+    func body(content: Content) -> some View {
+        // Checked only in edit mode: it resolves the path on disk.
+        let removable = isEditing && AppTrash.isRemovable(appPath: app.appPath)
+        content
+            .overlay(alignment: .topLeading) {
+                if removable {
+                    badge
+                }
+            }
+    }
+
+    private var badge: some View {
+        let size = iconSize * Uninstall.badgeSizeRatio
+        return Button {
+            removeApp(app)
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: size * Uninstall.badgeGlyphRatio, weight: .bold))
+                .foregroundStyle(.black)
+                .frame(width: size, height: size)
+                .background(Circle().fill(.white.opacity(Uninstall.badgeOpacity)))
+                .launcherLabelShadow()
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .offset(x: -size * Uninstall.badgeOutset, y: -size * Uninstall.badgeOutset)
+        .accessibilityIdentifier("remove-app-badge")
+    }
+}
+
+private struct RemoveAppAccessibilityAction: ViewModifier {
+    let app: AppEntry
+
+    @Environment(\.isEditing) private var isEditing
+    @Environment(\.removeApp) private var removeApp
+
+    func body(content: Content) -> some View {
+        content.accessibilityActions {
+            if isEditing, AppTrash.isRemovable(appPath: app.appPath) {
+                Button("Move to Trash") {
+                    removeApp(app)
+                }
+            }
+        }
     }
 }
 

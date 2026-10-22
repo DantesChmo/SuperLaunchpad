@@ -24,6 +24,7 @@ Built as a replacement for the system Launchpad removed in macOS 26 Tahoe.
 - **Folders by drag and drop**: hold an app over another app to make a folder named after its category, drop apps onto folders, drag them out of an open folder
 - **Folder rename**: click the title of an open folder
 - **Jiggle mode** for editing the layout: long-press an icon, start a drag, or hold `⌥`; `Esc`, `Return` or a click on the background ends it
+- **Delete apps**: in jiggle mode click the × on an app to move it to the Trash (apps that are part of macOS have none). Apps that need an administrator password go through Finder, which asks for it; the first time, macOS asks to let SuperLaunchpad control Finder
 - **First-run layout**: imports icons and folders from the system Launchpad database when it exists; on macOS 26 Tahoe, where it doesn't, builds a categorized layout (Apple apps first, Utilities in an "Other" folder, third-party apps in category folders)
 - **Multi-monitor**: opens on the display under the cursor
 - **Accessibility**: honours Reduce Motion (cross-fades instead of zooms, no jiggle) and Increase Contrast; VoiceOver labels and an "Edit Layout" action
@@ -77,6 +78,7 @@ macOS 26 has its own trackpad pinch (four or five fingers, on by default) that o
 | Open a folder | Click the folder icon |
 | Rename a folder | Click the title of an open folder |
 | Edit layout | Long-press an icon or hold `⌥`; drag icons to move them or onto each other to make a folder |
+| Delete an app | In edit mode, click the × on its icon, then **Move to Trash** (`Return`) or **Cancel** (`Esc`) |
 | Leave edit mode | `Esc` / `Return` / click the background |
 | Settings | Menu bar → Settings… (`⌘,`) |
 

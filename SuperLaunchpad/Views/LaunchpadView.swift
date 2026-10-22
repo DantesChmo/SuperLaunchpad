@@ -186,10 +186,29 @@ struct LaunchpadView: View {
                     .opacity(folderIsOpen ? 1 : 0)
                     .scaleEffect(motion.folderScale(isOpen: folderIsOpen))
                 }
+
+                if let removal = viewModel.pendingRemoval {
+                    AppRemovalDialog(
+                        removal: removal,
+                        onConfirm: {
+                            Task {
+                                await viewModel.confirmRemoval {
+                                    NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
+                                }
+                            }
+                        },
+                        onCancel: {
+                            viewModel.cancelRemoval()
+                        }
+                    )
+                    .transition(.opacity)
+                }
             }
+            .animation(.easeInOut(duration: Uninstall.dialogAnimation), value: viewModel.pendingRemoval != nil)
             // Below the drag modifier, so the lifted icon doesn't wiggle.
             .environment(\.isEditing, viewModel.isEditing)
             .environment(\.enterEditMode, EnterEditModeAction(viewModel: viewModel))
+            .environment(\.removeApp, RemoveAppAction(viewModel: viewModel))
             .modifier(LaunchpadDragGesture(
                 viewModel: viewModel,
                 pager: pager,
@@ -220,6 +239,11 @@ struct LaunchpadView: View {
             // changes. Two different durations for show vs hide give the
             // hide a snappier feel.
             .animation(motion.launcherAnimation(isVisible: viewModel.isVisible), value: viewModel.isVisible)
+            // An app moved to the Trash (or uninstalled elsewhere) leaves the
+            // open folder.
+            .onChange(of: viewModel.apps.count) {
+                refreshFolderSnapshot()
+            }
             .onChange(of: viewModel.isEditing) { _, editing in
                 AccessibilityNotification.Announcement(editing ? "Editing" : "Done editing").post()
             }

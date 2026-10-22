@@ -143,6 +143,12 @@ final class AppDatabase {
         }
     }
 
+    func deleteApp(bundleIdentifier: String) throws {
+        try dbQueue.write { db in
+            _ = try AppEntry.deleteOne(db, key: bundleIdentifier)
+        }
+    }
+
     // MARK: - Folders
 
     func fetchAllFolders() throws -> [FolderEntry] {

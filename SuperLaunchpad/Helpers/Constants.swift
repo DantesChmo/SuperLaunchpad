@@ -194,6 +194,26 @@ enum Edit {
     static let reducedMotionAnimation: Double = 0.15
 }
 
+// Moving apps to the Trash from edit mode.
+enum Uninstall {
+    // The × badge on an icon's top-left corner, as a share of the icon size…
+    static let badgeSizeRatio: CGFloat = 0.32
+    // …its glyph, as a share of the badge…
+    static let badgeGlyphRatio: CGFloat = 0.45
+    // …and how far it sticks out past the corner, as a share of the badge.
+    static let badgeOutset: CGFloat = 0.25
+    static let badgeOpacity: Double = 0.9
+    static let dialogWidth: CGFloat = 300
+    static let dialogPadding: CGFloat = 20
+    static let dialogSpacing: CGFloat = 12
+    static let dialogCornerRadius: CGFloat = 14
+    static let dialogIconSize: CGFloat = 64
+    static let dialogDimOpacity: Double = 0.3
+    static let dialogAnimation: Double = 0.15
+    // Seconds Finder may wait for the administrator password.
+    static let finderTimeout = 600
+}
+
 // Tuning for the main-grid pager. Positions and velocities are in "pages"
 // (1.0 = one screen width), so the numbers are independent of display size.
 enum Paging {

@@ -158,6 +158,15 @@ struct GridLayout: Equatable {
         return move(.app(appID), toPage: page, slot: slot)
     }
 
+    // Drops `appID` from the layout (the app was uninstalled), closing its
+    // gap. A folder it leaves empty stays — see `dissolveEmptyFolders()`.
+    @discardableResult
+    mutating func delete(_ appID: String) -> Bool {
+        guard take(.app(appID)) != nil else { return false }
+        normalize()
+        return true
+    }
+
     // Removes every folder without apps, closing its gap on the page.
     mutating func dissolveEmptyFolders() {
         let emptyIDs = Set(folders.filter { $0.value.appIDs.isEmpty }.keys)

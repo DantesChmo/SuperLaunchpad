@@ -303,6 +303,7 @@ private struct FolderAppIconView: View {
             VStack(spacing: 6) {
                 iconImage
                     .frame(width: iconSize, height: iconSize)
+                    .removeAppBadge(app, iconSize: iconSize)
 
                 Text(app.displayName)
                     .font(.system(size: labelFont))
@@ -327,6 +328,7 @@ private struct FolderAppIconView: View {
             hint: isEditing ? String(localized: "Drag to move") : String(localized: "Opens the app"),
             onActivate: onTap
         )
+        .removeAppAccessibilityAction(app)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("folder-app-icon")
     }

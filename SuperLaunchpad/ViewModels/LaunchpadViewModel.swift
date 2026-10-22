@@ -519,6 +519,7 @@ final class LaunchpadViewModel {
         // in a clean state.
         openFolderID = nil
         searchText = ""
+        pendingRemoval = nil
         exitEditMode()
         isVisible = false
     }
@@ -768,9 +769,82 @@ final class LaunchpadViewModel {
         if isEditing != editing { isEditing = editing }
     }
 
+    // MARK: - Uninstall
+    //
+    // The × on an app in edit mode asks for confirmation, then moves the app
+    // to the Trash and drops it from the layout.
+
+    struct PendingRemoval: Equatable {
+        enum Stage: Equatable {
+            case confirm
+            // A running app is not moved; the user quits it first.
+            case appIsOpen
+            case failed(AppTrash.Failure)
+        }
+
+        let app: AppEntry
+        var stage: Stage
+    }
+
+    // The dialog on screen, if any.
+    private(set) var pendingRemoval: PendingRemoval?
+    @ObservationIgnored var trash = AppTrash.Operations.live
+
+    // Apps that are part of macOS have no ×.
+    func requestRemoval(of app: AppEntry) {
+        guard isEditing, AppTrash.isRemovable(appPath: app.appPath) else { return }
+        let stage: PendingRemoval.Stage = trash.isRunning(app.bundleIdentifier) ? .appIsOpen : .confirm
+        pendingRemoval = PendingRemoval(app: app, stage: stage)
+    }
+
+    func cancelRemoval() {
+        pendingRemoval = nil
+    }
+
+    // The dialog's default button: moves the app to the Trash when asked to,
+    // otherwise just closes the dialog. Finder's password prompt would open
+    // behind the launcher, so the launcher hides before Finder is asked; a
+    // failure there shows its dialog when the launcher opens next.
+    func confirmRemoval(hideLauncher: () -> Void) async {
+        guard let removal = pendingRemoval, removal.stage == .confirm else {
+            pendingRemoval = nil
+            return
+        }
+        pendingRemoval = nil
+        let app = removal.app
+        do {
+            if trash.needsAuthorization(app.appPath) {
+                hideLauncher()
+                try? await Task.sleep(for: .seconds(AnimationDuration.hide + AnimationDuration.orderOutSlack))
+                try trash.moveToTrashWithFinder(app.appPath)
+            } else {
+                try trash.moveToTrash(app.appPath)
+            }
+        } catch AppTrash.Failure.cancelled {
+            return
+        } catch {
+            let failure = error as? AppTrash.Failure ?? .other(error.localizedDescription)
+            pendingRemoval = PendingRemoval(app: app, stage: .failed(failure))
+            return
+        }
+        dropUninstalledApp(app.bundleIdentifier)
+    }
+
+    // Takes an app that is gone from disk out of the layout right away,
+    // without waiting for the directory watcher's rescan (which doesn't see
+    // subfolders like /Applications/Utilities).
+    @discardableResult
+    func dropUninstalledApp(_ appID: String) -> Bool {
+        guard applyEdit({ $0.delete(appID) }) else { return false }
+        apps.removeAll { $0.bundleIdentifier == appID }
+        try? database?.deleteApp(bundleIdentifier: appID)
+        return true
+    }
+
     // MARK: - Search
 
     enum EscapeAction: Equatable {
+        case cancelledRemoval
         case cancelledDrag
         case exitedEditMode
         case clearedSearch
@@ -778,9 +852,14 @@ final class LaunchpadViewModel {
         case hideLauncher
     }
 
-    // Escape acts on the innermost context: a dragged icon, edit mode, the query, then an
-    // open folder, then the launcher itself (which the caller hides).
+    // Escape acts on the innermost context: the Trash dialog, a dragged icon,
+    // edit mode, the query, then an open folder, then the launcher itself
+    // (which the caller hides).
     func handleEscape() -> EscapeAction {
+        if pendingRemoval != nil {
+            cancelRemoval()
+            return .cancelledRemoval
+        }
         if cancelDrag() {
             return .cancelledDrag
         }
