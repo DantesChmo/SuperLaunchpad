@@ -22,12 +22,17 @@ struct FolderIconView: View {
             Text(folder.title)
                 .font(.system(size: metrics.labelFont))
                 .foregroundStyle(.white)
+                .launcherLabelShadow()
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(width: metrics.labelWidth)
         }
+        .launcherItemAccessibility(
+            label: folder.title,
+            hint: apps.count == 1 ? "Folder with 1 app. Opens the folder" : "Folder with \(apps.count) apps. Opens the folder",
+            onActivate: onTap
+        )
         .accessibilityIdentifier("folder-icon")
-        .accessibilityLabel(folder.title)
         .accessibilityAddTraits(.isButton)
     }
 

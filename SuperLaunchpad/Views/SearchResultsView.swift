@@ -9,13 +9,15 @@ struct SearchResultsView: View {
     let metrics: LayoutMetrics
     let onLaunch: (AppEntry) -> Void
 
+    @Environment(\.colorSchemeContrast) private var contrast
+
     var body: some View {
         Group {
             if viewModel.searchResults.isEmpty {
                 VStack {
                     Spacer()
                     Text("No Results")
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(.white.opacity(contrast == .increased ? LabelContrast.increasedSecondaryOpacity : LabelContrast.secondaryOpacity))
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)

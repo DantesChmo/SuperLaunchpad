@@ -9,21 +9,33 @@ import SwiftUI
 struct SearchBarView: View {
     @Bindable var viewModel: LaunchpadViewModel
     @FocusState private var isFocused: Bool
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private var secondaryOpacity: Double {
+        contrast == .increased ? LabelContrast.increasedSecondaryOpacity : LabelContrast.secondaryOpacity
+    }
+
+    private var placeholderOpacity: Double {
+        contrast == .increased ? LabelContrast.increasedSecondaryOpacity : LabelContrast.placeholderOpacity
+    }
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.white.opacity(secondaryOpacity))
                 .font(.system(size: Search.fieldFontSize))
+                .accessibilityHidden(true)
             TextField(
                 "Search",
                 text: $viewModel.searchText,
-                prompt: Text("Search").foregroundStyle(.white.opacity(0.4))
+                prompt: Text("Search").foregroundStyle(.white.opacity(placeholderOpacity))
             )
             .textFieldStyle(.plain)
             .font(.system(size: Search.fieldFontSize))
             .foregroundStyle(.white)
             .focused($isFocused)
+            .accessibilityLabel("Search apps")
+            .accessibilityHint("Type to filter apps; arrow keys choose a result, Return opens it")
             .accessibilityIdentifier("search-field")
         }
         .padding(.horizontal, 12)

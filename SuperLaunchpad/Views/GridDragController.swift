@@ -474,9 +474,7 @@ final class GridDragController {
     }
 
     static var animation: Animation? {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            ? nil
-            : .spring(duration: Drag.springDuration, bounce: 0)
+        Motion.current.dragAnimation
     }
 }
 

@@ -72,11 +72,50 @@ struct EnterEditModeAction: Equatable {
 }
 
 extension View {
+    // One VoiceOver element per icon (see `LauncherItemAccessibility`).
+    func launcherItemAccessibility(label: String, hint: String, onActivate: @escaping () -> Void) -> some View {
+        modifier(LauncherItemAccessibility(label: label, hint: hint, onActivate: onActivate))
+    }
+
+    // Icon labels sit straight on the blurred desktop: a soft shadow keeps
+    // them readable over a bright wallpaper, as in the system Launchpad.
+    func launcherLabelShadow() -> some View {
+        shadow(
+            color: .black.opacity(LabelContrast.shadowOpacity),
+            radius: LabelContrast.shadowRadius,
+            y: LabelContrast.shadowOffset
+        )
+    }
+
     // Long press to enter edit mode, plus the wiggle while in it. Shared by
     // grid icons and the open folder's icons.
     func editModeGestures(_ enterEditMode: EnterEditModeAction) -> some View {
         modifier(WiggleEffect())
             .onLongPressGesture(minimumDuration: Edit.longPressDuration, maximumDistance: Drag.threshold) {
+                enterEditMode()
+            }
+    }
+}
+
+// Icon, name and backplate read as one element: the name, a hint, the click
+// as the default action, and an "Edit Layout" action standing in for the
+// long press, which VoiceOver can't perform.
+private struct LauncherItemAccessibility: ViewModifier {
+    let label: String
+    let hint: String
+    let onActivate: () -> Void
+
+    @Environment(\.enterEditMode) private var enterEditMode
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+            .accessibilityHint(hint)
+            .accessibilityAction {
+                onActivate()
+            }
+            .accessibilityAction(named: "Edit Layout") {
                 enterEditMode()
             }
     }
@@ -94,13 +133,14 @@ private struct WiggleEffect: ViewModifier {
     @State private var phase = Double.random(in: 0..<1)
 
     func body(content: Content) -> some View {
-        let wiggles = isEditing && !reduceMotion
+        let motion = Motion(reduced: reduceMotion)
+        let wiggles = motion.wiggles(isEditing: isEditing)
         TimelineView(.animation(paused: !wiggles)) { context in
             content
                 .rotationEffect(.degrees(wiggles ? angle(at: context.date) : 0))
         }
         // Reduce Motion: a still cue instead of the rocking.
-        .scaleEffect(isEditing && reduceMotion ? Edit.reducedMotionScale : 1)
+        .scaleEffect(motion.editScale(isEditing: isEditing))
         .animation(.easeInOut(duration: Edit.reducedMotionAnimation), value: isEditing && reduceMotion)
     }
 

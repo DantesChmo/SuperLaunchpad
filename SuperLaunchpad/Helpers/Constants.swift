@@ -32,6 +32,36 @@ enum AnimationDuration {
     // Extra wait after the hide animation before `orderOut`, so the window is
     // not removed while the tail of the spring is still on screen.
     static let orderOutSlack: Double = 0.1
+    // The hidden launcher is zoomed in this much, so showing it zooms out.
+    static let launcherHiddenScale: CGFloat = 1.05
+    // Folder popup open / close, and the closed popup's scale it pops from.
+    static let folder: Double = 0.25
+    static let folderClosedScale: CGFloat = 0.85
+    // The closing popup's contents are kept this long, until the close
+    // animation has visibly finished.
+    static let folderCleanupDelay: Double = 0.3
+    // The active page dot's grow animation.
+    static let pageIndicator: Double = 0.3
+    static let pageIndicatorBounce: Double = 0.2
+}
+
+// Readability of labels drawn straight over the blurred desktop.
+enum LabelContrast {
+    // Dark layer between the blur and the grid. Increase Contrast uses the
+    // stronger one: white text then stays above 4.5 : 1 even over a white
+    // wallpaper.
+    static let dimOpacity: Double = 0.3
+    static let increasedDimOpacity: Double = 0.55
+    // Soft shadow under icon labels, as in the system Launchpad, so a bright
+    // spot of wallpaper behind a label doesn't wash it out.
+    static let shadowOpacity: Double = 0.5
+    static let shadowRadius: CGFloat = 1.5
+    static let shadowOffset: CGFloat = 0.5
+    // Secondary text (search prompt, icon, "No Results"). Increase Contrast
+    // makes it fully opaque.
+    static let secondaryOpacity: Double = 0.6
+    static let placeholderOpacity: Double = 0.4
+    static let increasedSecondaryOpacity: Double = 0.9
 }
 
 enum Search {

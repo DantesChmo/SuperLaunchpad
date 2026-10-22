@@ -144,6 +144,12 @@ struct FolderDetailView: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("folder-detail")
         .accessibilityLabel(folder.title)
+        // VoiceOver stays inside the open popup, and its escape gesture
+        // closes it like a click on the dimmed backdrop does.
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape) {
+            onClose()
+        }
         .onAppear {
             if startsRenaming {
                 beginRename()
@@ -184,6 +190,7 @@ struct FolderDetailView: View {
                         commitRename()
                     }
                 }
+                .accessibilityLabel("Folder name")
                 .accessibilityIdentifier("folder-title-field")
         } else {
             Text(folder.title)
@@ -193,6 +200,10 @@ struct FolderDetailView: View {
                     beginRename()
                 }
                 .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Renames the folder")
+                .accessibilityAction {
+                    beginRename()
+                }
                 .accessibilityIdentifier("folder-title")
         }
     }
@@ -269,6 +280,7 @@ private struct FolderAppIconView: View {
 
     @State private var isHovering = false
     @Environment(\.enterEditMode) private var enterEditMode
+    @Environment(\.isEditing) private var isEditing
 
     var body: some View {
         // Same outer/inner VStack pattern as `GridItemContainer` — see the
@@ -296,6 +308,13 @@ private struct FolderAppIconView: View {
             }
             .editModeGestures(enterEditMode)
         }
+        .launcherItemAccessibility(
+            label: app.displayName,
+            hint: isEditing ? "Drag to move" : "Opens the app",
+            onActivate: onTap
+        )
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("folder-app-icon")
     }
 
     @ViewBuilder

@@ -11,6 +11,8 @@ struct AppIconView: View {
     var isMergeTarget = false
     let onTap: () -> Void
 
+    @Environment(\.isEditing) private var isEditing
+
     var body: some View {
         // `GridItemContainer` is a generic view that takes two `@ViewBuilder`
         // closures — `icon:` and `label:`. The trailing closure syntax with
@@ -31,6 +33,7 @@ struct AppIconView: View {
             Text(app.displayName)
                 .font(.system(size: metrics.labelFont))
                 .foregroundStyle(.white)
+                .launcherLabelShadow()
                 // Two-line cap matches Finder's icon labels — longer names
                 // are truncated with an ellipsis.
                 .lineLimit(2)
@@ -42,8 +45,13 @@ struct AppIconView: View {
                 .fill(.white.opacity(isSelected ? Search.selectionOpacity : 0))
                 .padding(-metrics.iconSize * Search.selectionOutsetRatio)
         }
+        .launcherItemAccessibility(
+            label: app.displayName,
+            // Clicks don't launch in edit mode.
+            hint: isEditing ? "Drag to move" : "Opens the app",
+            onActivate: onTap
+        )
         .accessibilityIdentifier("app-icon")
-        .accessibilityLabel(app.displayName)
         // `GridItemContainer` is a `VStack` + `onTapGesture`, not a `Button`,
         // so XCUI's `app.buttons` query wouldn't match it without this trait.
         // Adding `.isButton` also gives VoiceOver the correct semantic role.

@@ -6,6 +6,8 @@ struct PageIndicatorView: View {
     let totalPages: Int
     let currentPage: Int
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(spacing: 8) {
             // `ForEach(0..<n, id: \.self)` — `Range<Int>` needs `id:` because
@@ -17,8 +19,13 @@ struct PageIndicatorView: View {
                     // 1.15× scaling makes the active dot stand out beyond
                     // just being opaque vs. semi-transparent.
                     .scaleEffect(index == currentPage ? 1.15 : 1.0)
-                    .animation(.spring(duration: 0.3, bounce: 0.2), value: currentPage)
+                    .animation(Motion(reduced: reduceMotion).pageIndicatorAnimation, value: currentPage)
             }
         }
+        // One element for VoiceOver: "Page 2 of 5" instead of a row of
+        // unlabeled dots.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Page \(currentPage + 1) of \(totalPages)")
+        .accessibilityIdentifier("page-indicator")
     }
 }

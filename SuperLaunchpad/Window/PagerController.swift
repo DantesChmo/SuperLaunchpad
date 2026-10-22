@@ -146,7 +146,7 @@ final class PagerController {
     }
 
     private func startSettling() {
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if Motion.current.settlesInstantly {
             model.settleImmediately()
         }
         publish()

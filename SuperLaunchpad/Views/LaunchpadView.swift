@@ -21,6 +21,12 @@ struct LaunchpadView: View {
     // Icon drags on the grid and in the folder popup. Lives here, not in the
     // grid, so a drag out of a folder survives the popup closing.
     @State private var drag = GridDragController()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private var motion: Motion {
+        Motion(reduced: reduceMotion)
+    }
 
     var body: some View {
         // `GeometryReader` measures the available space; we use it to compute
@@ -38,8 +44,10 @@ struct LaunchpadView: View {
                 VisualEffectBackground()
                     .ignoresSafeArea()
 
-                Color.black.opacity(0.3)
+                Color.black
+                    .opacity(contrast == .increased ? LabelContrast.increasedDimOpacity : LabelContrast.dimOpacity)
                     .ignoresSafeArea()
+                    .accessibilityHidden(true)
 
                 VStack(spacing: 0) {
                     Spacer().frame(height: metrics.topPadding)
@@ -61,7 +69,7 @@ struct LaunchpadView: View {
                     } else if viewModel.pages.isEmpty {
                         Spacer()
                         Text("No applications found")
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(.white.opacity(contrast == .increased ? LabelContrast.increasedSecondaryOpacity : LabelContrast.secondaryOpacity))
                         Spacer()
                     } else {
                         PagingGridView(
@@ -118,6 +126,7 @@ struct LaunchpadView: View {
                         .fill(.ultraThinMaterial)
                         .ignoresSafeArea()
                         .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                         .transition(.opacity)
 
                     // Dark backdrop behind the folder popup. Tap to dismiss.
@@ -126,6 +135,9 @@ struct LaunchpadView: View {
                         .onTapGesture {
                             closeFolder()
                         }
+                        // VoiceOver closes the folder with the card's escape
+                        // action instead.
+                        .accessibilityHidden(true)
                         .transition(.opacity)
                 }
 
@@ -161,9 +173,10 @@ struct LaunchpadView: View {
                     )
                     // A different folder gets fresh edit state.
                     .id(folder.id)
-                    // Pop-out animation: fade in + scale up from 85%.
+                    // Pop-out animation: fade in + scale up from 85% (only
+                    // the fade with Reduce Motion).
                     .opacity(folderIsOpen ? 1 : 0)
-                    .scaleEffect(folderIsOpen ? 1 : 0.85)
+                    .scaleEffect(motion.folderScale(isOpen: folderIsOpen))
                 }
             }
             // Below the drag modifier, so the lifted icon doesn't wiggle.
@@ -188,21 +201,17 @@ struct LaunchpadView: View {
             ))
             // Whole-launcher show/hide animation:
             //   • fade from 0 → 1
-            //   • scale from 105% → 100% (slight zoom-in, like macOS).
+            //   • scale from 105% → 100% (slight zoom-in, like macOS);
+            //     Reduce Motion keeps only the fade.
             .opacity(viewModel.isVisible ? 1 : 0)
-            .scaleEffect(viewModel.isVisible ? 1 : 1.05)
+            .scaleEffect(motion.launcherScale(isVisible: viewModel.isVisible))
             // Don't capture clicks while invisible — they would otherwise hit
             // the fully-transparent panel and block desktop clicks.
             .allowsHitTesting(viewModel.isVisible)
             // `.animation(_:value:)` re-runs the animation whenever `value`
             // changes. Two different durations for show vs hide give the
             // hide a snappier feel.
-            .animation(
-                viewModel.isVisible
-                    ? .spring(duration: AnimationDuration.show, bounce: 0)
-                    : .spring(duration: AnimationDuration.hide, bounce: 0),
-                value: viewModel.isVisible
-            )
+            .animation(motion.launcherAnimation(isVisible: viewModel.isVisible), value: viewModel.isVisible)
             .onChange(of: viewModel.isEditing) { _, editing in
                 AccessibilityNotification.Announcement(editing ? "Editing" : "Done editing").post()
             }
@@ -221,11 +230,11 @@ struct LaunchpadView: View {
                     } else {
                         // User pressed Escape while launcher is still visible —
                         // play the close animation, then clear the snapshot
-                        // after the animation completes (~0.3s).
-                        withAnimation(.spring(duration: 0.25, bounce: 0)) {
+                        // after the animation completes.
+                        withAnimation(motion.folderAnimation) {
                             folderIsOpen = false
                         }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + AnimationDuration.folderCleanupDelay) {
                             // Guard: if the user re-opened the folder during
                             // the delay, don't blow away the freshly set data.
                             guard !folderIsOpen else { return }
@@ -246,7 +255,7 @@ struct LaunchpadView: View {
         folderStartsRenaming = renaming
         // `withAnimation` makes the opacity/scale changes that depend on
         // `folderIsOpen` animate together.
-        withAnimation(.spring(duration: 0.25, bounce: 0)) {
+        withAnimation(motion.folderAnimation) {
             folderIsOpen = true
         }
         viewModel.openFolder(folder)
@@ -268,13 +277,13 @@ struct LaunchpadView: View {
     }
 
     private func closeFolder() {
-        withAnimation(.spring(duration: 0.25, bounce: 0)) {
+        withAnimation(motion.folderAnimation) {
             folderIsOpen = false
         }
         viewModel.closeFolder()
         // Same delayed cleanup as in `onChange` — keep the snapshot alive
         // until the close animation has visibly finished.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + AnimationDuration.folderCleanupDelay) {
             guard !folderIsOpen else { return }
             displayedFolder = nil
             displayedFolderApps = []
