@@ -131,6 +131,7 @@ final class LaunchpadPanel: NSPanel {
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case 53: // Escape
+            guard !viewModel.cancelDrag() else { return }
             // Escape acts on the innermost context: close the open folder if
             // any, otherwise dismiss the launcher.
             if viewModel.openFolderID != nil {

@@ -43,7 +43,8 @@ private extension Comparable {
 //
 // Drag-to-reorder: a click-drag on an icon lifts it (`GridDragController`).
 // The pager only listens to scroll events, so a mouse drag never pages and a
-// trackpad swipe never reorders.
+// trackpad swipe never reorders. Holding the lifted icon beside the grid flips
+// the page (edge paging); past the last page an empty one is added.
 struct PagingGridView: View {
     let viewModel: LaunchpadViewModel
     let pages: [[LaunchpadItem]]
@@ -66,7 +67,7 @@ struct PagingGridView: View {
                 HStack(spacing: 0) {
                     // Index identity is fine: pages are reshuffled holistically
                     // rather than reordered.
-                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
+                    ForEach(Array(shownPages.enumerated()), id: \.offset) { index, page in
                         AppGridPageView(
                             items: previewItems(page, index: index),
                             metrics: metrics,
@@ -78,7 +79,7 @@ struct PagingGridView: View {
                                 guard !drag.isTapSuppressed else { return }
                                 onOpenFolder(folder)
                             },
-                            hiddenItemID: drag.session?.page == index ? drag.session?.itemID : nil
+                            hiddenItemID: drag.session?.hidesItem(onPage: index) == true ? drag.session?.itemID : nil
                         )
                         .contentShape(Rectangle())
                         .frame(width: geo.size.width)
@@ -99,7 +100,7 @@ struct PagingGridView: View {
         } action: { width in
             pager.pageWidth = width
         }
-        .onChange(of: pages.count) {
+        .onChange(of: viewModel.displayedPageCount) {
             pager.syncPageCount()
         }
         .onChange(of: isPressing) { _, pressing in
@@ -116,11 +117,52 @@ struct PagingGridView: View {
             drag.cancel()
             viewModel.endDragSession()
         }
+        .onChange(of: viewModel.dragCancelRequest) {
+            let page = drag.cancelDrop()
+            viewModel.endDragSession()
+            show(page)
+        }
+    }
+
+    private var shownPages: [[LaunchpadItem]] {
+        viewModel.hasTrailingDragPage ? pages + [[]] : pages
     }
 
     private func previewItems(_ items: [LaunchpadItem], index: Int) -> [LaunchpadItem] {
-        guard let session = drag.session, session.page == index else { return items }
-        return session.preview(items)
+        guard let session = drag.session, let lifted = drag.liftedItem else { return items }
+        return session.preview(items, page: index, moved: lifted, capacity: Grid.appsPerPage)
+    }
+
+    // Edge paging: flips by `direction`, adding the trailing empty page when
+    // flipping right from the last one. Returns the page now shown.
+    private func flipPage(_ direction: Int) -> Int? {
+        let current = viewModel.currentPage
+        if direction > 0, current + 1 >= viewModel.displayedPageCount {
+            guard viewModel.openTrailingDragPage() else { return nil }
+        }
+        pager.step(by: direction)
+        return viewModel.currentPage == current ? nil : viewModel.currentPage
+    }
+
+    // Brings the page a dropped icon lands on into view (the drop may have
+    // closed up an emptied page, or been refused on another page).
+    private func show(_ page: Int?) {
+        guard let page else { return }
+        pager.syncPageCount()
+        let delta = page - viewModel.currentPage
+        if delta != 0 {
+            pager.step(by: delta)
+        }
+    }
+
+    // Where the dropped item sits in the stored layout after a commit.
+    private func storedLocation(of itemID: String) -> (page: Int, slot: Int)? {
+        for (page, items) in viewModel.pages.enumerated() {
+            if let slot = items.firstIndex(where: { $0.id == itemID }) {
+                return (page, slot)
+            }
+        }
+        return nil
     }
 
     private func reorderGesture(geometry: GridGeometry, pageWidth: CGFloat) -> some Gesture {
@@ -136,17 +178,20 @@ struct PagingGridView: View {
                     page: viewModel.currentPage,
                     geometry: geometry,
                     pagerPosition: pager.position,
-                    pageWidth: pageWidth
+                    pageWidth: pageWidth,
+                    flipPage: flipPage
                 )
                 if lifted {
                     viewModel.beginDragSession()
                 }
             }
             .onEnded { _ in
-                drag.end(pages: pages, geometry: geometry, pagerPosition: pager.position, pageWidth: pageWidth) { session in
-                    viewModel.moveItem(session.item, toPage: session.page, slot: session.targetSlot)
+                let page = drag.end { session in
+                    guard viewModel.moveItem(session.item, toPage: session.page, slot: session.targetSlot) else { return nil }
+                    return storedLocation(of: session.itemID)
                 }
                 viewModel.endDragSession()
+                show(page)
             }
     }
 }

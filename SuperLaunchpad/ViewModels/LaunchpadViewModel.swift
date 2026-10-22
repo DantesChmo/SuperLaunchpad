@@ -563,14 +563,44 @@ final class LaunchpadViewModel {
     @ObservationIgnored private(set) var isDragSessionActive = false
     @ObservationIgnored private var parkedRescan: ParkedRescan?
 
+    // An empty page after the last one, shown while a dragged icon is held
+    // past the last page so it can be dropped there. Dropping on it creates
+    // the page (`moveItem` to `pages.count`); ending the drag removes it.
+    private(set) var hasTrailingDragPage = false
+    // Bumped by `cancelDrag()`; the grid observes it.
+    private(set) var dragCancelRequest = 0
+
+    // Pages the pager shows: the stored ones plus the trailing drag page.
+    var displayedPageCount: Int {
+        pages.count + (hasTrailingDragPage ? 1 : 0)
+    }
+
     func beginDragSession() {
         isDragSessionActive = true
+    }
+
+    // Returns false when there is no drag or the page is already shown.
+    @discardableResult
+    func openTrailingDragPage() -> Bool {
+        guard isDragSessionActive, !hasTrailingDragPage else { return false }
+        hasTrailingDragPage = true
+        return true
+    }
+
+    // Esc: asks the grid to drop the dragged icon back where it came from.
+    // Returns false when no icon is being dragged.
+    @discardableResult
+    func cancelDrag() -> Bool {
+        guard isDragSessionActive else { return false }
+        dragCancelRequest += 1
+        return true
     }
 
     // Safe to call more than once per drag.
     func endDragSession() {
         guard isDragSessionActive else { return }
         isDragSessionActive = false
+        hasTrailingDragPage = false
         guard let parked = parkedRescan else { return }
         parkedRescan = nil
         receiveRescanResult(apps: parked.apps, folders: parked.folders, startRevision: parked.startRevision)

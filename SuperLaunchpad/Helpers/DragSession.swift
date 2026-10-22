@@ -1,20 +1,24 @@
 import CoreGraphics
+import Foundation
 
 // One icon drag on the main grid, in pure values so it can be unit tested.
 // `GridDragController` owns it and feeds it pointer positions.
 //
-// The page shows a live preview: the dragged item is taken out of
-// `sourceSlot` and re-inserted at `targetSlot`, which is exactly what
-// `GridLayout.move(_:toPage:slot:)` does on drop.
+// The pages show a live preview. On the page the item came from, it is taken
+// out of `sourceSlot` and re-inserted at `targetSlot`, which is exactly what
+// `GridLayout.move(_:toPage:slot:)` does on drop. Once edge paging carried it
+// to another page, its source cell stays (hidden) and the item is inserted
+// into that page instead.
 struct DragSession: Equatable {
     let itemID: String
     let item: GridLayout.Item
-    // The page being reordered. Fixed for now; edge paging (stage 3 B2)
-    // will move the session to the neighbouring page.
-    var page: Int
-    // Where the item sits in the page currently shown by the view model.
+    // The page the item sits on in the view model.
+    private(set) var sourcePage: Int
+    // Where the item sits on `sourcePage`.
     private(set) var sourceSlot: Int
-    // Where the preview shows it, and where a drop puts it.
+    // The page shown while dragging, where a drop puts the item.
+    private(set) var page: Int
+    // Where the preview shows it on `page`, and where a drop puts it.
     private(set) var targetSlot: Int
     // Pointer position minus the center of the grabbed cell, so the lifted
     // icon keeps its place under the pointer instead of jumping to center.
@@ -26,16 +30,24 @@ struct DragSession: Equatable {
     init(itemID: String, item: GridLayout.Item, page: Int, slot: Int, grabOffset: CGSize) {
         self.itemID = itemID
         self.item = item
-        self.page = page
+        sourcePage = page
         sourceSlot = slot
+        self.page = page
         targetSlot = slot
         self.grabOffset = grabOffset
     }
 
-    var hasMoved: Bool { targetSlot != sourceSlot }
+    var hasMoved: Bool { page != sourcePage || targetSlot != sourceSlot }
 
     mutating func retarget(_ slot: Int) {
         guard !isDropping else { return }
+        targetSlot = slot
+    }
+
+    // Edge paging flipped the grid to `page`.
+    mutating func switchPage(to page: Int, slot: Int) {
+        guard !isDropping else { return }
+        self.page = page
         targetSlot = slot
     }
 
@@ -46,22 +58,77 @@ struct DragSession: Equatable {
     // The view model now stores the moved order itself; the preview must stop
     // moving the item on top of it.
     mutating func markCommitted() {
-        sourceSlot = targetSlot
+        markCommitted(page: page, slot: targetSlot)
+    }
+
+    // As above, when the stored layout put the item somewhere else than the
+    // target (a page emptied by the move closed up before it).
+    mutating func markCommitted(page: Int, slot: Int) {
+        sourcePage = page
+        sourceSlot = slot
+        self.page = page
+        targetSlot = slot
     }
 
     // Snaps the preview back to the stored order (drop refused or cancelled).
     mutating func revert() {
+        page = sourcePage
         targetSlot = sourceSlot
     }
 
-    // `items` as the page should show them now. Out-of-range slots (the page
-    // changed under the session) leave the order alone.
+    // Whether page `index` hides the item's real cell: its source cell, and
+    // the copy the preview inserts under the lifted icon.
+    func hidesItem(onPage index: Int) -> Bool {
+        index == page || index == sourcePage
+    }
+
+    // `items` as the source page should show them now. Out-of-range slots
+    // (the page changed under the session) leave the order alone.
     func preview<Element>(_ items: [Element]) -> [Element] {
-        guard hasMoved, items.indices.contains(sourceSlot), items.indices.contains(targetSlot) else { return items }
+        guard page == sourcePage, hasMoved, items.indices.contains(sourceSlot), items.indices.contains(targetSlot) else { return items }
         var result = items
         let moved = result.remove(at: sourceSlot)
         result.insert(moved, at: targetSlot)
         return result
+    }
+
+    // `items` as page `index` should show them now, with `moved` standing for
+    // the dragged item on a page it is carried to. A full page shows only its
+    // first `capacity` items; the last one spills to the next page on drop.
+    func preview<Element>(_ items: [Element], page index: Int, moved: Element, capacity: Int) -> [Element] {
+        guard index == page else { return items }
+        guard page != sourcePage else { return preview(items) }
+        var result = items
+        result.insert(moved, at: min(targetSlot, result.count))
+        return Array(result.prefix(capacity))
+    }
+}
+
+// Turns "the pointer is in an edge zone" samples into page flips: the first
+// after `Drag.edgeDwell`, then one every `Drag.edgeRepeat` while the pointer
+// stays in the same zone. Leaving the zone starts over. Time is passed in, so
+// the caller decides the clock.
+struct EdgeDwell: Equatable {
+    // -1 / +1 for the left / right zone, nil outside both.
+    private(set) var direction: Int?
+    // When the next flip is due, while in a zone.
+    private(set) var deadline: TimeInterval?
+
+    // Returns the direction to flip when this sample makes a flip due.
+    mutating func update(direction: Int?, now: TimeInterval) -> Int? {
+        guard direction == self.direction else {
+            self.direction = direction
+            deadline = direction == nil ? nil : now + Drag.edgeDwell
+            return nil
+        }
+        guard let direction, let deadline, now >= deadline else { return nil }
+        self.deadline = now + Drag.edgeRepeat
+        return direction
+    }
+
+    mutating func reset() {
+        direction = nil
+        deadline = nil
     }
 }
 

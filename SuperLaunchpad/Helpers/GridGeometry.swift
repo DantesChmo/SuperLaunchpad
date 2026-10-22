@@ -74,6 +74,15 @@ struct GridGeometry: Equatable {
         return min(slot, itemCount - 1)
     }
 
+    // -1 / +1 when `point` is in the left / right margin beside the grid
+    // (`LayoutMetrics.horizontalPadding` on a full-screen page), where holding
+    // a dragged icon flips to the previous / next page; nil elsewhere.
+    func edgeDirection(at point: CGPoint) -> Int? {
+        if point.x < origin.x { return -1 }
+        if point.x > origin.x + CGFloat(columns) * cellSize.width { return 1 }
+        return nil
+    }
+
     // The cell under `point`, with points outside the grid clamped to the
     // nearest row / column. Half the row spacing belongs to each neighbouring
     // row.

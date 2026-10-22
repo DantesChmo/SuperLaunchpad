@@ -89,6 +89,11 @@ enum Drag {
     static let dwell: Double = 0.15
     // Spring used for the reflow, the lift and the drop.
     static let springDuration: Double = 0.25
+    // The pointer must rest in the margin beside the grid this long before
+    // the grid flips to the neighbouring page…
+    static let edgeDwell: Double = 0.5
+    // …and then flips again this often while it stays there.
+    static let edgeRepeat: Double = 0.8
 }
 
 // Tuning for the main-grid pager. Positions and velocities are in "pages"
