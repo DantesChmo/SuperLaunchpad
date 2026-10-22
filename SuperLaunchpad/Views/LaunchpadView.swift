@@ -2,10 +2,8 @@ import SwiftUI
 
 // Root SwiftUI view rendered inside the NSPanel.
 struct LaunchpadView: View {
-    // `@Bindable` (Swift 5.9+) creates two-way bindings into an `@Observable`
-    // model — e.g. `$viewModel.currentPage` produces a `Binding<Int>` for the
-    // pager. Use this instead of the older `@ObservedObject`.
-    @Bindable var viewModel: LaunchpadViewModel
+    let viewModel: LaunchpadViewModel
+    let pager: PagerController
 
     // Local view state that only this view needs. Keeping it as `@State`
     // (rather than on the ViewModel) is intentional: this is purely UI
@@ -53,9 +51,7 @@ struct LaunchpadView: View {
                     } else {
                         PagingGridView(
                             pages: viewModel.pages,
-                            // `$viewModel.currentPage` produces a Binding<Int>
-                            // thanks to `@Bindable` — the pager can write back.
-                            currentPage: $viewModel.currentPage,
+                            pager: pager,
                             metrics: metrics,
                             onLaunch: { app in
                                 viewModel.launchApp(app)
@@ -84,10 +80,7 @@ struct LaunchpadView: View {
 
                         Spacer().frame(height: 12)
 
-                        PageIndicatorView(
-                            totalPages: viewModel.pages.count,
-                            currentPage: viewModel.currentPage
-                        )
+                        CurrentPageIndicator(viewModel: viewModel)
                     }
 
                     Spacer().frame(height: metrics.bottomPadding)
@@ -102,26 +95,29 @@ struct LaunchpadView: View {
                     NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                 }
 
-                // Folder overlay layer. We keep the dim/blur/detail views in
-                // the tree at all times (with opacity 0 when closed) instead
-                // of using `if folderIsOpen` because SwiftUI can animate
-                // opacity/scale changes — but it can't animate view insertion
-                // smoothly.
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .ignoresSafeArea()
-                    .opacity(folderIsOpen ? 1 : 0)
-                    .allowsHitTesting(false)
+                // Folder overlay layer. The blur and dim are inserted only
+                // while a folder is open: a full-screen material is a backdrop
+                // blur that keeps sampling the screen every frame even at
+                // opacity 0, which costs frame time while the grid pages.
+                // `folderIsOpen` flips inside `withAnimation`, so the
+                // `.opacity` transitions fade them in and out with the same
+                // spring; the instant reset on hide flips it without
+                // animation, so they disappear at once.
+                if folderIsOpen {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
 
-                // Dark backdrop behind the folder popup. Tap to dismiss.
-                // `allowsHitTesting(folderIsOpen)` makes it inert when closed,
-                // so taps fall through to the grid underneath.
-                Color.black.opacity(folderIsOpen ? 0.4 : 0)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(folderIsOpen)
-                    .onTapGesture {
-                        closeFolder()
-                    }
+                    // Dark backdrop behind the folder popup. Tap to dismiss.
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            closeFolder()
+                        }
+                        .transition(.opacity)
+                }
 
                 if let folder = displayedFolder {
                     FolderDetailView(
@@ -202,6 +198,16 @@ struct LaunchpadView: View {
             displayedFolder = nil
             displayedFolderApps = []
         }
+    }
+}
+
+// Reads `currentPage` in its own body so a page change re-renders only the
+// dots, not the whole launcher with its pages.
+private struct CurrentPageIndicator: View {
+    let viewModel: LaunchpadViewModel
+
+    var body: some View {
+        PageIndicatorView(totalPages: viewModel.pages.count, currentPage: viewModel.currentPage)
     }
 }
 

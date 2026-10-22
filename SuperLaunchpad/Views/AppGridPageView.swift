@@ -7,22 +7,19 @@ struct AppGridPageView: View {
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
 
-    // Note the `SwiftUI.` prefix — we have our own `LaunchpadItem` (the enum
-    // in Models/) plus the project file is named `GridItem.swift`, both of
-    // which shadow SwiftUI's `GridItem`. Fully qualifying disambiguates.
-    private var columns: [SwiftUI.GridItem] {
-        // `.fixed(width)` makes each column exactly `itemWidth` wide so the
-        // grid lines up across pages (vs. `.flexible` which would re-balance
-        // based on available space and produce subtle jitter on resize).
-        Array(repeating: SwiftUI.GridItem(.fixed(metrics.itemWidth), spacing: 0), count: Grid.columns)
-    }
-
     var body: some View {
         VStack {
-            // `LazyVGrid` only materialises rows that are scrolled into view.
-            // For our 5-row grid it's not a perf win (everything is visible),
-            // but it's also the easiest API for fixed-column layouts.
-            LazyVGrid(columns: columns, alignment: .center, spacing: metrics.rowSpacing) {
+            // An eager layout instead of `LazyVGrid`: a lazy grid builds its
+            // cells the first time the page slides into view, which hitched
+            // the first swipe to every page. All cells of a page are created
+            // with the page itself. A flat `ForEach` (rather than row stacks)
+            // keeps each item's identity stable when it moves between rows.
+            FixedColumnsLayout(
+                columns: Grid.columns,
+                itemWidth: metrics.itemWidth,
+                itemHeight: metrics.itemHeight,
+                rowSpacing: metrics.rowSpacing
+            ) {
                 ForEach(items) { item in
                     // Cell layout trick: wrap each icon in a VStack with
                     // top/bottom Spacers. The Spacers absorb leftover vertical
@@ -44,7 +41,9 @@ struct AppGridPageView: View {
                         }
                         Spacer(minLength: 0)
                     }
-                    .frame(height: metrics.itemHeight)
+                    // Full column width centers the icon in its column, as the
+                    // `.fixed` columns of the old `LazyVGrid` did.
+                    .frame(width: metrics.itemWidth, height: metrics.itemHeight)
                 }
             }
             .padding(.horizontal, metrics.horizontalPadding)
@@ -52,5 +51,40 @@ struct AppGridPageView: View {
             // top edge instead of floating in the middle of the page.
             Spacer(minLength: 0)
         }
+    }
+}
+
+// Places subviews left to right in `columns` fixed-width columns, wrapping to
+// a new row every `columns` items. The width is always the full column count,
+// so a page with a single partial row lines up with full pages.
+private struct FixedColumnsLayout: Layout {
+    let columns: Int
+    let itemWidth: CGFloat
+    let itemHeight: CGFloat
+    let rowSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = rowCount(for: subviews.count)
+        let height = CGFloat(rows) * itemHeight + CGFloat(max(rows - 1, 0)) * rowSpacing
+        return CGSize(width: CGFloat(columns) * itemWidth, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard columns > 0 else { return }
+        let cellProposal = ProposedViewSize(width: itemWidth, height: itemHeight)
+        for (index, subview) in subviews.enumerated() {
+            let column = index % columns
+            let row = index / columns
+            let origin = CGPoint(
+                x: bounds.minX + CGFloat(column) * itemWidth,
+                y: bounds.minY + CGFloat(row) * (itemHeight + rowSpacing)
+            )
+            subview.place(at: origin, anchor: .topLeading, proposal: cellProposal)
+        }
+    }
+
+    private func rowCount(for count: Int) -> Int {
+        guard columns > 0 else { return 0 }
+        return (count + columns - 1) / columns
     }
 }

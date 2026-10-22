@@ -172,7 +172,7 @@ private struct FolderAppIconView: View {
 
     @ViewBuilder
     private var iconImage: some View {
-        if let data = app.iconData, let nsImage = NSImage(data: data) {
+        if let nsImage = IconCache.shared.image(for: app) {
             Image(nsImage: nsImage)
                 .resizable()
                 .interpolation(.high)

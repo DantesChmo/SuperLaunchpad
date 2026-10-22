@@ -9,12 +9,18 @@ import SwiftUI
 // uses for Spotlight, Quick Note, etc.
 final class LaunchpadPanel: NSPanel {
     private let viewModel: LaunchpadViewModel
+    private let pager: PagerController
     // Token returned by `NSEvent.addLocalMonitor...` — stored so we can pass it
     // back to `removeMonitor` when hiding.
     private var eventMonitor: Any?
+    // Deferred `orderOut` scheduled by `hidePanel`. Kept so `showPanel` can
+    // cancel it: otherwise a quick hide→show lets the stale `orderOut` remove
+    // the window while `viewModel.isVisible` is already true again.
+    private var pendingOrderOut: DispatchWorkItem?
 
     init(viewModel: LaunchpadViewModel) {
         self.viewModel = viewModel
+        pager = PagerController(viewModel: viewModel)
 
         // Multi-monitor is intentionally out of scope (see AGENTS.md > known
         // limitations); fall back to first screen if `.main` is nil during
@@ -60,7 +66,7 @@ final class LaunchpadPanel: NSPanel {
 
         // `NSHostingView` is the AppKit bridge that lets us put a SwiftUI tree
         // into any AppKit window. The `contentView` is what `NSPanel` renders.
-        let hostingView = NSHostingView(rootView: LaunchpadView(viewModel: viewModel))
+        let hostingView = NSHostingView(rootView: LaunchpadView(viewModel: viewModel, pager: pager))
         // Explicit frame is required — `NSHostingView` does NOT auto-resize to
         // its parent panel in this configuration. AGENTS.md flags this.
         hostingView.frame = screen.frame
@@ -68,11 +74,16 @@ final class LaunchpadPanel: NSPanel {
     }
 
     func showPanel() {
+        pendingOrderOut?.cancel()
+        pendingOrderOut = nil
         // Re-resolve the screen at show-time so display unplug/replug or a
         // resolution change picks up the latest frame.
         let screen = NSScreen.main ?? NSScreen.screens[0]
         setFrame(screen.frame, display: true)
         (contentView as? NSHostingView<LaunchpadView>)?.frame = screen.frame
+        // Normally already done on hide; repeated here (before `show()`, while
+        // still transparent) so the grid never slides back to page 0 on screen.
+        pager.reset()
         viewModel.show()
         // `ignoringOtherApps: true` — bring our process to the front even if
         // the user clicked another app's window in between.
@@ -89,11 +100,23 @@ final class LaunchpadPanel: NSPanel {
         stopEventMonitor()
         viewModel.hide()
         // Delay the actual `orderOut` (window removal) until AFTER the SwiftUI
-        // fade-out has finished. The `+ 0.1` is slack to avoid clipping the
-        // tail of the spring animation.
-        DispatchQueue.main.asyncAfter(deadline: .now() + AnimationDuration.hide + 0.1) {
+        // fade-out has finished. The slack avoids clipping the tail of the
+        // spring animation.
+        pendingOrderOut?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingOrderOut = nil
+            // `showPanel` cancels this item, but guard anyway in case it was
+            // already dequeued: never remove a window that is visible again.
+            guard !self.viewModel.isVisible else { return }
             self.orderOut(nil)
+            self.pager.reset()
         }
+        pendingOrderOut = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + AnimationDuration.hide + AnimationDuration.orderOutSlack,
+            execute: workItem
+        )
     }
 
     // `NSPanel` defaults to NOT becoming key/main (panels are usually auxiliary).
@@ -116,47 +139,27 @@ final class LaunchpadPanel: NSPanel {
                 hidePanel()
             }
         case 123: // Left arrow
-            goToPreviousPage()
+            pager.step(by: -1)
         case 124: // Right arrow
-            goToNextPage()
+            pager.step(by: 1)
         default:
             super.keyDown(with: event)
         }
     }
 
-    // MARK: - Page Navigation
-
-    private func goToNextPage() {
-        if viewModel.currentPage < viewModel.pages.count - 1 {
-            viewModel.currentPage += 1
-        }
-    }
-
-    private func goToPreviousPage() {
-        if viewModel.currentPage > 0 {
-            viewModel.currentPage -= 1
-        }
-    }
-
     // MARK: - Event Monitor
 
-    // Scroll-wheel monitor for mouse-driven paging (regular mice, not trackpads).
-    // Trackpads scroll the inner SwiftUI ScrollView natively; we only intercept
-    // discrete mouse wheel ticks here.
+    // All main-grid paging input (trackpad and mouse wheel) goes through
+    // `PagerController`. Events are swallowed so nothing else scrolls the grid;
+    // while a folder is open they pass through to the folder's own ScrollView.
     private func startEventMonitor() {
         stopEventMonitor()
         eventMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.scrollWheel]
         ) { [weak self] event in
-            guard let self, self.viewModel.isVisible else { return event }
-            // `hasPreciseScrollingDeltas` is `true` for trackpads (continuous,
-            // pixel-precise). When `false`, it's a mouse wheel — fixed steps
-            // that we want to convert into page jumps.
-            if !event.hasPreciseScrollingDeltas {
-                self.handleMouseScroll(event)
-            }
-            // Local monitor: returning the event lets it continue to SwiftUI.
-            return event
+            guard let self, self.viewModel.isVisible, self.viewModel.openFolderID == nil else { return event }
+            self.pager.handleScroll(event)
+            return nil
         }
     }
 
@@ -165,28 +168,5 @@ final class LaunchpadPanel: NSPanel {
             NSEvent.removeMonitor(eventMonitor)
         }
         eventMonitor = nil
-    }
-
-    // MARK: - Mouse Scroll
-
-    private func handleMouseScroll(_ event: NSEvent) {
-        // Some mice (e.g. tilting wheel) report horizontal deltas; respect the
-        // dominant axis. Negate Y because positive Y means "scroll up" but we
-        // want "scroll down → next page".
-        let delta: CGFloat
-        if abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
-            delta = event.scrollingDeltaX
-        } else {
-            delta = -event.scrollingDeltaY
-        }
-
-        // 0.5 threshold filters out tiny noise from imprecise hardware.
-        guard abs(delta) > 0.5 else { return }
-
-        if delta > 0 {
-            goToPreviousPage()
-        } else {
-            goToNextPage()
-        }
     }
 }
