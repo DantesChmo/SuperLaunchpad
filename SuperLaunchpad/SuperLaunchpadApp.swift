@@ -80,6 +80,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.viewModel.isVisible else { return }
             self.panel.hidePanel()
         }
+        gestureMonitor.isLauncherVisible = { [weak self] in
+            self?.viewModel.isVisible ?? false
+        }
         gestureMonitor.start()
 
         // UI tests launch with `-UITestMode YES`. The launcher panel is normally
