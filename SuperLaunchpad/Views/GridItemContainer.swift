@@ -104,6 +104,11 @@ extension View {
         )
     }
 
+    // "New" for an app that has the blue dot (or a folder holding one).
+    func newAppAccessibilityValue(_ isNew: Bool) -> some View {
+        accessibilityValue(isNew ? Text("New") : Text(""))
+    }
+
     // The × on an app icon in edit mode. Apps that are part of macOS have none.
     func removeAppBadge(_ app: AppEntry, iconSize: CGFloat) -> some View {
         modifier(RemoveAppBadge(app: app, iconSize: iconSize))
@@ -240,5 +245,20 @@ private struct WiggleEffect: ViewModifier {
     private func angle(at date: Date) -> Double {
         let cycle = date.timeIntervalSinceReferenceDate / Edit.wigglePeriod + phase
         return sin(cycle * 2 * .pi) * Edit.wiggleAngle
+    }
+}
+
+extension Text {
+    // An icon's name, after a blue dot when the app is new, as in the system
+    // Launchpad. Part of the text, so it wraps and centers with the name.
+    static func launcherLabel(_ title: String, isNew: Bool, fontSize: CGFloat) -> Text {
+        let name = Text(title).font(.system(size: fontSize))
+        guard isNew else { return name }
+        let dotSize = fontSize * NewAppDot.sizeRatio
+        let dot = Text(Image(systemName: "circle.fill"))
+            .font(.system(size: dotSize))
+            .foregroundStyle(.blue)
+            .baselineOffset((fontSize - dotSize) * NewAppDot.capMiddleRatio)
+        return Text("\(dot) \(name)")
     }
 }

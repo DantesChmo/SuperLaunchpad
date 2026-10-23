@@ -48,7 +48,7 @@ Data flow:
 1. `AppDelegate.applicationDidFinishLaunching()` → creates `LaunchpadPanel`, calls `viewModel.loadApps()`.
 2. `loadApps()` reads DB cache first, then `Task.detached` scans `/Applications` + `/System/Applications` via `AppEnumerator`, syncs back to `@MainActor`.
 3. First launch only: `SystemLaunchpadDB` reads `~/.com.apple.dock.launchpad/db/db` for ordering and folders; otherwise alphabetical fallback.
-4. Subsequent launches: existing positions preserved, new apps appended at end.
+4. Subsequent launches: existing positions preserved; new apps (no DB row yet) get `isNew` and go where Settings → New Apps says (`Helpers/NewAppPlacement.swift`: end / category folder / "New" folder). The rescan's DB work is the pure-ish `LaunchpadViewModel.syncScan`, testable with a temp DB.
 5. `AppDirectoryWatcher` (DispatchSource) triggers `loadApps()` on install/uninstall.
 6. `GestureMonitor` listens for global trackpad pinch (threshold 0.5) to show/hide.
 
@@ -60,7 +60,7 @@ Data flow:
 |------|------|
 | `SuperLaunchpadApp.swift` | `@main`, `AppDelegate`, `MenuBarExtra` |
 | `ViewModels/LaunchpadViewModel.swift` | source of truth — apps, pages, currentPage, show/hide/launch |
-| `Models/AppEntry.swift` | GRDB record — bundleIdentifier (PK), pageIndex, orderIndex, folderID, folderOrderIndex, isHidden |
+| `Models/AppEntry.swift` | GRDB record — bundleIdentifier (PK), pageIndex, orderIndex, folderID, folderOrderIndex, isHidden, isNew (blue dot) |
 | `Models/FolderEntry.swift` | GRDB record — id (PK), title, pageIndex, orderIndex |
 | `Models/GridItem.swift` | `LaunchpadItem` enum: `.app(AppEntry)` / `.folder(FolderEntry, apps)` |
 | `Database/AppDatabase.swift` | SQLite, migrations, CRUD |
@@ -81,6 +81,7 @@ Data flow:
 | `Services/AppDirectoryWatcher.swift` | DispatchSource on `/Applications` |
 | `Helpers/Constants.swift` | `Grid`, `FolderGrid`, `AnimationDuration`, `LayoutMetrics` |
 | `Helpers/NSImageExtensions.swift` | `pngData()`, `resized(to:)` |
+| `Helpers/NewAppPlacement.swift` | Settings → New Apps: where a rescan puts a new app; category folder title matching |
 | `SuperLaunchpadTests/` | swift-testing test suites |
 
 ## Conventions
@@ -188,6 +189,7 @@ Things a new developer cannot guess from the code:
 - **Context menu items are built in one place:** `ItemMenu.items(for:)`, one function per item kind (app, folder). A new action (Hide, Quit, …) is a new `ItemMenu.Action` case, a line there and a branch in `LaunchpadViewModel.perform(_:on:)`; the menu and the VoiceOver actions pick it up. Actions returning `true` want the launcher hidden — the view posts `.hideLaunchpad`, it is not the view model's job.
 - **Hidden apps (`appEntry.isHidden`) have no position at all** — `pageIndex`, `orderIndex`, `folderID`, `folderOrderIndex` are all nil, so they take no slot on a page or in a folder (a folder they leave empty is dissolved). `rebuildPages` and `GridLayout.init` skip them; only search (`AppSearch` runs over every app) and Settings → Hidden Apps show them. `hideApp` / `unhideApp` go through `applyEdit`; unhiding appends to the end of the last page (`GridLayout.append`). A rescan keeps the flag (`mergeNewApps` copies existing rows and never attaches a hidden app to a re-imported folder), and `hasOrderingData` counts hidden rows so they are never re-imported as visible.
 - **Modifier clicks:** `⌘`-click opens the app without activating it (`AppOpener`, `activates = false`) so the launcher keeps the keyboard; `⌥⌘`-click shows it in Finder; `⌃`-click is left to the context menu. None of them act in edit mode.
+- **New apps (blue dot).** An app is marked `isNew` only when a rescan finds it without a DB row *and* `AppSetting.Key.newAppTracking` is set. The flag is set by the v6 migration for an existing layout, or by the first scan after which every app on disk has a row — so the first-run import (and apps the system Launchpad import skipped, added on the next rescan) never get the dot. Opening it from the launcher (click, `⌘`-click, menu Open) clears it (`clearNew`); a folder's label shows the dot while it holds a new app.
 - **`searchText` exists on the ViewModel but is not wired.** Don't add filtering downstream of it without also building the search UI and decide on debounce/scope first.
 
 ## Forbidden patterns

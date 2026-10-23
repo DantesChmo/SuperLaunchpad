@@ -208,6 +208,7 @@ final class LaunchpadViewModel {
         // Captured once: the detached task must not read main-actor state.
         let database = database
         let startRevision = layoutRevision
+        let newAppPlacement = Preferences().newAppPlacement
 
         // `Task.detached` runs outside the structured concurrency tree of the
         // caller — important here because `loadApps` is `@MainActor` and we
@@ -218,60 +219,12 @@ final class LaunchpadViewModel {
             let enumerated = AppEnumerator.enumerate()
             guard let self else { return }
 
-            // First launch heuristic: if no app has a pageIndex yet, we treat
-            // this as a fresh install and import ordering from macOS Launchpad.
-            let hasOrdering = (try? database?.hasOrderingData()) ?? false
-            let systemOrdering = SystemLaunchpadDB.readOrdering()
-
-            let appsToSave: [AppEntry]
-            let foldersToSave: [FolderEntry]
-
-            if !hasOrdering {
-                // Fresh DB → apply system Launchpad layout (or alphabetical
-                // fallback if the system DB is empty).
-                (appsToSave, foldersToSave) = LaunchpadViewModel.applyOrdering(systemOrdering, to: enumerated)
-            } else {
-                // Existing DB → preserve user's existing positions, append
-                // any newly installed apps at the end.
-                let folderImportDone = (try? database?.setting(.folderImportDone)) != nil
-                (appsToSave, foldersToSave) = LaunchpadViewModel.mergeNewApps(
-                    enumerated,
-                    existingApps: (try? database?.fetchAllApps()) ?? [],
-                    existingFolders: (try? database?.fetchAllFolders()) ?? [],
-                    systemOrdering: systemOrdering,
-                    folderImportDone: folderImportDone
-                )
-            }
-
-            // Order matters: folders must exist before apps with FK references
-            // to them are inserted. (FK constraint would otherwise fire.)
-            try? database?.saveFolders(foldersToSave)
-            try? database?.saveApps(appsToSave)
-
-            // With a system layout available, both paths above have imported
-            // its folders by now; never import them again.
-            if systemOrdering != nil {
-                try? database?.setSetting(.folderImportDone, "1")
-            }
-
-            // Drop rows for apps that were uninstalled since the last scan.
-            let validIDs = Set(enumerated.map(\.bundleIdentifier))
-            try? database?.deleteStale(validIdentifiers: validIDs)
-
-            // After deleting stale apps, some folders may now be empty —
-            // remove those too so they don't appear as ghost tiles.
-            let folderIDsWithApps = Set(appsToSave.compactMap(\.folderID))
-            let staleFolderIDs = Set(foldersToSave.map(\.id)).subtracting(folderIDsWithApps)
-            if !staleFolderIDs.isEmpty {
-                let validFolderIDs = Set(foldersToSave.map(\.id)).subtracting(staleFolderIDs)
-                try? database?.deleteStaleFolders(validIDs: validFolderIDs)
-            }
-
-            // Re-read from DB so we get rows sorted by the canonical SQL
-            // ordering (with locale-aware collation). Falls back to the
-            // in-memory list if the read fails.
-            let sortedApps = (try? database?.fetchAllApps()) ?? appsToSave
-            let sortedFolders = (try? database?.fetchAllFolders()) ?? foldersToSave
+            let (sortedApps, sortedFolders) = LaunchpadViewModel.syncScan(
+                enumerated,
+                systemOrdering: SystemLaunchpadDB.readOrdering(),
+                placement: newAppPlacement,
+                database: database
+            )
 
             // `MainActor.run` is the bridge back to the main thread for UI
             // state updates. Mutating `@Observable` state off-main is a
@@ -283,6 +236,83 @@ final class LaunchpadViewModel {
                 }
             }
         }
+    }
+
+    // Writes one scan's result to the DB: the first-launch layout for an empty
+    // DB, otherwise the existing layout plus new apps minus uninstalled ones.
+    // Returns the rows as stored.
+    //
+    // `nonisolated static`: runs inside the detached rescan.
+    nonisolated static func syncScan(
+        _ enumerated: [AppEntry],
+        systemOrdering: LaunchpadOrdering?,
+        placement: NewAppPlacement,
+        database: AppDatabase?
+    ) -> (apps: [AppEntry], folders: [FolderEntry]) {
+        // First launch heuristic: if no app has a pageIndex yet, we treat
+        // this as a fresh install and import ordering from macOS Launchpad.
+        let hasOrdering = (try? database?.hasOrderingData()) ?? false
+
+        let appsToSave: [AppEntry]
+        let foldersToSave: [FolderEntry]
+
+        if !hasOrdering {
+            // Fresh DB → apply system Launchpad layout (or alphabetical
+            // fallback if the system DB is empty).
+            (appsToSave, foldersToSave) = LaunchpadViewModel.applyOrdering(systemOrdering, to: enumerated)
+        } else {
+            // Existing DB → preserve user's existing positions, append
+            // any newly installed apps at the end.
+            let folderImportDone = (try? database?.setting(.folderImportDone)) != nil
+            let tracksNewApps = (try? database?.setting(.newAppTracking)) != nil
+            (appsToSave, foldersToSave) = LaunchpadViewModel.mergeNewApps(
+                enumerated,
+                existingApps: (try? database?.fetchAllApps()) ?? [],
+                existingFolders: (try? database?.fetchAllFolders()) ?? [],
+                systemOrdering: systemOrdering,
+                folderImportDone: folderImportDone,
+                markNew: tracksNewApps,
+                placement: placement
+            )
+        }
+
+        // Order matters: folders must exist before apps with FK references
+        // to them are inserted. (FK constraint would otherwise fire.)
+        try? database?.saveFolders(foldersToSave)
+        try? database?.saveApps(appsToSave)
+
+        // With a system layout available, both paths above have imported
+        // its folders by now; never import them again.
+        if systemOrdering != nil {
+            try? database?.setSetting(.folderImportDone, "1")
+        }
+
+        // Every app on disk has a row now, unless the first import skipped
+        // apps the system layout doesn't know: from the next rescan on, an
+        // app without a row was just installed.
+        if appsToSave.count == enumerated.count {
+            try? database?.setSetting(.newAppTracking, "1")
+        }
+
+        // Drop rows for apps that were uninstalled since the last scan.
+        let validIDs = Set(enumerated.map(\.bundleIdentifier))
+        try? database?.deleteStale(validIdentifiers: validIDs)
+
+        // After deleting stale apps, some folders may now be empty —
+        // remove those too so they don't appear as ghost tiles.
+        let folderIDsWithApps = Set(appsToSave.compactMap(\.folderID))
+        let staleFolderIDs = Set(foldersToSave.map(\.id)).subtracting(folderIDsWithApps)
+        if !staleFolderIDs.isEmpty {
+            let validFolderIDs = Set(foldersToSave.map(\.id)).subtracting(staleFolderIDs)
+            try? database?.deleteStaleFolders(validIDs: validFolderIDs)
+        }
+
+        // Re-read from DB so we get rows sorted by the canonical SQL
+        // ordering (with locale-aware collation). Falls back to the
+        // in-memory list if the read fails.
+        let sortedApps = (try? database?.fetchAllApps()) ?? appsToSave
+        let sortedFolders = (try? database?.fetchAllFolders()) ?? foldersToSave
+        return (sortedApps, sortedFolders)
     }
 
     // A rescan that finishes mid-drag would swap `pages` under the dragged
@@ -382,12 +412,18 @@ final class LaunchpadViewModel {
     //
     // `nonisolated static` like `applyOrdering`; the caller passes in the rows
     // currently in the DB and the `folderImportDone` setting.
+    //
+    // With `markNew` the new apps are marked `isNew` and go where `placement`
+    // says; `categoryTitles` names the folders that match an app's category.
     nonisolated static func mergeNewApps(
         _ enumerated: [AppEntry],
         existingApps existing: [AppEntry],
         existingFolders: [FolderEntry],
         systemOrdering: LaunchpadOrdering?,
-        folderImportDone: Bool
+        folderImportDone: Bool,
+        markNew: Bool = false,
+        placement: NewAppPlacement = .end,
+        categoryTitles: (AppEntry) -> [String] = NewAppPlacement.categoryFolderTitles
     ) -> ([AppEntry], [FolderEntry]) {
         // O(1) bundleID lookup for the merge loop below.
         // `uniqueKeysWithValues` traps on duplicate keys — safe here because
@@ -462,7 +498,41 @@ final class LaunchpadViewModel {
         var nextOrder = lastOrder + 1
         var currentPage = lastPage
 
+        // The next free slot, paging over when the current page fills up.
+        func takeNextSlot() -> (page: Int, order: Int) {
+            if nextOrder >= Grid.appsPerPage {
+                currentPage += 1
+                nextOrder = 0
+            }
+            defer { nextOrder += 1 }
+            return (currentPage, nextOrder)
+        }
+
+        // The folder `placement` puts a new app into, if any. The "New"
+        // folder is made in the next free slot the first time it is needed.
+        func placementFolderID(for app: AppEntry) -> String? {
+            switch placement {
+            case .end:
+                return nil
+            case .categoryFolder:
+                let titles = categoryTitles(app)
+                return existingFolders.first { folder in
+                    titles.contains { $0.localizedCaseInsensitiveCompare(folder.title) == .orderedSame }
+                }?.id
+            case .newFolder:
+                let title = NewAppPlacement.newFolderTitle
+                if let folder = existingFolders.first(where: { $0.title.localizedCaseInsensitiveCompare(title) == .orderedSame }) {
+                    return folder.id
+                }
+                let slot = takeNextSlot()
+                let folder = FolderEntry(id: UUID().uuidString, title: title, pageIndex: slot.page, orderIndex: slot.order)
+                existingFolders.append(folder)
+                return folder.id
+            }
+        }
+
         for var app in newApps {
+            app.isNew = markNew
             // Priority 1: this new app belongs to a folder according to the
             // (possibly just-imported) system DB layout.
             if let folderPos = folderAppPositions[app.bundleIdentifier] {
@@ -470,20 +540,23 @@ final class LaunchpadViewModel {
                 app.folderOrderIndex = folderPos.folderOrderIndex
                 app.pageIndex = nil
                 app.orderIndex = nil
+            } else if markNew, let folderID = placementFolderID(for: app) {
+                // Priority 2: the user's choice in Settings, after the
+                // folder's last app.
+                let lastIndex = result.filter { $0.folderID == folderID }.compactMap(\.folderOrderIndex).max() ?? -1
+                app.folderID = folderID
+                app.folderOrderIndex = lastIndex + 1
+                app.pageIndex = nil
+                app.orderIndex = nil
             } else if let pos = systemOrdering?.appPositions[app.bundleIdentifier] {
-                // Priority 2: the system DB knows where this app should go.
+                // Priority 3: the system DB knows where this app should go.
                 app.pageIndex = pos.pageIndex
                 app.orderIndex = pos.orderIndex
             } else {
-                // Priority 3: append at the next free slot, paging over when
-                // the current page fills up.
-                if nextOrder >= Grid.appsPerPage {
-                    currentPage += 1
-                    nextOrder = 0
-                }
-                app.pageIndex = currentPage
-                app.orderIndex = nextOrder
-                nextOrder += 1
+                // Priority 4: append at the next free slot.
+                let slot = takeNextSlot()
+                app.pageIndex = slot.page
+                app.orderIndex = slot.order
             }
             result.append(app)
         }
@@ -500,8 +573,18 @@ final class LaunchpadViewModel {
     func launchApp(_ app: AppEntry) -> Bool {
         guard !isEditing else { return false }
         opener.open(app.appPath, true)
+        clearNew(app.bundleIdentifier)
         hide()
         return true
+    }
+
+    // The blue dot goes once the app is opened from the launcher.
+    func clearNew(_ appID: String) {
+        guard let index = apps.firstIndex(where: { $0.bundleIdentifier == appID }), apps[index].isNew else { return }
+        apps[index].isNew = false
+        // A rescan running now read the flag before it was cleared.
+        layoutRevision += 1
+        try? database?.clearNew(bundleIdentifier: appID)
     }
 
     func show() {
@@ -881,11 +964,13 @@ final class LaunchpadViewModel {
         switch ItemMenu.clickAction(modifiers: modifiers, isEditing: isEditing) {
         case .launch:
             opener.open(app.appPath, true)
+            clearNew(app.bundleIdentifier)
             return true
         case .launchKeepingLauncher:
             // The app stays in the background, so the launcher keeps the
             // keyboard for the next click.
             opener.open(app.appPath, false)
+            clearNew(app.bundleIdentifier)
             return false
         case .showInFinder:
             opener.showInFinder(app.appPath)
@@ -899,6 +984,7 @@ final class LaunchpadViewModel {
         switch action {
         case .open:
             opener.open(app.appPath, true)
+            clearNew(app.bundleIdentifier)
             return true
         case .showInFinder:
             // Finder opens below the launcher's panel.

@@ -96,6 +96,18 @@ final class AppDatabase {
                 t.add(column: "isHidden", .boolean).notNull().defaults(to: false)
             }
         }
+        migrator.registerMigration("v6") { db in
+            try db.alter(table: "appEntry") { t in
+                t.add(column: "isNew", .boolean).notNull().defaults(to: false)
+            }
+            // An existing layout already holds every installed app, so nothing
+            // is new now and the next rescan can mark apps installed after
+            // this. A fresh DB starts tracking after its first import instead.
+            let hasLayout = try AppEntry.filter(AppEntry.Columns.pageIndex != nil).fetchCount(db) > 0
+            if hasLayout {
+                try AppSetting(key: AppSetting.Key.newAppTracking.rawValue, value: "1").insert(db)
+            }
+        }
         return migrator
     }
 
@@ -153,6 +165,15 @@ final class AppDatabase {
     func deleteApp(bundleIdentifier: String) throws {
         try dbQueue.write { db in
             _ = try AppEntry.deleteOne(db, key: bundleIdentifier)
+        }
+    }
+
+    // The app was opened from the launcher: it is no longer new.
+    func clearNew(bundleIdentifier: String) throws {
+        try dbQueue.write { db in
+            _ = try AppEntry
+                .filter(AppEntry.Columns.bundleIdentifier == bundleIdentifier)
+                .updateAll(db, AppEntry.Columns.isNew.set(to: false))
         }
     }
 

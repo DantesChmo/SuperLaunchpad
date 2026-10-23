@@ -8,6 +8,9 @@ struct SettingsView: View {
     @AppStorage(Preferences.Key.pinchGestureEnabled)
     private var pinchGestureEnabled = Preferences.Default.pinchGestureEnabled
 
+    @AppStorage(Preferences.Key.newAppPlacement)
+    private var newAppPlacement = Preferences.Default.newAppPlacement
+
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var loginItemNeedsApproval = LoginItem.requiresApproval
     @State private var loginItemError: String?
@@ -38,6 +41,23 @@ struct SettingsView: View {
                 Text("macOS 26 may also handle the pinch gesture itself.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("New Apps") {
+                Picker("Put new apps", selection: $newAppPlacement) {
+                    ForEach(NewAppPlacement.allCases) { placement in
+                        Text(placement.title).tag(placement)
+                    }
+                }
+                Group {
+                    if newAppPlacement == .categoryFolder {
+                        Text("New apps have a blue dot until you open them from SuperLaunchpad. An app goes at the end when no folder is named after its category.")
+                    } else {
+                        Text("New apps have a blue dot until you open them from SuperLaunchpad.")
+                    }
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
 
             Section("Keyboard") {

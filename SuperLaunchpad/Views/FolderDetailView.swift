@@ -306,8 +306,7 @@ private struct FolderAppIconView: View {
                     .removeAppBadge(app, iconSize: iconSize)
                     .hideAppBadge(app, iconSize: iconSize)
 
-                Text(app.displayName)
-                    .font(.system(size: labelFont))
+                Text.launcherLabel(app.displayName, isNew: app.isNew, fontSize: labelFont)
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
@@ -330,6 +329,7 @@ private struct FolderAppIconView: View {
             onActivate: onTap
         )
         .appContextMenu(app)
+        .newAppAccessibilityValue(app.isNew)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("folder-app-icon")
     }

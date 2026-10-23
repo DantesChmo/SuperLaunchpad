@@ -9,6 +9,11 @@ struct AppSetting: Identifiable, Equatable {
         // edited the layout. From then on a rescan never re-imports them, so a
         // folder the user dissolved stays dissolved.
         case folderImportDone
+        // Set once every app on disk has a row. From then on an app a rescan
+        // finds without a row was just installed and is marked new. Unset after
+        // a first import that skipped apps: the next rescan adds those apps
+        // without the mark, then sets it.
+        case newAppTracking
     }
 
     var key: String

@@ -7,11 +7,13 @@ struct Preferences {
         static let pinchGestureEnabled = "pinchGestureEnabled"
         static let hotKeyCode = "hotKeyCode"
         static let hotKeyModifiers = "hotKeyModifiers"
+        static let newAppPlacement = "newAppPlacement"
     }
 
     enum Default {
         static let pinchGestureEnabled = true
         static let hotKey = KeyCombo.default
+        static let newAppPlacement = NewAppPlacement.end
     }
 
     private let defaults: UserDefaults
@@ -22,6 +24,7 @@ struct Preferences {
             Key.pinchGestureEnabled: Default.pinchGestureEnabled,
             Key.hotKeyCode: Int(Default.hotKey.keyCode),
             Key.hotKeyModifiers: Int(Default.hotKey.modifiers),
+            Key.newAppPlacement: Default.newAppPlacement.rawValue,
         ])
     }
 
@@ -43,5 +46,13 @@ struct Preferences {
             defaults.set(newValue.map { Int($0.modifiers) } ?? 0, forKey: Key.hotKeyModifiers)
             defaults.set(newValue.map { Int($0.keyCode) } ?? HotKey.noKeyCode, forKey: Key.hotKeyCode)
         }
+    }
+
+    var newAppPlacement: NewAppPlacement {
+        get {
+            defaults.string(forKey: Key.newAppPlacement).flatMap(NewAppPlacement.init(rawValue:))
+                ?? Default.newAppPlacement
+        }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: Key.newAppPlacement) }
     }
 }

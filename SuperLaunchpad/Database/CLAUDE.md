@@ -6,13 +6,17 @@ Single GRDB-backed SQLite at `~/Library/Application Support/com.dantes.SuperLaun
 
 Versions are `"v1"`, `"v2"`, `"v3"`, … Add a new `"vN+1"` block to `migrate()` in `AppDatabase.swift`. **Never edit a shipped migration**, never `DROP TABLE`. Use `.add(column:)` / `.create(table:)` only.
 
-Current schema (after v5):
+Current schema (after v6):
 
-- `appEntry` — PK `bundleIdentifier`. Cols: `displayName`, `appPath`, `iconData`, `pageIndex?`, `orderIndex?`, `folderID?` (FK → `folderEntry.id`, `.setNull` on delete), `folderOrderIndex?`, `isHidden` (v5, not null, default false; a hidden app has all four position columns nil).
+- `appEntry` — PK `bundleIdentifier`. Cols: `displayName`, `appPath`, `iconData`, `pageIndex?`, `orderIndex?`, `folderID?` (FK → `folderEntry.id`, `.setNull` on delete), `folderOrderIndex?`, `isHidden` (v5, not null, default false; a hidden app has all four position columns nil), `isNew` (v6, not null, default false).
 - `folderEntry` — PK `id` (UUID string, generated in code), `title`, `pageIndex`, `orderIndex`.
 - `appSetting` — PK `key` (`AppSetting.Key` raw value), `value`. Read/write via `setting(_:)` / `setSetting(_:_:)`.
 
 `AppSetting.Key.folderImportDone`: set once the system Launchpad folders were imported (rescan with a system layout), by any `saveLayout`, or backfilled by v4 when apps already sit in folders. While it is set, `mergeNewApps` never re-imports system folders — otherwise dissolving the last folder would bring them back on the next rescan.
+
+`AppSetting.Key.newAppTracking`: set once every app on disk has a row (backfilled by v6 for an existing layout). Only then does a rescan mark apps without a row `isNew`. `clearNew(bundleIdentifier:)` clears the flag on launch.
+
+Migration tests that fill an older schema must insert only that schema's columns (raw `INSERT`): `AppEntry.insert` writes every current column.
 
 `AppDatabase.migrator` is exposed so tests can `migrate(_:upTo:)` an older version and check what a later migration does to existing rows.
 

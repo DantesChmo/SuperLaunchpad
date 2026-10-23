@@ -39,4 +39,21 @@ struct PreferencesTests {
 
         #expect(preferences.pinchGestureEnabled == false)
     }
+
+    @Test func newAppPlacementDefaultsToEndAndRoundTrips() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        #expect(Preferences(defaults: defaults).newAppPlacement == .end)
+        Preferences(defaults: defaults).newAppPlacement = .newFolder
+        #expect(Preferences(defaults: defaults).newAppPlacement == .newFolder)
+    }
+
+    @Test func unknownNewAppPlacementFallsBackToDefault() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("somewhere", forKey: Preferences.Key.newAppPlacement)
+
+        #expect(Preferences(defaults: defaults).newAppPlacement == Preferences.Default.newAppPlacement)
+    }
 }

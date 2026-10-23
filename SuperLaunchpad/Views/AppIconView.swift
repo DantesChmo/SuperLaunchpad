@@ -56,6 +56,7 @@ struct AppIconView: View {
             onActivate: onTap
         )
         .appContextMenu(app)
+        .newAppAccessibilityValue(app.isNew)
         .accessibilityIdentifier("app-icon")
         // `GridItemContainer` is a `VStack` + `onTapGesture`, not a `Button`,
         // so XCUI's `app.buttons` query wouldn't match it without this trait.
@@ -64,8 +65,9 @@ struct AppIconView: View {
     }
 
     private var nameText: Text {
-        guard app.isHidden else { return Text(app.displayName) }
-        return Text("\(Image(systemName: "eye.slash")) \(app.displayName)")
+        let label = Text.launcherLabel(app.displayName, isNew: app.isNew, fontSize: metrics.labelFont)
+        guard app.isHidden else { return label }
+        return Text("\(Image(systemName: "eye.slash")) \(label)")
     }
 
     // `@ViewBuilder` lets us return different concrete view types from the

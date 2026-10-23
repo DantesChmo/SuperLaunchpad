@@ -78,6 +78,15 @@ enum Search {
     static let resultsTransition: Double = 0.12
 }
 
+// The blue dot in front of a new app's label.
+enum NewAppDot {
+    // Its font size as a share of the label's.
+    static let sizeRatio: CGFloat = 0.5
+    // Height of a capital letter's middle above the baseline, as a share of
+    // the font size: the dot is raised to the middle of the label's capitals.
+    static let capMiddleRatio: CGFloat = 0.35
+}
+
 enum SettingsWindow {
     static let width: CGFloat = 420
     static let hiddenAppIconSize: CGFloat = 20

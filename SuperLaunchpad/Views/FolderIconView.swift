@@ -19,8 +19,8 @@ struct FolderIconView: View {
             folderIcon
                 .frame(width: metrics.iconSize, height: metrics.iconSize)
         } label: {
-            Text(folder.title)
-                .font(.system(size: metrics.labelFont))
+            // The dot tells a new app went into this folder.
+            Text.launcherLabel(folder.title, isNew: apps.contains(where: \.isNew), fontSize: metrics.labelFont)
                 .foregroundStyle(.white)
                 .launcherLabelShadow()
                 .lineLimit(2)
@@ -35,6 +35,7 @@ struct FolderIconView: View {
             onActivate: onTap
         )
         .folderContextMenu(folder)
+        .newAppAccessibilityValue(apps.contains(where: \.isNew))
         .accessibilityIdentifier("folder-icon")
         .accessibilityAddTraits(.isButton)
     }
