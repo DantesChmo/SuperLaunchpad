@@ -3,6 +3,7 @@ import SwiftUI
 // Asks before an app goes to the Trash, or says why it can't. Drawn inside
 // the launcher: an `NSAlert` would open below its `.screenSaver`-level panel.
 // Escape and Return reach the view model through the panel's key monitor.
+// A group (multi-select) gets one dialog with its icons side by side.
 struct AppRemovalDialog: View {
     let removal: RemovalModel.PendingRemoval
     let onConfirm: () -> Void
@@ -17,13 +18,17 @@ struct AppRemovalDialog: View {
                 .accessibilityHidden(true)
 
             VStack(spacing: Uninstall.dialogSpacing) {
-                if let icon = IconCache.shared.image(for: removal.app) {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: Uninstall.dialogIconSize, height: Uninstall.dialogIconSize)
-                        .accessibilityHidden(true)
+                HStack(spacing: -Uninstall.dialogIconSize * Uninstall.groupIconOverlap) {
+                    ForEach(removal.apps.prefix(Uninstall.groupIconCount)) { app in
+                        if let icon = IconCache.shared.image(for: app) {
+                            Image(nsImage: icon)
+                                .resizable()
+                                .interpolation(.high)
+                                .frame(width: Uninstall.dialogIconSize, height: Uninstall.dialogIconSize)
+                        }
+                    }
                 }
+                .accessibilityHidden(true)
                 Text(title)
                     .font(.headline)
                     .multilineTextAlignment(.center)
@@ -84,7 +89,10 @@ struct AppRemovalDialog: View {
     }
 
     private var title: String {
-        switch removal.stage {
+        if removal.isGroup, let groupTitle {
+            return groupTitle
+        }
+        return switch removal.stage {
         case .confirm:
             String(localized: "Move “\(name)” to the Trash?")
         case .appIsOpen:
@@ -98,10 +106,53 @@ struct AppRemovalDialog: View {
         }
     }
 
-    private var message: String? {
+    // A group's title, for the stages that name the apps; a failure names
+    // the one app that failed.
+    private var groupTitle: String? {
+        let count = removal.apps.count
+        return switch removal.stage {
+        case .confirm: String(localized: "Move \(count) apps to the Trash?")
+        case .appIsOpen: String(localized: "Some of these apps are open")
+        case .quitting: String(localized: "Quitting apps…")
+        case .didNotQuit: String(localized: "Not every app quit")
+        case .failed: nil
+        }
+    }
+
+    private var groupMessage: String? {
         switch removal.stage {
         case .confirm:
+            [names, skippedNote].compactMap { $0 }.joined(separator: "\n")
+        case .appIsOpen:
+            [String(localized: "Quit them and move all \(removal.apps.count) to the Trash?"), skippedNote].compactMap { $0 }.joined(separator: "\n")
+        case .quitting:
             nil
+        case .didNotQuit:
+            String(localized: "One may be asking to save changes. Quit it yourself, then try again.")
+        case .failed:
+            nil
+        }
+    }
+
+    private var names: String {
+        ListFormatter.localizedString(byJoining: removal.apps.map(\.displayName))
+    }
+
+    private var skippedNote: String? {
+        switch removal.skippedCount {
+        case 0: nil
+        case 1: String(localized: "1 app that is part of macOS stays.")
+        default: String(localized: "\(removal.skippedCount) apps that are part of macOS stay.")
+        }
+    }
+
+    private var message: String? {
+        if removal.isGroup, !isFailure {
+            return groupMessage
+        }
+        return switch removal.stage {
+        case .confirm:
+            skippedNote
         case .appIsOpen:
             String(localized: "Quit it and move it to the Trash?")
         case .quitting:
@@ -115,5 +166,10 @@ struct AppRemovalDialog: View {
         case .failed(.cancelled):
             nil
         }
+    }
+
+    private var isFailure: Bool {
+        if case .failed = removal.stage { return true }
+        return false
     }
 }

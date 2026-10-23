@@ -28,6 +28,10 @@ struct LaunchpadView: View {
         Motion(reduced: reduceMotion)
     }
 
+    private var showsSelectionBar: Bool {
+        viewModel.editing.isEditing && !viewModel.editing.selection.isEmpty
+    }
+
     var body: some View {
         // `GeometryReader` measures the available space; we use it to compute
         // screen-relative `LayoutMetrics`. Inside the panel it equals the
@@ -63,6 +67,19 @@ struct LaunchpadView: View {
                     Spacer().frame(height: metrics.topPadding)
 
                     SearchBarView(search: viewModel.search)
+                        // The group actions take the search field's place
+                        // while apps are selected.
+                        .opacity(showsSelectionBar ? 0 : 1)
+                        .allowsHitTesting(!showsSelectionBar)
+                        .accessibilityHidden(showsSelectionBar)
+                        .overlay {
+                            if showsSelectionBar {
+                                SelectionBar(viewModel: viewModel)
+                                    .fixedSize()
+                                    .transition(.opacity)
+                            }
+                        }
+                        .animation(.easeInOut(duration: Search.resultsTransition), value: showsSelectionBar)
 
                     Spacer().frame(height: metrics.topPadding * 0.5)
 
@@ -125,9 +142,11 @@ struct LaunchpadView: View {
                 // actual icon rects, not the gaps between them.
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    // Click outside any icon → leave edit mode, or hide the
-                    // launcher.
-                    guard !viewModel.editing.exitEditMode() else { return }
+                    // A marquee ends on this click: it already did its job.
+                    guard !drag.isTapSuppressed else { return }
+                    // Click outside any icon → drop the selection, leave edit
+                    // mode, or hide the launcher.
+                    guard !viewModel.editing.clearSelection(), !viewModel.editing.exitEditMode() else { return }
                     NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                 }
 
@@ -218,6 +237,7 @@ struct LaunchpadView: View {
             .animation(.easeInOut(duration: Uninstall.dialogAnimation), value: viewModel.removal.pendingRemoval != nil)
             // Below the drag modifier, so the lifted icon doesn't wiggle.
             .environment(\.isEditing, viewModel.editing.isEditing)
+            .environment(\.selectedAppIDs, viewModel.editing.selection)
             .environment(\.enterEditMode, EnterEditModeAction(viewModel: viewModel))
             .environment(\.removeApp, RemoveAppAction(viewModel: viewModel))
             .environment(\.itemMenu, ItemMenuAction(viewModel: viewModel))
@@ -264,6 +284,11 @@ struct LaunchpadView: View {
             }
             .onChange(of: viewModel.editing.isEditing) { _, editing in
                 AccessibilityNotification.Announcement(editing ? "Editing" : "Done editing").post()
+            }
+            .onChange(of: viewModel.editing.selection.count) { _, count in
+                // Leaving edit mode says so itself.
+                guard viewModel.editing.isEditing else { return }
+                AccessibilityNotification.Announcement(count == 0 ? "Selection cleared" : "\(count) selected").post()
             }
             // React to programmatic folder dismissals (e.g. Escape key handled
             // in `LaunchpadPanel.keyDown`). The animations below mirror what
@@ -332,7 +357,7 @@ struct LaunchpadView: View {
         guard let session = drag.session, session.isInFolder, session.sourceFolderID == displayedFolder?.id else {
             return displayedFolderApps
         }
-        return session.preview(displayedFolderApps)
+        return session.preview(session.lifting(displayedFolderApps))
     }
 
     private func closeFolder() {

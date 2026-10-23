@@ -19,6 +19,10 @@ import SwiftUI
 //
 // Slots are computed for the page the pager settles on (`session.page`), not
 // for the mid-flight position, so a target stays put while the pages slide.
+//
+// A group drag (multi-select) lifts the selected apps with the one grabbed;
+// every page and folder list below is read without them (`lifting`). In
+// edit mode a press outside any icon draws a marquee instead.
 @MainActor
 @Observable
 final class GridDragController {
@@ -56,6 +60,10 @@ final class GridDragController {
     // The lifted icon's center, in root coordinates.
     private(set) var location: CGPoint = .zero
     private(set) var liftedItem: LaunchpadItem?
+    // The selected apps a group drag carries under the lifted icon.
+    private(set) var liftedCompanions: [AppEntry] = []
+    // The rubber band being drawn, in root coordinates.
+    private(set) var marquee: CGRect?
 
     // A click on an icon that turned into a drag must not also launch it or
     // open its folder. Stays set until just after the drag ends.
@@ -95,6 +103,8 @@ final class GridDragController {
         // Esc; ignore the rest of it.
         case ignored
         case dragging
+        // Drawing a marquee from an empty spot in edit mode.
+        case marquee
     }
 
     var isActive: Bool { session != nil }
@@ -103,6 +113,9 @@ final class GridDragController {
 
     // Feeds one `DragGesture` change, in root coordinates. `folder` is the
     // open folder, if any: while one is open only its apps can be lifted.
+    // `companions` gives the apps a lift of the given app carries along (the
+    // rest of the selection). With `marquee` set, a press on the grid
+    // outside any icon draws a band and reports the apps under it.
     // Returns true when this update lifted an icon.
     @discardableResult
     func update(
@@ -111,7 +124,9 @@ final class GridDragController {
         grid: GridContext?,
         folder: FolderContext? = nil,
         flipPage: @escaping (Int) -> Int?,
-        leaveFolder: @escaping () -> Void = {}
+        leaveFolder: @escaping () -> Void = {},
+        companions: (String) -> [AppEntry] = { _ in [] },
+        marquee report: ((Set<String>) -> Void)? = nil
     ) -> Bool {
         self.grid = grid
         // Keep the last folder seen while the drag is in it, for the landing.
@@ -123,15 +138,27 @@ final class GridDragController {
         switch phase {
         case .ignored:
             return false
+        case .marquee:
+            if let report {
+                updateMarquee(start: start, pointer: pointer, report: report)
+            }
+            return false
         case .idle:
             // A drop is still flying home: don't start a second drag on top.
-            guard session == nil, let lifted = lift(at: start) else {
-                phase = .ignored
+            guard session == nil, let lifted = lift(at: start, companions: companions) else {
+                if session == nil, let report, folder == nil, let grid, grid.frame.contains(start) {
+                    phase = .marquee
+                    isTapSuppressed = true
+                    updateMarquee(start: start, pointer: pointer, report: report)
+                } else {
+                    phase = .ignored
+                }
                 return false
             }
             phase = .dragging
             isTapSuppressed = true
             liftedItem = lifted.item
+            liftedCompanions = lifted.companions
             session = lifted.session
             move(to: pointer)
             return true
@@ -193,27 +220,34 @@ final class GridDragController {
         cancelTimers()
         session = nil
         liftedItem = nil
+        liftedCompanions = []
         finishGesture()
     }
 
     // MARK: - Private
 
-    private func lift(at start: CGPoint) -> (item: LaunchpadItem, session: DragSession)? {
+    private func lift(
+        at start: CGPoint,
+        companions: (String) -> [AppEntry]
+    ) -> (item: LaunchpadItem, companions: [AppEntry], session: DragSession)? {
         if let folder {
             guard folder.frames.card.contains(start) else { return nil }
             let first = folder.page * FolderGrid.appsPerPage
             let local = start - folder.frames.grid.origin
-            guard let slot = folder.geometry.item(at: local, itemCount: folderPageCount(folder)),
+            guard let slot = folder.geometry.item(at: local, itemCount: folderPageCount(folder, appCount: folder.apps.count)),
                   folder.apps.indices.contains(first + slot) else { return nil }
             let app = folder.apps[first + slot]
+            let group = companions(app.id)
+            let companionIDs = Set(group.map(\.id))
             let cell = folder.geometry.cellFrame(slot: slot)
             let session = DragSession(
                 appID: app.id,
                 folderID: folder.folderID,
-                index: first + slot,
-                grabOffset: CGSize(width: local.x - cell.midX, height: local.y - cell.midY)
+                index: folder.apps.filter { !companionIDs.contains($0.id) }.firstIndex { $0.id == app.id } ?? first + slot,
+                grabOffset: CGSize(width: local.x - cell.midX, height: local.y - cell.midY),
+                companionIDs: group.map(\.id)
             )
-            return (.app(app), session)
+            return (.app(app), group, session)
         }
         guard let grid, grid.pages.indices.contains(grid.page) else { return nil }
         let local = GridGeometry.pageLocal(
@@ -224,15 +258,49 @@ final class GridDragController {
         )
         guard let slot = grid.geometry.item(at: local, itemCount: grid.pages[grid.page].count) else { return nil }
         let item = grid.pages[grid.page][slot]
+        let group: [AppEntry]
+        if case .app = item {
+            group = companions(item.id)
+        } else {
+            group = []
+        }
+        let companionIDs = Set(group.map(\.id))
         let cell = grid.geometry.cellFrame(slot: slot)
         let session = DragSession(
             itemID: item.id,
             item: item.layoutItem,
             page: grid.page,
-            slot: slot,
-            grabOffset: CGSize(width: local.x - cell.midX, height: local.y - cell.midY)
+            slot: grid.pages[grid.page].filter { !companionIDs.contains($0.id) }.firstIndex { $0.id == item.id } ?? slot,
+            grabOffset: CGSize(width: local.x - cell.midX, height: local.y - cell.midY),
+            companionIDs: group.map(\.id)
         )
-        return (item, session)
+        return (item, group, session)
+    }
+
+    // The band from `start` to `pointer`, and the apps on the shown page
+    // whose icon + label box it touches.
+    private func updateMarquee(start: CGPoint, pointer: CGPoint, report: (Set<String>) -> Void) {
+        let rect = GridGeometry.marqueeRect(from: start, to: pointer)
+        marquee = rect
+        guard let grid, grid.pages.indices.contains(grid.page) else { return }
+        let origin = GridGeometry.pageLocal(
+            CGPoint(x: rect.minX, y: rect.minY) - grid.frame.origin,
+            page: grid.page,
+            pagerPosition: grid.pagerPosition,
+            pageWidth: grid.frame.width
+        )
+        let local = CGRect(origin: origin, size: rect.size)
+        let items = grid.pages[grid.page]
+        let hits = grid.geometry.slots(intersecting: local, itemCount: items.count).compactMap { slot -> String? in
+            guard case .app(let app) = items[slot] else { return nil }
+            return app.id
+        }
+        report(Set(hits))
+    }
+
+    // Page `index` as a session's slots count it: without its companions.
+    private func items(onPage index: Int, of grid: GridContext, for session: DragSession) -> [LaunchpadItem] {
+        grid.pages.indices.contains(index) ? session.lifting(grid.pages[index]) : []
     }
 
     private func move(to pointer: CGPoint) {
@@ -319,7 +387,7 @@ final class GridDragController {
     private func mergeTarget(for center: CGPoint, session: DragSession) -> String? {
         guard case .app = session.item, let grid, let lifted = liftedItem,
               grid.pages.indices.contains(session.page) || session.insertsItem else { return nil }
-        let items = grid.pages.indices.contains(session.page) ? grid.pages[session.page] : []
+        let items = self.items(onPage: session.page, of: grid, for: session)
         let shown = session.preview(items, page: session.page, moved: lifted, capacity: grid.geometry.capacity)
         guard let slot = grid.geometry.mergeSlot(at: center - grid.frame.origin, itemCount: shown.count) else { return nil }
         let target = shown[slot].id
@@ -336,14 +404,14 @@ final class GridDragController {
         folder = nil
         leaveFolder()
         let tile = session.sourceFolderID.flatMap { folderID in
-            grid.pages.enumerated().lazy.compactMap { page, items in
-                items.firstIndex { $0.id == folderID }.map { (page: page, slot: $0) }
+            grid.pages.indices.lazy.compactMap { page in
+                self.items(onPage: page, of: grid, for: session).firstIndex { $0.id == folderID }.map { (page: page, slot: $0) }
             }.first
         }
         let page = grid.page
         session.leaveFolder(
             tilePage: tile?.page ?? page,
-            tileSlot: tile?.slot ?? (grid.pages.indices.contains(page) ? grid.pages[page].count : 0),
+            tileSlot: tile?.slot ?? items(onPage: page, of: grid, for: session).count,
             page: page,
             slot: 0
         )
@@ -393,7 +461,7 @@ final class GridDragController {
     // carried to, the slot past the last item is a target too.
     private func dropSlot(for center: CGPoint, session: DragSession) -> Int? {
         guard let grid else { return nil }
-        let count = grid.pages.indices.contains(session.page) ? grid.pages[session.page].count : 0
+        let count = items(onPage: session.page, of: grid, for: session).count
         return grid.geometry.dropSlot(at: center - grid.frame.origin, itemCount: session.insertsItem ? count + 1 : count)
     }
 
@@ -401,14 +469,15 @@ final class GridDragController {
     // page shown.
     private func folderSlot(for center: CGPoint) -> Int? {
         guard let folder else { return nil }
-        let count = folderPageCount(folder)
+        let count = folderPageCount(folder, appCount: session.map { $0.lifting(folder.apps).count } ?? folder.apps.count)
         guard count > 0 else { return nil }
         let slot = folder.geometry.dropSlot(at: center - folder.frames.grid.origin, itemCount: count)
         return folder.page * FolderGrid.appsPerPage + slot
     }
 
-    private func folderPageCount(_ folder: FolderContext) -> Int {
-        min(max(folder.apps.count - folder.page * FolderGrid.appsPerPage, 0), FolderGrid.appsPerPage)
+    // Apps on the folder page shown, out of `appCount` in the folder.
+    private func folderPageCount(_ folder: FolderContext, appCount: Int) -> Int {
+        min(max(appCount - folder.page * FolderGrid.appsPerPage, 0), FolderGrid.appsPerPage)
     }
 
     // A grid drag whose item is no longer where it started (a rescan moved
@@ -416,9 +485,8 @@ final class GridDragController {
     private func isValid(_ session: DragSession) -> Bool {
         guard session.sourceFolderID == nil else { return true }
         guard let grid else { return false }
-        return grid.pages.indices.contains(session.sourcePage)
-            && grid.pages[session.sourcePage].indices.contains(session.sourceSlot)
-            && grid.pages[session.sourcePage][session.sourceSlot].id == session.itemID
+        let items = self.items(onPage: session.sourcePage, of: grid, for: session)
+        return items.indices.contains(session.sourceSlot) && items[session.sourceSlot].id == session.itemID
     }
 
     // Flies the lifted icon into its cell (shrinking into a merge target),
@@ -439,11 +507,15 @@ final class GridDragController {
             guard let self, self.session?.isDropping == true else { return }
             self.session = nil
             self.liftedItem = nil
+            self.liftedCompanions = []
         }
     }
 
     private func finishGesture() {
         phase = .idle
+        if marquee != nil {
+            marquee = nil
+        }
         cancelTimers()
         guard isTapSuppressed else { return }
         // The icon's tap handler runs on the same mouse-up; clear the flag

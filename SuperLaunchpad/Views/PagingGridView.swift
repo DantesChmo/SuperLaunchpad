@@ -104,7 +104,7 @@ struct PagingGridView: View {
 
     private func previewItems(_ items: [LaunchpadItem], index: Int) -> [LaunchpadItem] {
         guard let session = drag.session, let lifted = drag.liftedItem else { return items }
-        return session.preview(items, page: index, moved: lifted, capacity: Grid.appsPerPage)
+        return session.preview(session.lifting(items), page: index, moved: lifted, capacity: Grid.appsPerPage)
     }
 }
 

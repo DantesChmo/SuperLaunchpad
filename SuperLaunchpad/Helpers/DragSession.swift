@@ -17,9 +17,17 @@ import Foundation
 //
 // Resting the lifted app on the middle of another icon sets
 // `mergeTargetID`; a drop then merges into that icon instead of inserting.
+//
+// A group drag (multi-select) lifts the lead `itemID` with `companionIDs`.
+// The companions leave every page and the folder while lifted: all slots
+// count in the lists without them (`lifting(_:)`), so the math above is
+// the single-drag math, and the drop puts the companions after the lead.
 struct DragSession: Equatable {
     let itemID: String
     let item: GridLayout.Item
+    // The other selected apps carried along, in layout order.
+    let companionIDs: [String]
+    private let companionSet: Set<String>
     // The page the item sits on in the view model.
     private(set) var sourcePage: Int
     // Where the item sits on `sourcePage`.
@@ -44,9 +52,11 @@ struct DragSession: Equatable {
     // folder tile, and no page shows it inserted any more.
     private(set) var isReturningToFolder = false
 
-    init(itemID: String, item: GridLayout.Item, page: Int, slot: Int, grabOffset: CGSize) {
+    init(itemID: String, item: GridLayout.Item, page: Int, slot: Int, grabOffset: CGSize, companionIDs: [String] = []) {
         self.itemID = itemID
         self.item = item
+        self.companionIDs = companionIDs
+        companionSet = Set(companionIDs)
         sourcePage = page
         sourceSlot = slot
         self.page = page
@@ -55,14 +65,24 @@ struct DragSession: Equatable {
     }
 
     // An app lifted at `index` of the open folder `folderID`.
-    init(appID: String, folderID: String, index: Int, grabOffset: CGSize) {
-        self.init(itemID: appID, item: .app(appID), page: 0, slot: index, grabOffset: grabOffset)
+    init(appID: String, folderID: String, index: Int, grabOffset: CGSize, companionIDs: [String] = []) {
+        self.init(itemID: appID, item: .app(appID), page: 0, slot: index, grabOffset: grabOffset, companionIDs: companionIDs)
         sourceFolderID = folderID
         isInFolder = true
     }
 
-    // Any drop of an app taken out of its folder changes the layout.
-    var hasMoved: Bool { page != sourcePage || targetSlot != sourceSlot || isOutOfFolder }
+    // Any drop of an app taken out of its folder changes the layout, and so
+    // does any group drop (the companions gather after the lead).
+    var hasMoved: Bool { page != sourcePage || targetSlot != sourceSlot || isOutOfFolder || isGroup }
+
+    var isGroup: Bool { !companionIDs.isEmpty }
+
+    // `items` without the companions: what the pages and the folder show
+    // under a group drag, and what its slots count in.
+    func lifting<Element: Identifiable>(_ items: [Element]) -> [Element] where Element.ID == String {
+        guard isGroup else { return items }
+        return items.filter { !companionSet.contains($0.id) }
+    }
 
     var isOutOfFolder: Bool { sourceFolderID != nil && !isInFolder }
 

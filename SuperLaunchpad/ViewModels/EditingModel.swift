@@ -59,6 +59,82 @@ final class EditingModel {
     private func updateEditing() {
         let editing = isEditingSticky || isOptionHeld
         if isEditing != editing { isEditing = editing }
+        if !editing {
+            clearSelection()
+            marqueeBase = nil
+        }
+    }
+
+    // MARK: - Selection
+    //
+    // Apps checked in edit mode (see AGENTS.md → "Multi-select"): visible apps
+    // on the grid or in a folder, never folders or hidden apps. Clicks toggle,
+    // a marquee adds (or toggles with ⌘/⇧); leaving edit mode clears it.
+
+    private(set) var selection: Set<String> = []
+    // The selection when the current marquee started.
+    @ObservationIgnored private var marqueeBase: Set<String>?
+
+    // Returns false when the app can't be selected (not in edit mode, not
+    // shown on the grid or in a folder).
+    @discardableResult
+    func toggleSelection(_ appID: String) -> Bool {
+        guard isEditing, isSelectable(appID) else { return false }
+        if selection.contains(appID) {
+            selection.remove(appID)
+        } else {
+            selection.insert(appID)
+        }
+        return true
+    }
+
+    // Returns false when nothing was selected.
+    @discardableResult
+    func clearSelection() -> Bool {
+        guard !selection.isEmpty else { return false }
+        selection = []
+        return true
+    }
+
+    // One marquee sample: `hits` are the apps under the band now. The first
+    // sample remembers the selection it started from; the band adds to it,
+    // or flips its apps when `toggling`.
+    func updateMarquee(hits: Set<String>, toggling: Bool) {
+        guard isEditing else { return }
+        let base = marqueeBase ?? selection
+        marqueeBase = base
+        let hits = hits.filter(isSelectable)
+        let updated = toggling ? base.symmetricDifference(hits) : base.union(hits)
+        if updated != selection { selection = updated }
+    }
+
+    func endMarquee() {
+        marqueeBase = nil
+    }
+
+    // The selection in layout order (see `GridLayout.ordered`).
+    var orderedSelection: [String] {
+        GridLayout(apps: launchpad.apps, folders: launchpad.folders).ordered(selection)
+    }
+
+    // The apps a drag lifting `appID` carries along: the rest of the
+    // selection in layout order, when `appID` is selected with others.
+    func dragCompanions(for appID: String) -> [AppEntry] {
+        guard selection.contains(appID), selection.count > 1 else { return [] }
+        let byID = Dictionary(launchpad.apps.map { ($0.bundleIdentifier, $0) }) { first, _ in first }
+        return orderedSelection.filter { $0 != appID }.compactMap { byID[$0] }
+    }
+
+    // Called by the coordinator after `apps`/`folders` change: apps that left
+    // the layout (hidden, trashed, uninstalled) leave the selection.
+    func contentsDidChange() {
+        guard !selection.isEmpty else { return }
+        let kept = selection.filter(isSelectable)
+        if kept != selection { selection = kept }
+    }
+
+    private func isSelectable(_ appID: String) -> Bool {
+        launchpad.apps.contains { $0.bundleIdentifier == appID && !$0.isHidden }
     }
 
     // MARK: - Drag session
@@ -120,6 +196,7 @@ final class EditingModel {
     // take an app out of its folder, or move an item on the grid. Returns
     // nil (and changes nothing) when the edit is not possible.
     func commitDrop(_ session: DragSession) -> DropOutcome? {
+        guard session.companionIDs.isEmpty else { return commitGroupDrop(session) }
         if session.isInFolder, let folderID = session.sourceFolderID {
             guard addApp(session.itemID, toFolder: folderID, at: session.targetSlot),
                   let index = launchpad.folderApps(folderID).firstIndex(where: { $0.id == session.itemID }) else { return nil }
@@ -145,6 +222,63 @@ final class EditingModel {
             guard moveItem(session.item, toPage: session.page, slot: session.targetSlot) else { return nil }
         }
         return launchpad.gridLocation(of: session.itemID).map { DropOutcome(page: $0.page, slot: $0.slot) }
+    }
+
+    // A group drag: the lead, then its companions, land together — in the
+    // open folder, into the folder or app under them, or consecutively on
+    // the grid. The selection is spent.
+    private func commitGroupDrop(_ session: DragSession) -> DropOutcome? {
+        let group = [session.itemID] + session.companionIDs
+        let outcome: DropOutcome?
+        if session.isInFolder, let folderID = session.sourceFolderID {
+            guard launchpad.applyEdit({ $0.addGroup(group, toFolder: folderID, at: session.targetSlot) }),
+                  let index = launchpad.folderApps(folderID).firstIndex(where: { $0.id == session.itemID }) else { return nil }
+            outcome = DropOutcome(page: 0, slot: index)
+        } else if let targetID = session.mergeTargetID {
+            if launchpad.folders.contains(where: { $0.id == targetID }) {
+                guard launchpad.applyEdit({ $0.addGroup(group, toFolder: targetID) }) else { return nil }
+                outcome = launchpad.gridLocation(of: targetID).map { DropOutcome(page: $0.page, slot: $0.slot) }
+            } else {
+                guard let target = launchpad.apps.first(where: { $0.bundleIdentifier == targetID }) else { return nil }
+                let folderID = UUID().uuidString
+                let title = AppCategoryTitle.folderTitle(forAppAt: target.appPath, fallback: Self.defaultFolderTitle)
+                guard launchpad.applyEdit({ $0.mergeGroup(group, onto: targetID, folderID: folderID, title: title) }),
+                      let location = launchpad.gridLocation(of: folderID) else { return nil }
+                outcome = DropOutcome(page: location.page, slot: location.slot, createdFolderID: folderID)
+            }
+        } else {
+            guard launchpad.applyEdit({ $0.moveGroup(group, toPage: session.page, slot: session.targetSlot) }) else { return nil }
+            outcome = launchpad.gridLocation(of: session.itemID).map { DropOutcome(page: $0.page, slot: $0.slot) }
+        }
+        clearSelection()
+        return outcome
+    }
+
+    // MARK: - Group actions
+    //
+    // What the selection bar does with the selected apps, each one
+    // `applyEdit`. The selection is spent.
+
+    // The new folder (titled after the first app's category) opens in rename
+    // mode. Returns its ID.
+    @discardableResult
+    func makeFolderFromSelection() -> String? {
+        let group = orderedSelection
+        guard let first = group.first.flatMap({ id in launchpad.apps.first { $0.bundleIdentifier == id } }) else { return nil }
+        let folderID = UUID().uuidString
+        let title = AppCategoryTitle.folderTitle(forAppAt: first.appPath, fallback: Self.defaultFolderTitle)
+        guard launchpad.applyEdit({ $0.makeFolder(group, folderID: folderID, title: title) }) else { return nil }
+        clearSelection()
+        launchpad.requestFolderOpen(folderID, renaming: true)
+        return folderID
+    }
+
+    @discardableResult
+    func hideSelection() -> Bool {
+        let group = orderedSelection
+        guard hideApps(group) else { return false }
+        clearSelection()
+        return true
     }
 
     // MARK: - Layout edits
@@ -236,14 +370,26 @@ final class EditingModel {
 
     @discardableResult
     func hideApp(_ appID: String) -> Bool {
-        guard launchpad.apps.contains(where: { $0.bundleIdentifier == appID && !$0.isHidden }) else { return false }
-        return launchpad.applyEdit({ $0.delete(appID) }, updateApps: { apps in
-            guard let index = apps.firstIndex(where: { $0.bundleIdentifier == appID }) else { return }
-            apps[index].isHidden = true
-            apps[index].pageIndex = nil
-            apps[index].orderIndex = nil
-            apps[index].folderID = nil
-            apps[index].folderOrderIndex = nil
+        hideApps([appID])
+    }
+
+    // All in one edit; false (and nothing hidden) if one of them is unknown
+    // or already hidden.
+    @discardableResult
+    func hideApps(_ appIDs: [String]) -> Bool {
+        let ids = Set(appIDs)
+        guard !ids.isEmpty,
+              ids.allSatisfy({ id in launchpad.apps.contains { $0.bundleIdentifier == id && !$0.isHidden } }) else { return false }
+        return launchpad.applyEdit({ layout in
+            ids.allSatisfy { layout.delete($0) }
+        }, updateApps: { apps in
+            for index in apps.indices where ids.contains(apps[index].bundleIdentifier) {
+                apps[index].isHidden = true
+                apps[index].pageIndex = nil
+                apps[index].orderIndex = nil
+                apps[index].folderID = nil
+                apps[index].folderOrderIndex = nil
+            }
         })
     }
 

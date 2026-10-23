@@ -7,6 +7,9 @@ import SwiftUI
 //
 // Also draws the lifted icon above everything (folder popup included) and
 // ends the drag when the launcher hides, a search starts, or Esc is pressed.
+// In edit mode it lifts the whole selection with a selected app, and a press
+// outside any icon draws a marquee that selects (see AGENTS.md →
+// "Multi-select").
 struct LaunchpadDragGesture: ViewModifier {
     let viewModel: LaunchpadViewModel
     let pager: PagerController
@@ -29,6 +32,9 @@ struct LaunchpadDragGesture: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .topLeading) {
+                MarqueeView(drag: drag)
+            }
+            .overlay(alignment: .topLeading) {
                 LiftedItemView(drag: drag, metrics: metrics)
             }
             .environment(\.isGridDragActive, drag.isActive)
@@ -43,6 +49,7 @@ struct LaunchpadDragGesture: ViewModifier {
                     drag.cancel()
                 }
                 viewModel.editing.endDragSession()
+                viewModel.editing.endMarquee()
             }
             .onChange(of: viewModel.isVisible) { _, visible in
                 guard !visible else { return }
@@ -75,7 +82,9 @@ struct LaunchpadDragGesture: ViewModifier {
                     grid: gridContext,
                     folder: folderContext,
                     flipPage: flipPage,
-                    leaveFolder: onLeaveFolder
+                    leaveFolder: onLeaveFolder,
+                    companions: { viewModel.editing.dragCompanions(for: $0) },
+                    marquee: marqueeHandler
                 )
                 if lifted {
                     viewModel.editing.beginDragSession()
@@ -95,6 +104,16 @@ struct LaunchpadDragGesture: ViewModifier {
                     onFolderCreated(createdFolderID)
                 }
             }
+    }
+
+    // A marquee selects only in edit mode; ⌘ or ⇧ makes it toggle.
+    private var marqueeHandler: ((Set<String>) -> Void)? {
+        guard viewModel.editing.isEditing else { return nil }
+        let editing = viewModel.editing
+        return { hits in
+            let toggling = !NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty
+            editing.updateMarquee(hits: hits, toggling: toggling)
+        }
     }
 
     private var gridContext: GridDragController.GridContext? {
@@ -142,9 +161,31 @@ struct LaunchpadDragGesture: ViewModifier {
     }
 }
 
+// The rubber band of a marquee selection.
+private struct MarqueeView: View {
+    let drag: GridDragController
+
+    var body: some View {
+        if let rect = drag.marquee {
+            Rectangle()
+                .fill(.white.opacity(Selection.marqueeFillOpacity))
+                .overlay {
+                    Rectangle()
+                        .strokeBorder(.white.opacity(Selection.marqueeStrokeOpacity), lineWidth: Selection.marqueeLineWidth)
+                }
+                .frame(width: rect.width, height: rect.height)
+                .offset(x: rect.minX, y: rect.minY)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
 // The copy of the dragged icon that follows the pointer, lifted above the
 // launcher with a scale and a shadow. Reads `drag.location`, so only this
-// view re-renders on every mouse move.
+// view re-renders on every mouse move. A group drag stacks up to
+// `Selection.stackDepth` of the other selected apps behind it, with a badge
+// counting them all.
 private struct LiftedItemView: View {
     let drag: GridDragController
     let metrics: LayoutMetrics
@@ -158,7 +199,36 @@ private struct LiftedItemView: View {
             // Over the folder popup it matches the popup's smaller icons.
             let baseScale = drag.session?.isInFolder == true ? FolderGrid.iconScale : 1
             let liftScale = isMerging ? Drag.mergeDropScale : (isLifted && !isDropping ? Drag.liftScale : 1)
+            let companions = drag.liftedCompanions
+            let stacked = Array(companions.prefix(Selection.stackDepth).enumerated().reversed())
+            let icon = iconOffset
             GridCellView(item: item, metrics: metrics, onLaunch: { _ in }, onOpenFolder: { _ in })
+                .background {
+                    // Only the icons stack; their labels would pile up.
+                    ForEach(stacked, id: \.element.id) { index, app in
+                        StackedIcon(app: app, size: metrics.iconSize)
+                            .offset(
+                                x: icon.width + CGFloat(index + 1) * metrics.iconSize * Selection.stackOffsetRatio,
+                                y: icon.height + CGFloat(index + 1) * metrics.iconSize * Selection.stackOffsetRatio
+                            )
+                            .opacity(isDropping ? 0 : 1)
+                    }
+                }
+                .overlay {
+                    if !companions.isEmpty {
+                        Text("\(companions.count + 1)")
+                            .font(.system(size: metrics.labelFont, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, metrics.labelFont * Selection.badgePaddingRatio)
+                            .frame(minWidth: metrics.labelFont * Selection.badgeSizeRatio, minHeight: metrics.labelFont * Selection.badgeSizeRatio)
+                            .background(Capsule().fill(Color.accentColor))
+                            .offset(
+                                x: icon.width + metrics.iconSize / 2,
+                                y: icon.height - metrics.iconSize / 2
+                            )
+                            .opacity(isDropping ? 0 : 1)
+                    }
+                }
                 .scaleEffect(baseScale * liftScale)
                 .opacity(isMerging ? 0 : 1)
                 .shadow(color: .black.opacity(isLifted && !isDropping ? Drag.shadowOpacity : 0), radius: Drag.shadowRadius)
@@ -173,5 +243,36 @@ private struct LiftedItemView: View {
                     isLifted = false
                 }
         }
+    }
+
+    // Where the icon's center sits from the cell's center (above it, by
+    // half the label).
+    private var iconOffset: CGSize {
+        let geometry = GridGeometry(metrics: metrics, pageWidth: metrics.itemWidth * CGFloat(Grid.columns))
+        let cell = geometry.cellFrame(slot: 0)
+        let icon = geometry.iconFrame(slot: 0)
+        return CGSize(width: icon.midX - cell.midX, height: icon.midY - cell.midY)
+    }
+}
+
+// One icon in the stack under a group drag.
+private struct StackedIcon: View {
+    let app: AppEntry
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let image = IconCache.shared.image(for: app) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Image(systemName: "app.fill")
+                    .resizable()
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .frame(width: size, height: size)
     }
 }

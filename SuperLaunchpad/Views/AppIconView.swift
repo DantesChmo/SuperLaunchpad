@@ -33,6 +33,7 @@ struct AppIconView: View {
                 .opacity(app.isHidden ? HiddenApp.iconOpacity : 1)
                 .removeAppBadge(app, iconSize: metrics.iconSize)
                 .hideAppBadge(app, iconSize: metrics.iconSize)
+                .selectionCheckmark(app, iconSize: metrics.iconSize)
                 .runningDot(app)
         } label: {
             nameText
@@ -52,12 +53,13 @@ struct AppIconView: View {
         }
         .launcherItemAccessibility(
             label: app.isHidden ? String(localized: "\(app.displayName), hidden") : app.displayName,
-            // Clicks don't launch in edit mode.
-            hint: isEditing ? String(localized: "Drag to move") : String(localized: "Opens the app"),
+            // Clicks select instead of launching in edit mode.
+            hint: isEditing ? String(localized: "Selects it. Drag to move") : String(localized: "Opens the app"),
             onActivate: onTap
         )
         .appContextMenu(app)
         .newAppAccessibilityValue(app.isNew)
+        .selectionAccessibility(app)
         .accessibilityIdentifier("app-icon")
         // `GridItemContainer` is a `VStack` + `onTapGesture`, not a `Button`,
         // so XCUI's `app.buttons` query wouldn't match it without this trait.

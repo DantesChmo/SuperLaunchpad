@@ -305,6 +305,7 @@ private struct FolderAppIconView: View {
                     .frame(width: iconSize, height: iconSize)
                     .removeAppBadge(app, iconSize: iconSize)
                     .hideAppBadge(app, iconSize: iconSize)
+                    .selectionCheckmark(app, iconSize: iconSize)
                     .runningDot(app)
 
                 Text.launcherLabel(app.displayName, isNew: app.isNew, fontSize: labelFont)
@@ -326,11 +327,12 @@ private struct FolderAppIconView: View {
         }
         .launcherItemAccessibility(
             label: app.displayName,
-            hint: isEditing ? String(localized: "Drag to move") : String(localized: "Opens the app"),
+            hint: isEditing ? String(localized: "Selects it. Drag to move") : String(localized: "Opens the app"),
             onActivate: onTap
         )
         .appContextMenu(app)
         .newAppAccessibilityValue(app.isNew)
+        .selectionAccessibility(app)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("folder-app-icon")
     }

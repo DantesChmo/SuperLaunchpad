@@ -55,6 +55,8 @@ extension EnvironmentValues {
     @Entry var isGridDragActive = false
     // Edit mode: icons wiggle (see `WiggleEffect`).
     @Entry var isEditing = false
+    // Apps checked in edit mode (`EditingModel.selection`).
+    @Entry var selectedAppIDs: Set<String> = []
     @Entry var enterEditMode = EnterEditModeAction(viewModel: nil)
     @Entry var removeApp = RemoveAppAction(viewModel: nil)
 }
@@ -117,6 +119,16 @@ extension View {
     // The hide button on an app icon's top-right corner in edit mode.
     func hideAppBadge(_ app: AppEntry, iconSize: CGFloat) -> some View {
         modifier(HideAppBadge(app: app, iconSize: iconSize))
+    }
+
+    // The checkmark on a selected app's icon in edit mode.
+    func selectionCheckmark(_ app: AppEntry, iconSize: CGFloat) -> some View {
+        modifier(SelectionCheckmark(app: app, iconSize: iconSize))
+    }
+
+    // The selected trait for VoiceOver on an app's element while it is checked.
+    func selectionAccessibility(_ app: AppEntry) -> some View {
+        modifier(SelectionAccessibility(app: app))
     }
 
     // The Dock's dot under the icon of a running app, in the gap above the label.
@@ -217,6 +229,49 @@ private struct HideAppBadge: ViewModifier {
                     .accessibilityIdentifier("hide-app-badge")
                 }
             }
+    }
+}
+
+private struct SelectionCheckmark: ViewModifier {
+    let app: AppEntry
+    let iconSize: CGFloat
+
+    @Environment(\.isEditing) private var isEditing
+    @Environment(\.selectedAppIDs) private var selectedAppIDs
+
+    func body(content: Content) -> some View {
+        let isSelected = isEditing && selectedAppIDs.contains(app.id)
+        let size = iconSize * Selection.checkmarkSizeRatio
+        let outset = size * Selection.checkmarkOutset
+        content
+            .overlay(alignment: .bottomTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .resizable()
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color.accentColor)
+                        .frame(width: size, height: size)
+                        .launcherLabelShadow()
+                        .offset(x: outset, y: outset)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                        .accessibilityIdentifier("selection-checkmark")
+                }
+            }
+    }
+}
+
+private struct SelectionAccessibility: ViewModifier {
+    let app: AppEntry
+
+    @Environment(\.isEditing) private var isEditing
+    @Environment(\.selectedAppIDs) private var selectedAppIDs
+
+    func body(content: Content) -> some View {
+        let isSelected = isEditing && selectedAppIDs.contains(app.id)
+        // A trait, not a value: the value already says "New".
+        content
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

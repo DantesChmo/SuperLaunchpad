@@ -67,12 +67,14 @@ final class LaunchpadViewModel {
         isBatchingContentUpdates = false
         rebuildPages()
         search.contentsDidChange()
+        editing.contentsDidChange()
     }
 
     private func rebuildPagesUnlessBatching() {
         guard !isBatchingContentUpdates else { return }
         rebuildPages()
         search.contentsDidChange()
+        editing.contentsDidChange()
     }
 
     private func rebuildPages() {
@@ -405,6 +407,7 @@ final class LaunchpadViewModel {
     enum EscapeAction: Equatable {
         case cancelledRemoval
         case cancelledDrag
+        case clearedSelection
         case exitedEditMode
         case clearedSearch
         case closedFolder
@@ -412,7 +415,7 @@ final class LaunchpadViewModel {
     }
 
     // Escape acts on the innermost context: the Trash dialog, a dragged icon,
-    // edit mode, the query, then an open folder, then the launcher itself
+    // the selection, edit mode, the query, then an open folder, then the launcher itself
     // (which the caller hides).
     func handleEscape() -> EscapeAction {
         if removal.pendingRemoval != nil {
@@ -421,6 +424,9 @@ final class LaunchpadViewModel {
         }
         if editing.cancelDrag() {
             return .cancelledDrag
+        }
+        if editing.clearSelection() {
+            return .clearedSelection
         }
         if editing.exitEditMode() {
             return .exitedEditMode

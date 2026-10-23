@@ -131,6 +131,29 @@ struct GridGeometry: Equatable {
         return hitFrame(slot: slot).contains(point) ? slot : nil
     }
 
+    // The occupied slots whose icon + label box intersects `rect` (a marquee
+    // in page-local points), in slot order. A band only one point thick (a
+    // straight sideways drag) still counts.
+    func slots(intersecting rect: CGRect, itemCount: Int) -> [Int] {
+        guard !rect.isNull else { return [] }
+        return (0..<min(max(itemCount, 0), capacity)).filter { slot in
+            let frame = hitFrame(slot: slot)
+            return frame.minX <= rect.maxX && rect.minX <= frame.maxX
+                && frame.minY <= rect.maxY && rect.minY <= frame.maxY
+        }
+    }
+
+    // The rectangle a marquee spans between where the press started and the
+    // pointer, in either direction.
+    static func marqueeRect(from start: CGPoint, to pointer: CGPoint) -> CGRect {
+        CGRect(
+            x: min(start.x, pointer.x),
+            y: min(start.y, pointer.y),
+            width: abs(pointer.x - start.x),
+            height: abs(pointer.y - start.y)
+        )
+    }
+
     // Where an item dragged within this page lands when dropped at `point`:
     // the cell under the pointer (the nearest one outside the grid), clamped
     // to the page's occupied slots — the dragged item itself is one of the

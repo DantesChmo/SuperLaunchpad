@@ -49,8 +49,13 @@ final class ItemActionsModel {
         !launchpad.editing.isEditing && !launchpad.search.isSearching
     }
 
+    // In edit mode a click (⌘ or not) checks or unchecks the app instead.
     func click(_ app: AppEntry, modifiers: NSEvent.ModifierFlags) -> Bool {
-        switch ItemMenu.clickAction(modifiers: modifiers, isEditing: launchpad.editing.isEditing) {
+        if launchpad.editing.isEditing {
+            launchpad.editing.toggleSelection(app.bundleIdentifier)
+            return false
+        }
+        switch ItemMenu.clickAction(modifiers: modifiers, isEditing: false) {
         case .launch:
             opener.open(app.appPath, true)
             launchpad.recordLaunch(app.bundleIdentifier)

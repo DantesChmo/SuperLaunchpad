@@ -106,6 +106,17 @@ struct GridLayout: Equatable {
         return nil
     }
 
+    // The apps of `appIDs` that are in the layout, in reading order: pages in
+    // turn, a folder's apps (in folder order) where its tile is.
+    func ordered(_ appIDs: Set<String>) -> [String] {
+        pages.joined().flatMap { item -> [String] in
+            switch item {
+            case .app(let id): appIDs.contains(id) ? [id] : []
+            case .folder(let id): (folders[id]?.appIDs ?? []).filter(appIDs.contains)
+            }
+        }
+    }
+
     // MARK: - Operations
     //
     // Each returns false and leaves the layout untouched when the edit is not
@@ -178,6 +189,94 @@ struct GridLayout: Equatable {
         pages[pages.count - 1].append(.app(appID))
         normalize()
         return true
+    }
+
+    // MARK: - Group operations
+    //
+    // A selection of apps (1.8.0) moves as one: every app comes out of its
+    // page or folder, then all are put back one after another in the given
+    // order. All apps must be in the layout. Folders they leave empty stay —
+    // see `dissolveEmptyFolders()`.
+
+    // Puts the apps consecutively at `slot` on page `page`, the slot counted
+    // on the page without them. `page == pages.count` opens a new last page;
+    // a page that overflows spills onto the next one.
+    @discardableResult
+    mutating func moveGroup(_ appIDs: [String], toPage page: Int, slot: Int) -> Bool {
+        guard isMovableGroup(appIDs), page >= 0, page <= pages.count, slot >= 0 else { return false }
+        for appID in appIDs {
+            take(.app(appID))
+        }
+        if page == pages.count {
+            pages.append([])
+        }
+        pages[page].insert(contentsOf: appIDs.map { Item.app($0) }, at: min(slot, pages[page].count))
+        normalize()
+        return true
+    }
+
+    // Puts the apps into an existing folder at `index` (clamped, counted
+    // without them; nil = at the end).
+    @discardableResult
+    mutating func addGroup(_ appIDs: [String], toFolder folderID: String, at index: Int? = nil) -> Bool {
+        guard isMovableGroup(appIDs), folders[folderID] != nil else { return false }
+        for appID in appIDs {
+            take(.app(appID))
+        }
+        guard var folder = folders[folderID] else { return false }
+        let position = min(max(index ?? folder.appIDs.count, 0), folder.appIDs.count)
+        folder.appIDs.insert(contentsOf: appIDs, at: position)
+        folders[folderID] = folder
+        normalize()
+        return true
+    }
+
+    // Drops the apps onto the top-level app `targetAppID`: a new folder takes
+    // the target's place and holds the target followed by the apps.
+    @discardableResult
+    mutating func mergeGroup(_ appIDs: [String], onto targetAppID: String, folderID: String, title: String) -> Bool {
+        guard isMovableGroup(appIDs), !appIDs.contains(targetAppID), folders[folderID] == nil,
+              case .page(let page, let slot) = location(of: .app(targetAppID)) else { return false }
+        pages[page][slot] = .folder(folderID)
+        for appID in appIDs {
+            take(.app(appID))
+        }
+        folders[folderID] = Folder(title: title, appIDs: [targetAppID] + appIDs)
+        normalize()
+        return true
+    }
+
+    // New Folder from Selection: the folder takes the place of the first app
+    // that is on a page; when all are in folders, it goes right after the
+    // folder holding the first one.
+    @discardableResult
+    mutating func makeFolder(_ appIDs: [String], folderID: String, title: String) -> Bool {
+        guard isMovableGroup(appIDs), folders[folderID] == nil else { return false }
+        var anchor: (page: Int, slot: Int)?
+        for appID in appIDs {
+            if case .page(let page, let slot) = location(of: .app(appID)) {
+                anchor = (page, slot)
+                break
+            }
+        }
+        if let anchor {
+            pages[anchor.page][anchor.slot] = .folder(folderID)
+        } else {
+            guard case .folder(let sourceID, _) = location(of: .app(appIDs[0])),
+                  case .page(let page, let slot) = location(of: .folder(sourceID)) else { return false }
+            pages[page].insert(.folder(folderID), at: slot + 1)
+        }
+        for appID in appIDs {
+            take(.app(appID))
+        }
+        folders[folderID] = Folder(title: title, appIDs: appIDs)
+        normalize()
+        return true
+    }
+
+    // Non-empty, no duplicates, every app in the layout.
+    private func isMovableGroup(_ appIDs: [String]) -> Bool {
+        !appIDs.isEmpty && Set(appIDs).count == appIDs.count && appIDs.allSatisfy { location(of: .app($0)) != nil }
     }
 
     // Removes every folder without apps, closing its gap on the page.

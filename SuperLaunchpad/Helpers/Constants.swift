@@ -249,6 +249,30 @@ enum Edit {
     static let reducedMotionAnimation: Double = 0.15
 }
 
+// Multi-select in edit mode (see AGENTS.md → "Multi-select").
+enum Selection {
+    // The checkmark on a selected icon's bottom-right corner, as a share of
+    // the icon size, and how far it sticks out past the corner, as a share
+    // of the checkmark.
+    static let checkmarkSizeRatio: CGFloat = 0.32
+    static let checkmarkOutset: CGFloat = 0.25
+    // The marquee's fill and outline.
+    static let marqueeFillOpacity: Double = 0.12
+    static let marqueeStrokeOpacity: Double = 0.6
+    static let marqueeLineWidth: CGFloat = 1
+    // A group drag: up to this many of the other selected icons stack behind
+    // the lifted one, each shifted by this share of the icon size…
+    static let stackDepth = 2
+    static let stackOffsetRatio: CGFloat = 0.06
+    // …with a count badge, sized in label font sizes.
+    static let badgeSizeRatio: CGFloat = 1.6
+    static let badgePaddingRatio: CGFloat = 0.4
+    // The bar with the group actions, in place of the search field.
+    static let barSpacing: CGFloat = 8
+    static let barPadding: CGFloat = 6
+    static let barCornerRadius: CGFloat = 10
+}
+
 // Moving apps to the Trash from edit mode.
 enum Uninstall {
     // The × badge on an icon's top-left corner, as a share of the icon size…
@@ -269,6 +293,10 @@ enum Uninstall {
     static let finderTimeout = 600
     // Seconds a running app gets to quit before it goes to the Trash.
     static let quitTimeout: Double = 10
+    // A group's dialog shows up to this many icons, each overlapping the
+    // previous by this share of its size.
+    static let groupIconCount = 3
+    static let groupIconOverlap: CGFloat = 0.35
 }
 
 // The dot under a running app's icon. Centered in the gap between icon and
