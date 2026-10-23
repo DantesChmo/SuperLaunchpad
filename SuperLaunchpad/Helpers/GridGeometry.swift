@@ -58,7 +58,7 @@ struct GridGeometry: Equatable {
     // top-left corner.
     static func folder(metrics: LayoutMetrics) -> GridGeometry {
         let iconSize = metrics.iconSize * FolderGrid.iconScale
-        let itemHeight = iconSize + LayoutMetrics.iconLabelSpacing + metrics.labelFont * 3
+        let itemHeight = iconSize + metrics.labelRoom
         return GridGeometry(
             columns: FolderGrid.columns,
             rows: FolderGrid.rows,
@@ -102,10 +102,14 @@ struct GridGeometry: Equatable {
 
     // The icon square of a cell. The hit box is as wide as the icon and
     // centers icon + label vertically, so the icon sits above the middle by
-    // half the label's height (taken as one line).
+    // half the label's height (taken as one line). With labels hidden the
+    // hit box is the icon.
     func iconFrame(slot: Int) -> CGRect {
         let hit = hitFrame(slot: slot)
         let iconSide = hitSize.width
+        guard hitSize.height > iconSide else {
+            return CGRect(x: hit.minX, y: hit.midY - iconSide / 2, width: iconSide, height: iconSide)
+        }
         let labelRoom = max(hitSize.height - iconSide - LayoutMetrics.iconLabelSpacing, 0)
         let content = iconSide + LayoutMetrics.iconLabelSpacing + labelRoom * Drag.oneLineLabelShare
         return CGRect(x: hit.minX, y: hit.midY - content / 2, width: iconSide, height: iconSide)

@@ -257,7 +257,8 @@ struct FolderDetailView: View {
                         app: app,
                         iconSize: folderIconSize,
                         labelFont: metrics.labelFont,
-                        labelWidth: folderItemWidth * FolderGrid.iconScale
+                        labelWidth: folderItemWidth * FolderGrid.iconScale,
+                        showsLabels: metrics.showsLabels
                     ) {
                         onLaunch(app)
                     }
@@ -289,6 +290,7 @@ private struct FolderAppIconView: View {
     let iconSize: CGFloat
     let labelFont: CGFloat
     let labelWidth: CGFloat
+    let showsLabels: Bool
     let onTap: () -> Void
 
     @State private var isHovering = false
@@ -309,13 +311,15 @@ private struct FolderAppIconView: View {
                     .customIconDrop(app, iconSize: iconSize)
                     .runningDot(app)
 
-                Text.launcherLabel(app.displayName, isNew: app.isNew, fontSize: labelFont)
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .frame(width: labelWidth)
+                if showsLabels {
+                    Text.launcherLabel(app.displayName, isNew: app.isNew, fontSize: labelFont)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(width: labelWidth)
+                }
             }
-            .frame(width: iconSize, height: iconSize + 6 + labelFont * 3)
+            .frame(width: iconSize, height: iconSize + LayoutMetrics.labelRoom(labelFont: labelFont, showsLabels: showsLabels))
             .scaleEffect(Motion(reduced: reduceMotion).hoverScale(isHovering: isHovering))
             .animation(.easeInOut(duration: 0.15), value: isHovering)
             .onHover { hovering in

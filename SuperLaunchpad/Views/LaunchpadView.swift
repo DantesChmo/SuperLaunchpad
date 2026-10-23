@@ -4,6 +4,7 @@ import SwiftUI
 struct LaunchpadView: View {
     let viewModel: LaunchpadViewModel
     let pager: PagerController
+    let wallpaper: DesktopWallpaper
 
     // Local view state that only this view needs. Keeping it as `@State`
     // (rather than on the ViewModel) is intentional: this is purely UI
@@ -23,6 +24,13 @@ struct LaunchpadView: View {
     @State private var drag = GridDragController()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
+    // Settings → Appearance, applied live: `@AppStorage` follows the
+    // Settings window's writes.
+    @AppStorage(Preferences.Key.backgroundStyle) private var backgroundStyle = Preferences.Default.backgroundStyle
+    @AppStorage(Preferences.Key.backgroundBlur) private var backgroundBlur = Preferences.Default.backgroundBlur
+    @AppStorage(Preferences.Key.backgroundDimming) private var backgroundDimming = Preferences.Default.backgroundDimming
+    @AppStorage(Preferences.Key.labelSize) private var labelSize = Preferences.Default.labelSize
+    @AppStorage(Preferences.Key.hidesLabels) private var hidesLabels = Preferences.Default.hidesLabels
 
     private var motion: Motion {
         Motion(reduced: reduceMotion)
@@ -46,20 +54,28 @@ struct LaunchpadView: View {
             let metrics = LayoutMetrics(
                 screenWidth: geo.size.width - dock.leading - dock.trailing,
                 screenHeight: geo.size.height - dock.bottom,
-                extraRows: viewModel.search.frequentApps.isEmpty ? 0 : 1
+                extraRows: viewModel.search.frequentApps.isEmpty ? 0 : 1,
+                labelSize: labelSize,
+                showsLabels: !hidesLabels
             )
 
             // Layered composition — the visual stack from back to front:
-            //   1. Frosted desktop background (NSVisualEffectView).
+            //   1. Frosted desktop background (NSVisualEffectView), or the
+            //      blurred wallpaper (Settings → Appearance).
             //   2. Dark overlay so icon labels are readable.
             //   3. The grid + chrome.
             //   4. Folder-open dimming + folder detail (when applicable).
             ZStack {
-                VisualEffectBackground()
-                    .ignoresSafeArea()
+                LauncherBackground(
+                    wallpaper: backgroundStyle == .wallpaper ? wallpaper.image : nil,
+                    blur: min(max(backgroundBlur, 0), 1)
+                )
 
                 Color.black
-                    .opacity(contrast == .increased ? LabelContrast.increasedDimOpacity : LabelContrast.dimOpacity)
+                    .opacity(BackgroundDimming.opacity(
+                        min(max(backgroundDimming, 0), BackgroundAppearance.maxDimming),
+                        increasedContrast: contrast == .increased
+                    ))
                     .ignoresSafeArea()
                     .accessibilityHidden(true)
 
@@ -380,6 +396,40 @@ struct LaunchpadView: View {
             displayedFolder = nil
             displayedFolderApps = []
         }
+    }
+}
+
+// The blurred wallpaper when there is one, otherwise the live system blur
+// of whatever is behind the panel. There is no public way to set that blur's
+// radius, so a weaker blur lets the sharp desktop show through it; the
+// wallpaper is blurred by `DesktopWallpaper` at the chosen strength.
+private struct LauncherBackground: View {
+    let wallpaper: CGImage?
+    let blur: Double
+
+    var body: some View {
+        ZStack {
+            if let wallpaper {
+                // `.fill` on a flexible clear view: covers the screen, cropped
+                // at the sides, whatever the picture's aspect ratio.
+                Color.clear
+                    .overlay {
+                        Image(decorative: wallpaper, scale: 1)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fill)
+                    }
+                    .clipped()
+                    .transition(.opacity)
+            } else {
+                VisualEffectBackground()
+                    .opacity(blur)
+                    .transition(.opacity)
+            }
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+        .animation(.easeInOut(duration: BackgroundAppearance.wallpaperTransition), value: wallpaper != nil)
     }
 }
 

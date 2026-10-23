@@ -21,6 +21,8 @@ final class LaunchpadPanel: NSPanel {
     // Display the panel was last placed on, so a display change can keep it
     // there (resolution change) or tell that it was unplugged.
     private var displayID: UInt32?
+    // Settings → Appearance → Blurred wallpaper, for the screen the panel is on.
+    private let wallpaper = DesktopWallpaper(provider: .live)
 
     init(viewModel: LaunchpadViewModel) {
         self.viewModel = viewModel
@@ -69,7 +71,7 @@ final class LaunchpadPanel: NSPanel {
 
         // `NSHostingView` is the AppKit bridge that lets us put a SwiftUI tree
         // into any AppKit window. The `contentView` is what `NSPanel` renders.
-        let hostingView = NSHostingView(rootView: LaunchpadView(viewModel: viewModel, pager: pager))
+        let hostingView = NSHostingView(rootView: LaunchpadView(viewModel: viewModel, pager: pager, wallpaper: wallpaper))
         // Explicit frame is required — `NSHostingView` does NOT auto-resize to
         // its parent panel in this configuration. AGENTS.md flags this.
         hostingView.frame = NSRect(origin: .zero, size: frame.size)
@@ -93,6 +95,13 @@ final class LaunchpadPanel: NSPanel {
             self,
             selector: #selector(menuDidEndTracking),
             name: NSMenu.didEndTrackingNotification,
+            object: nil
+        )
+        // Each Space can have its own desktop picture.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(activeSpaceDidChange),
+            name: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil
         )
     }
@@ -160,6 +169,7 @@ final class LaunchpadPanel: NSPanel {
         guard let index = pick(NSEvent.mouseLocation, displays) else { return }
         let screen = screens[index]
         displayID = displays[index].id
+        wallpaper.refresh(displayID: displays[index].id)
         setFrame(screen.frame, display: true)
         // Window coordinates, not `screen.frame`: on a secondary display the
         // screen origin is non-zero and would push the grid off the panel.
@@ -171,6 +181,11 @@ final class LaunchpadPanel: NSPanel {
         if viewModel.dockInsets != dockInsets {
             viewModel.dockInsets = dockInsets
         }
+    }
+
+    @objc private func activeSpaceDidChange(_ notification: Notification) {
+        guard viewModel.isVisible else { return }
+        wallpaper.refresh()
     }
 
     // MARK: - Menus
@@ -302,11 +317,4 @@ final class LaunchpadPanel: NSPanel {
 
 private extension NSWindow.Level {
     static let belowMenus = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue - 1)
-}
-
-private extension NSScreen {
-    // Stable while the display is connected, unlike the index in `screens`.
-    var displayID: UInt32 {
-        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
-    }
 }

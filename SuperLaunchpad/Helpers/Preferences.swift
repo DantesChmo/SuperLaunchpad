@@ -9,6 +9,11 @@ struct Preferences {
         static let hotKeyModifiers = "hotKeyModifiers"
         static let newAppPlacement = "newAppPlacement"
         static let showsFrequentApps = "showsFrequentApps"
+        static let backgroundStyle = "backgroundStyle"
+        static let backgroundBlur = "backgroundBlur"
+        static let backgroundDimming = "backgroundDimming"
+        static let labelSize = "labelSize"
+        static let hidesLabels = "hidesLabels"
     }
 
     enum Default {
@@ -16,6 +21,12 @@ struct Preferences {
         static let hotKey = KeyCombo.default
         static let newAppPlacement = NewAppPlacement.end
         static let showsFrequentApps = false
+        // Today's look: the full system blur and `LabelContrast.dimOpacity`.
+        static let backgroundStyle = BackgroundStyle.desktop
+        static let backgroundBlur: Double = 1
+        static let backgroundDimming = LabelContrast.dimOpacity
+        static let labelSize = LabelSize.medium
+        static let hidesLabels = false
     }
 
     private let defaults: UserDefaults
@@ -28,6 +39,11 @@ struct Preferences {
             Key.hotKeyModifiers: Int(Default.hotKey.modifiers),
             Key.newAppPlacement: Default.newAppPlacement.rawValue,
             Key.showsFrequentApps: Default.showsFrequentApps,
+            Key.backgroundStyle: Default.backgroundStyle.rawValue,
+            Key.backgroundBlur: Default.backgroundBlur,
+            Key.backgroundDimming: Default.backgroundDimming,
+            Key.labelSize: Default.labelSize.rawValue,
+            Key.hidesLabels: Default.hidesLabels,
         ])
     }
 
@@ -63,5 +79,37 @@ struct Preferences {
     var showsFrequentApps: Bool {
         get { defaults.bool(forKey: Key.showsFrequentApps) }
         nonmutating set { defaults.set(newValue, forKey: Key.showsFrequentApps) }
+    }
+
+    // MARK: - Appearance
+
+    var backgroundStyle: BackgroundStyle {
+        get {
+            defaults.string(forKey: Key.backgroundStyle).flatMap(BackgroundStyle.init(rawValue:))
+                ?? Default.backgroundStyle
+        }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: Key.backgroundStyle) }
+    }
+
+    // 0…1: none to the full blur.
+    var backgroundBlur: Double {
+        get { min(max(defaults.double(forKey: Key.backgroundBlur), 0), 1) }
+        nonmutating set { defaults.set(newValue, forKey: Key.backgroundBlur) }
+    }
+
+    // Opacity of the dark layer over the background, 0…`BackgroundAppearance.maxDimming`.
+    var backgroundDimming: Double {
+        get { min(max(defaults.double(forKey: Key.backgroundDimming), 0), BackgroundAppearance.maxDimming) }
+        nonmutating set { defaults.set(newValue, forKey: Key.backgroundDimming) }
+    }
+
+    var labelSize: LabelSize {
+        get { defaults.string(forKey: Key.labelSize).flatMap(LabelSize.init(rawValue:)) ?? Default.labelSize }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: Key.labelSize) }
+    }
+
+    var hidesLabels: Bool {
+        get { defaults.bool(forKey: Key.hidesLabels) }
+        nonmutating set { defaults.set(newValue, forKey: Key.hidesLabels) }
     }
 }

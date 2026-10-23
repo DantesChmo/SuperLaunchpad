@@ -14,6 +14,21 @@ struct SettingsView: View {
     @AppStorage(Preferences.Key.showsFrequentApps)
     private var showsFrequentApps = Preferences.Default.showsFrequentApps
 
+    @AppStorage(Preferences.Key.backgroundStyle)
+    private var backgroundStyle = Preferences.Default.backgroundStyle
+
+    @AppStorage(Preferences.Key.backgroundBlur)
+    private var backgroundBlur = Preferences.Default.backgroundBlur
+
+    @AppStorage(Preferences.Key.backgroundDimming)
+    private var backgroundDimming = Preferences.Default.backgroundDimming
+
+    @AppStorage(Preferences.Key.labelSize)
+    private var labelSize = Preferences.Default.labelSize
+
+    @AppStorage(Preferences.Key.hidesLabels)
+    private var hidesLabels = Preferences.Default.hidesLabels
+
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var loginItemNeedsApproval = LoginItem.requiresApproval
     @State private var loginItemError: String?
@@ -37,6 +52,39 @@ struct SettingsView: View {
                         LoginItem.openSystemSettings()
                     }
                 }
+            }
+
+            Section {
+                Picker("Background", selection: $backgroundStyle) {
+                    ForEach(BackgroundStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                Slider(value: $backgroundBlur, in: 0...1) {
+                    Text("Blur")
+                }
+                Slider(value: $backgroundDimming, in: 0...BackgroundAppearance.maxDimming) {
+                    Text("Dimming")
+                }
+                Picker("Label size", selection: $labelSize) {
+                    ForEach(LabelSize.allCases) { size in
+                        Text(size.title).tag(size)
+                    }
+                }
+                .disabled(hidesLabels)
+                Toggle("Hide labels", isOn: $hidesLabels)
+            } header: {
+                Text("Appearance")
+            } footer: {
+                Group {
+                    if backgroundStyle == .wallpaper {
+                        Text("The desktop picture of the launcher’s screen, instead of the windows behind it. Increase Contrast dims the background more.")
+                    } else {
+                        Text("Increase Contrast dims the background more.")
+                    }
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
 
             Section("Gestures") {

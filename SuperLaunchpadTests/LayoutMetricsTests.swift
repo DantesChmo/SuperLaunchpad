@@ -97,4 +97,103 @@ struct LayoutMetricsTests {
         #expect(withRow.itemWidth == standard.itemWidth)
         #expect(withRow.labelFont == standard.labelFont)
     }
+
+    // MARK: - Appearance: label size and hidden labels
+
+    @Test(arguments: [(1440.0, 900.0), (1920.0, 1080.0), (3440.0, 1440.0)])
+    func defaultLabelSettingsKeepTheOriginalMetrics(width: Double, height: Double) {
+        let standard = LayoutMetrics(screenWidth: width, screenHeight: height)
+        let explicit = LayoutMetrics(screenWidth: width, screenHeight: height, labelSize: .medium, showsLabels: true)
+        #expect(explicit.iconSize == standard.iconSize)
+        #expect(explicit.labelFont == standard.labelFont)
+        #expect(explicit.itemHitSize == standard.itemHitSize)
+        #expect(standard.iconSize == standard.itemWidth * 0.5)
+        #expect(abs(standard.labelFont - max(11, height * 0.012)) < 0.001)
+        #expect(abs(standard.itemHitSize.height - (standard.iconSize + 6 + standard.labelFont * 3)) < 0.001)
+    }
+
+    @Test(arguments: LabelSize.allCases)
+    func labelSizeScalesTheFont(size: LabelSize) {
+        let standard = LayoutMetrics(screenWidth: 1920, screenHeight: 1080)
+        let m = LayoutMetrics(screenWidth: 1920, screenHeight: 1080, labelSize: size)
+        #expect(abs(m.labelFont - standard.labelFont * size.scale) < 0.001)
+        #expect(m.itemHeight == standard.itemHeight)
+        #expect(m.itemWidth == standard.itemWidth)
+    }
+
+    @Test func labelSizesGrowInOrder() {
+        let scales = LabelSize.allCases.map(\.scale)
+        #expect(scales == scales.sorted())
+        #expect(LabelSize.medium.scale == 1)
+    }
+
+    @Test func smallLabelsKeepTheIconSize() {
+        let standard = LayoutMetrics(screenWidth: 1920, screenHeight: 1080)
+        let small = LayoutMetrics(screenWidth: 1920, screenHeight: 1080, labelSize: .small)
+        #expect(small.iconSize == standard.iconSize)
+    }
+
+    // Bigger labels need more room under the icon; where the cell can't give
+    // it, the icon shrinks so icon and label still fit the cell.
+    @Test(arguments: [(1920.0, 1080.0), (1440.0, 900.0), (2560.0, 1080.0)])
+    func largeLabelsFitTheirCells(width: Double, height: Double) {
+        for size in [LabelSize.large, .extraLarge] {
+            let m = LayoutMetrics(screenWidth: width, screenHeight: height, labelSize: size)
+            #expect(m.itemHitSize.height <= m.itemHeight + 0.001)
+            #expect(m.iconSize <= m.itemWidth * 0.5)
+        }
+    }
+
+    @Test func extraLargeLabelsShrinkTheIconOnA1080pScreen() {
+        let standard = LayoutMetrics(screenWidth: 1920, screenHeight: 1080)
+        let m = LayoutMetrics(screenWidth: 1920, screenHeight: 1080, labelSize: .extraLarge)
+        #expect(m.iconSize < standard.iconSize)
+    }
+
+    @Test func hiddenLabelsLeaveJustTheIcon() {
+        let m = LayoutMetrics(screenWidth: 1920, screenHeight: 1080, showsLabels: false)
+        #expect(m.showsLabels == false)
+        #expect(m.labelRoom == 0)
+        #expect(m.itemHitSize == CGSize(width: m.iconSize, height: m.iconSize))
+    }
+
+    @Test func hiddenLabelsKeepTheGridAndIconSize() {
+        let standard = LayoutMetrics(screenWidth: 1920, screenHeight: 1080)
+        let hidden = LayoutMetrics(screenWidth: 1920, screenHeight: 1080, showsLabels: false)
+        #expect(hidden.iconSize == standard.iconSize)
+        #expect(hidden.itemHeight == standard.itemHeight)
+        #expect(hidden.rowSpacing == standard.rowSpacing)
+    }
+
+    // With the Frequently Used row the icon gives way to the label; without
+    // labels it gets that room back.
+    @Test func hiddenLabelsGiveTheShorterCellsBigIcons() {
+        let labelled = LayoutMetrics(screenWidth: 1920, screenHeight: 1080, extraRows: 1)
+        let hidden = LayoutMetrics(screenWidth: 1920, screenHeight: 1080, extraRows: 1, showsLabels: false)
+        #expect(labelled.iconSize < labelled.itemWidth * 0.5)
+        #expect(hidden.iconSize > labelled.iconSize)
+        #expect(hidden.iconSize <= hidden.itemHeight)
+        #expect(hidden.iconSize <= hidden.itemWidth * 0.5)
+    }
+
+    @Test func hiddenLabelsIgnoreTheLabelSize() {
+        let small = LayoutMetrics(screenWidth: 1920, screenHeight: 1080, labelSize: .small, showsLabels: false)
+        let extraLarge = LayoutMetrics(screenWidth: 1920, screenHeight: 1080, labelSize: .extraLarge, showsLabels: false)
+        #expect(small.iconSize == extraLarge.iconSize)
+        #expect(small.itemHitSize == extraLarge.itemHitSize)
+    }
+
+    // MARK: - Appearance: dimming
+
+    @Test func dimmingIsTheSettingWithNormalContrast() {
+        #expect(BackgroundDimming.opacity(0.1, increasedContrast: false) == 0.1)
+        #expect(BackgroundDimming.opacity(LabelContrast.dimOpacity, increasedContrast: false) == LabelContrast.dimOpacity)
+    }
+
+    @Test func increasedContrastDimsAtLeastTheReadableMinimum() {
+        // The default reproduces the original Increase Contrast dimming.
+        #expect(BackgroundDimming.opacity(LabelContrast.dimOpacity, increasedContrast: true) == LabelContrast.increasedDimOpacity)
+        #expect(BackgroundDimming.opacity(0, increasedContrast: true) == LabelContrast.increasedDimOpacity)
+        #expect(BackgroundDimming.opacity(0.7, increasedContrast: true) == 0.7)
+    }
 }

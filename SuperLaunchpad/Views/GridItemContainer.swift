@@ -27,7 +27,11 @@ struct GridItemContainer<Icon: View, Label: View>: View {
         VStack(spacing: 0) {
             VStack(spacing: LayoutMetrics.iconLabelSpacing) {
                 icon
-                label
+                // Settings → Appearance → Hide labels. The accessibility
+                // label is set by the cell, so VoiceOver keeps the name.
+                if metrics.showsLabels {
+                    label
+                }
             }
             // Explicit inner frame = predictable hover/tap target.
             // Height = icon + spacing + room for up to 2 label lines.

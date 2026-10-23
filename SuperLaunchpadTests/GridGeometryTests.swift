@@ -46,6 +46,27 @@ struct GridGeometryTests {
         #expect(g.hitSize == metrics.itemHitSize)
     }
 
+    @Test func hiddenLabelsMakeTheIconTheHitBox() {
+        let metrics = LayoutMetrics(screenWidth: 1920, screenHeight: 1080, showsLabels: false)
+        let g = GridGeometry(metrics: metrics, pageWidth: 1920)
+        #expect(g.iconFrame(slot: 8) == g.hitFrame(slot: 8))
+        // Centered in its cell.
+        let cell = g.cellFrame(slot: 8)
+        #expect(abs(g.iconFrame(slot: 8).midY - cell.midY) < 0.001)
+        #expect(abs(g.iconFrame(slot: 8).midX - cell.midX) < 0.001)
+    }
+
+    @Test func folderGeometryFollowsTheLabelSettings() {
+        let labelled = GridGeometry.folder(metrics: LayoutMetrics(screenWidth: 1920, screenHeight: 1080))
+        let hidden = GridGeometry.folder(metrics: LayoutMetrics(screenWidth: 1920, screenHeight: 1080, showsLabels: false))
+        let large = GridGeometry.folder(metrics: LayoutMetrics(screenWidth: 1920, screenHeight: 1080, labelSize: .large))
+        #expect(hidden.cellSize.height == hidden.hitSize.width)
+        #expect(hidden.cellSize.height < labelled.cellSize.height)
+        // Label room under the icon.
+        #expect(large.cellSize.height - large.hitSize.width > labelled.cellSize.height - labelled.hitSize.width)
+        #expect(hidden.iconFrame(slot: 0) == hidden.hitFrame(slot: 0))
+    }
+
     // MARK: - Picking the dragged item
 
     @Test func itemAtPointInsideHitBox() {

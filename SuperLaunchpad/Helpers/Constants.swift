@@ -85,6 +85,34 @@ enum LabelContrast {
     static let increasedSecondaryOpacity: Double = 0.9
 }
 
+// Settings → Appearance.
+enum BackgroundAppearance {
+    // Upper end of the Dimming slider; past it the background is nearly black.
+    static let maxDimming: Double = 0.8
+    // The wallpaper is decoded at most this many pixels on its longer side:
+    // it is blurred anyway, and a 6K picture would cost memory for nothing.
+    static let wallpaperMaxPixelSize = 2560
+    // Gaussian blur radius at full strength, as a share of the decoded
+    // wallpaper's width; about the system blur's look.
+    static let wallpaperBlurRatio: Double = 0.015
+    // Crossfade when the wallpaper arrives or changes.
+    static let wallpaperTransition: Double = 0.2
+}
+
+// Settings → Appearance → Label size, as factors on the default size.
+enum LabelSizeScale {
+    static let small: CGFloat = 0.85
+    static let large: CGFloat = 1.15
+    static let extraLarge: CGFloat = 1.3
+}
+
+// macOS 26's icon style (System Settings → Appearance → Icon & widget style)
+// is detected by rendering one reference icon (see `IconStyleProbe`).
+enum IconStyle {
+    static let referenceAppPath = "/System/Library/CoreServices/Finder.app"
+    static let probePixelSize = 32
+}
+
 enum Search {
     static let fieldWidth: CGFloat = 200
     static let fieldFontSize: CGFloat = 14
@@ -149,6 +177,8 @@ struct LayoutMetrics {
     let iconSize: CGFloat
     let labelWidth: CGFloat
     let labelFont: CGFloat
+    // Settings → Appearance → Hide labels. VoiceOver still reads the names.
+    let showsLabels: Bool
     let itemWidth: CGFloat
     let itemHeight: CGFloat
     let horizontalPadding: CGFloat
@@ -162,15 +192,33 @@ struct LayoutMetrics {
     // slack.
     static let labelRoomInFontSizes: CGFloat = 3
 
+    // Height under the icon kept for its label: the gap and two lines plus
+    // slack; none when labels are hidden.
+    var labelRoom: CGFloat {
+        Self.labelRoom(labelFont: labelFont, showsLabels: showsLabels)
+    }
+
     // Hover / tap / drag target of a cell: the icon plus room for two label
-    // lines, centered in the cell (see `GridItemContainer`).
+    // lines, centered in the cell (see `GridItemContainer`). Just the icon
+    // when labels are hidden, so the icon is centered in its cell.
     var itemHitSize: CGSize {
-        CGSize(width: iconSize, height: iconSize + Self.iconLabelSpacing + labelFont * Self.labelRoomInFontSizes)
+        CGSize(width: iconSize, height: iconSize + labelRoom)
+    }
+
+    static func labelRoom(labelFont: CGFloat, showsLabels: Bool) -> CGFloat {
+        showsLabels ? iconLabelSpacing + labelFont * labelRoomInFontSizes : 0
     }
 
     // `extraRows` are rows drawn above the grid (the Frequently Used row),
-    // which share its height.
-    init(screenWidth: CGFloat, screenHeight: CGFloat, extraRows: Int = 0) {
+    // which share its height. `labelSize` and `showsLabels` come from
+    // Settings → Appearance; the defaults are the original look.
+    init(
+        screenWidth: CGFloat,
+        screenHeight: CGFloat,
+        extraRows: Int = 0,
+        labelSize: LabelSize = .medium,
+        showsLabels: Bool = true
+    ) {
         // All numbers are screen-relative so the grid looks proportionally the
         // same on a 13" MacBook and a 6K Pro Display. Hard-coded pixel sizes
         // would look cramped or sparse depending on the display.
@@ -180,7 +228,8 @@ struct LayoutMetrics {
         labelWidth = itemWidth * 0.8
         // Floor at 11pt so labels stay legible on small screens where the
         // proportional value (screenHeight * 0.012) would round down too far.
-        labelFont = max(11, screenHeight * 0.012)
+        labelFont = max(11, screenHeight * 0.012) * labelSize.scale
+        self.showsLabels = showsLabels
 
         topPadding = screenHeight * 0.06
         bottomPadding = screenHeight * 0.04
@@ -195,10 +244,12 @@ struct LayoutMetrics {
         rowSpacing = itemHeight * rowSpacingRatio
 
         let widthBasedIconSize = itemWidth * 0.5
-        if extraRows > 0 {
-            // The shorter cells may not fit the icon and its label; the icon
-            // gives way.
-            let heightBasedIconSize = itemHeight - Self.iconLabelSpacing - labelFont * Self.labelRoomInFontSizes
+        if extraRows > 0 || labelSize.scale > 1 {
+            // The shorter cells, or the cells with bigger labels, may not fit
+            // the icon and its label; the icon gives way. Hidden labels give
+            // the icon the whole cell height. Default labels on the full grid
+            // keep the original size even where they don't quite fit.
+            let heightBasedIconSize = itemHeight - Self.labelRoom(labelFont: labelFont, showsLabels: showsLabels)
             iconSize = min(widthBasedIconSize, heightBasedIconSize)
         } else {
             iconSize = widthBasedIconSize

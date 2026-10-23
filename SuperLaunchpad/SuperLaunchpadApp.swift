@@ -82,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let hotKeyMonitor = HotKeyMonitor()
     let updater = UpdaterController()
     private let preferences = Preferences()
+    private let iconStyleProbe = IconStyleProbe()
     private var isGestureMonitorRunning = false
 
     // Called once the AppKit framework has finished bootstrapping the app.
@@ -93,6 +94,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Load cached apps from SQLite, then kick off a background rescan.
         // Non-blocking: see `LaunchpadViewModel.loadApps` for the two-phase flow.
         viewModel.loadApps()
+        // Records the icon style this launch's rescan extracts icons in.
+        _ = iconStyleProbe.styleDidChange()
 
         // `[weak self]` breaks the retain cycle: AppDelegate -> watcher -> closure -> self.
         // Without it the AppDelegate would never deallocate (not fatal here since it
@@ -130,6 +133,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated {
                 self?.applyGesturePreference()
                 self?.applyHotKeyPreference()
+            }
+        }
+
+        // The icon style can only change in System Settings, so it is
+        // checked when the app comes back to the front, normally to show the
+        // launcher. A change re-extracts every icon in the new style.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.iconStyleProbe.styleDidChange() else { return }
+                self.viewModel.scheduleRescan()
             }
         }
 
