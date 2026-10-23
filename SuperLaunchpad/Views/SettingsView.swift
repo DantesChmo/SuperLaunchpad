@@ -75,13 +75,13 @@ struct SettingsView: View {
             }
 
             Section {
-                if viewModel.hiddenApps.isEmpty {
+                if viewModel.editing.hiddenApps.isEmpty {
                     Text("No hidden apps.")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(viewModel.hiddenApps) { app in
+                    ForEach(viewModel.editing.hiddenApps) { app in
                         HiddenAppRow(app: app) {
-                            viewModel.unhideApp(app.bundleIdentifier)
+                            viewModel.editing.unhideApp(app.bundleIdentifier)
                         }
                     }
                 }

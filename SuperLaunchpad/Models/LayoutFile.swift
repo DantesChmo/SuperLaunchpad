@@ -136,7 +136,7 @@ struct LayoutFile: Equatable {
                     let id = makeFolderID()
                     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
                     folders[id] = GridLayout.Folder(
-                        title: trimmed.isEmpty ? LaunchpadViewModel.defaultFolderTitle : trimmed,
+                        title: trimmed.isEmpty ? EditingModel.defaultFolderTitle : trimmed,
                         appIDs: present
                     )
                     items.append(.folder(id))

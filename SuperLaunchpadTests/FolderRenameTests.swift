@@ -63,7 +63,7 @@ struct FolderRenameTests {
         let idsBefore = vm.pages.map { $0.map(\.id) }
 
         let title = try #require(FolderRename.committedTitle(draft: " Work ", current: "Tools"))
-        #expect(vm.renameFolder("F", to: title))
+        #expect(vm.editing.renameFolder("F", to: title))
 
         #expect(folderTileTitle(vm, "F") == "Work")
         #expect(vm.pages.map { $0.map(\.id) } == idsBefore)

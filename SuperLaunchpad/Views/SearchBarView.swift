@@ -7,7 +7,7 @@ import SwiftUI
 // Arrow keys, Return and Escape never reach the field while the launcher is
 // open: `LaunchpadPanel` intercepts them for selection, paging and dismissal.
 struct SearchBarView: View {
-    @Bindable var viewModel: LaunchpadViewModel
+    @Bindable var search: SearchModel
     @FocusState private var isFocused: Bool
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -27,7 +27,7 @@ struct SearchBarView: View {
                 .accessibilityHidden(true)
             TextField(
                 "Search",
-                text: $viewModel.searchText,
+                text: $search.searchText,
                 prompt: Text("Search").foregroundStyle(.white.opacity(placeholderOpacity))
             )
             .textFieldStyle(.plain)
@@ -45,6 +45,6 @@ struct SearchBarView: View {
         .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: Search.fieldCornerRadius))
         .frame(width: Search.fieldWidth)
         .onAppear { isFocused = true }
-        .onChange(of: viewModel.searchFocusRequest) { isFocused = true }
+        .onChange(of: search.searchFocusRequest) { isFocused = true }
     }
 }

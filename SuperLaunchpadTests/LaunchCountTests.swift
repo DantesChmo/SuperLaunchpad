@@ -35,7 +35,7 @@ struct LaunchCountTests {
         try db.saveApps(apps)
         let vm = LaunchpadViewModel(database: db)
         vm.apps = try db.fetchAllApps()
-        vm.opener = AppOpener.Operations(open: { _, _ in }, showInFinder: { _ in })
+        vm.itemActions.opener = AppOpener.Operations(open: { _, _ in }, showInFinder: { _ in })
         vm.show()
         return vm
     }
@@ -118,10 +118,10 @@ struct LaunchCountTests {
         let entry = try #require(vm.apps.first { $0.bundleIdentifier == "com.a" })
 
         switch path {
-        case .returnInSearch: vm.launchApp(entry)
-        case .click: _ = vm.click(entry, modifiers: [])
-        case .commandClick: _ = vm.click(entry, modifiers: .command)
-        case .menuOpen: _ = vm.perform(.open, on: entry)
+        case .returnInSearch: vm.itemActions.launchApp(entry)
+        case .click: _ = vm.itemActions.click(entry, modifiers: [])
+        case .commandClick: _ = vm.itemActions.click(entry, modifiers: .command)
+        case .menuOpen: _ = vm.itemActions.perform(.open, on: entry)
         }
 
         let launched = try #require(vm.apps.first { $0.bundleIdentifier == "com.a" })
@@ -136,11 +136,11 @@ struct LaunchCountTests {
         let vm = try makeViewModel(db, apps: [app("com.a", order: 0)])
         let entry = try #require(vm.apps.first)
 
-        _ = vm.click(entry, modifiers: [.option, .command])
-        _ = vm.perform(.showInFinder, on: entry)
-        vm.enterEditMode()
-        _ = vm.click(entry, modifiers: [])
-        vm.launchApp(entry)
+        _ = vm.itemActions.click(entry, modifiers: [.option, .command])
+        _ = vm.itemActions.perform(.showInFinder, on: entry)
+        vm.editing.enterEditMode()
+        _ = vm.itemActions.click(entry, modifiers: [])
+        vm.itemActions.launchApp(entry)
 
         #expect(vm.apps.first?.launchCount == 0)
         #expect(try storedCounts(db) == ["com.a": 0])
@@ -150,12 +150,12 @@ struct LaunchCountTests {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, apps: [app("Safari", order: 0), app("Slack", order: 1)])
-        vm.searchText = "s"
-        #expect(vm.searchResults.map(\.name) == ["Safari", "Slack"])
+        vm.search.searchText = "s"
+        #expect(vm.search.searchResults.map(\.name) == ["Safari", "Slack"])
 
         vm.recordLaunch("Slack")
 
-        #expect(vm.searchResults.map(\.name) == ["Slack", "Safari"])
+        #expect(vm.search.searchResults.map(\.name) == ["Slack", "Safari"])
     }
 
     // MARK: - Frequently Used row
@@ -172,8 +172,8 @@ struct LaunchCountTests {
     private func makeFrequentViewModel(_ preferences: Preferences, apps: [AppEntry]) -> LaunchpadViewModel {
         let vm = LaunchpadViewModel(database: nil)
         vm.apps = apps
-        vm.preferences = preferences
-        vm.opener = AppOpener.Operations(open: { _, _ in }, showInFinder: { _ in })
+        vm.search.preferences = preferences
+        vm.itemActions.opener = AppOpener.Operations(open: { _, _ in }, showInFinder: { _ in })
         return vm
     }
 
@@ -181,7 +181,7 @@ struct LaunchCountTests {
         try withPreferences(showsFrequentApps: false) { preferences in
             let vm = makeFrequentViewModel(preferences, apps: [app("com.a", order: 0, launches: 5)])
             vm.show()
-            #expect(vm.frequentApps.isEmpty)
+            #expect(vm.search.frequentApps.isEmpty)
         }
     }
 
@@ -194,7 +194,7 @@ struct LaunchCountTests {
             vm.show()
 
             let expected = (2..<(FrequentApps.maxCount + 2)).reversed().map { "com.app\($0)" }
-            #expect(vm.frequentApps.map(\.bundleIdentifier) == expected)
+            #expect(vm.search.frequentApps.map(\.bundleIdentifier) == expected)
         }
     }
 
@@ -202,16 +202,16 @@ struct LaunchCountTests {
         try withPreferences(showsFrequentApps: true) { preferences in
             let vm = makeFrequentViewModel(preferences, apps: [app("com.a", order: 0, launches: 2), app("com.b", order: 1, launches: 1)])
             vm.show()
-            #expect(vm.frequentApps.map(\.bundleIdentifier) == ["com.a", "com.b"])
+            #expect(vm.search.frequentApps.map(\.bundleIdentifier) == ["com.a", "com.b"])
 
-            _ = vm.click(try #require(vm.frequentApps.last), modifiers: .command)
-            _ = vm.click(try #require(vm.frequentApps.last), modifiers: .command)
+            _ = vm.itemActions.click(try #require(vm.search.frequentApps.last), modifiers: .command)
+            _ = vm.itemActions.click(try #require(vm.search.frequentApps.last), modifiers: .command)
 
-            #expect(vm.frequentApps.map(\.bundleIdentifier) == ["com.a", "com.b"])
-            #expect(vm.frequentApps.last?.launchCount == 3)
+            #expect(vm.search.frequentApps.map(\.bundleIdentifier) == ["com.a", "com.b"])
+            #expect(vm.search.frequentApps.last?.launchCount == 3)
             vm.hide()
             vm.show()
-            #expect(vm.frequentApps.map(\.bundleIdentifier) == ["com.b", "com.a"])
+            #expect(vm.search.frequentApps.map(\.bundleIdentifier) == ["com.b", "com.a"])
         }
     }
 
@@ -223,10 +223,10 @@ struct LaunchCountTests {
             )
             vm.show()
 
-            #expect(vm.hideApp("com.a"))
+            #expect(vm.editing.hideApp("com.a"))
             vm.apps.removeAll { $0.bundleIdentifier == "com.c" }
 
-            #expect(vm.frequentApps.map(\.bundleIdentifier) == ["com.b"])
+            #expect(vm.search.frequentApps.map(\.bundleIdentifier) == ["com.b"])
         }
     }
 
@@ -234,13 +234,13 @@ struct LaunchCountTests {
         try withPreferences(showsFrequentApps: true) { preferences in
             let vm = makeFrequentViewModel(preferences, apps: [app("com.a", order: 0, launches: 1)])
             vm.show()
-            #expect(vm.frequentApps.count == 1)
+            #expect(vm.search.frequentApps.count == 1)
 
             vm.hide()
             preferences.showsFrequentApps = false
             vm.show()
 
-            #expect(vm.frequentApps.isEmpty)
+            #expect(vm.search.frequentApps.isEmpty)
         }
     }
 }

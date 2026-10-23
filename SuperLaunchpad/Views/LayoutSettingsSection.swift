@@ -63,7 +63,7 @@ struct LayoutSettingsSection: View {
         panel.nameFieldStringValue = String(localized: "SuperLaunchpad Layout") + ".json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try viewModel.layoutFile.encoded().write(to: url, options: .atomic)
+            try viewModel.layoutFiles.layoutFile.encoded().write(to: url, options: .atomic)
             status = String(localized: "Saved to “\(url.lastPathComponent)”.")
         } catch {
             show(error, title: String(localized: "Couldn’t save the layout"))
@@ -77,7 +77,7 @@ struct LayoutSettingsSection: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let file = try LayoutFile.decode(Data(contentsOf: url))
-            let result = try viewModel.loadLayout(file)
+            let result = try viewModel.layoutFiles.loadLayout(file)
             status = loadedStatus(result.applied, restored: false)
         } catch {
             show(error, title: String(localized: "Couldn’t load the layout"))
@@ -92,7 +92,7 @@ struct LayoutSettingsSection: View {
 
     private func reset(_ mode: LayoutReset.Mode) {
         do {
-            try viewModel.resetLayout(mode, systemOrdering: systemOrdering)
+            try viewModel.layoutFiles.resetLayout(mode, systemOrdering: systemOrdering)
             status = String(localized: "Layout reset. Restore Previous Layout undoes it.")
         } catch {
             show(error, title: String(localized: "Couldn’t reset the layout"))
@@ -102,7 +102,7 @@ struct LayoutSettingsSection: View {
 
     private func restorePrevious() {
         do {
-            guard let result = try viewModel.restorePreviousLayout() else { return }
+            guard let result = try viewModel.layoutFiles.restorePreviousLayout() else { return }
             status = loadedStatus(result.applied, restored: true)
         } catch {
             show(error, title: String(localized: "Couldn’t restore the layout"))
@@ -118,7 +118,7 @@ struct LayoutSettingsSection: View {
     // MARK: - Helpers
 
     private func refreshBackups() {
-        latestBackup = viewModel.layoutBackups?.latest
+        latestBackup = viewModel.layoutFiles.layoutBackups?.latest
     }
 
     private func loadedStatus(_ applied: LayoutFile.Applied, restored: Bool) -> String {

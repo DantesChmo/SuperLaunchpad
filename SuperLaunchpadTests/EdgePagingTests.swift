@@ -374,8 +374,8 @@ struct TrailingDragPageTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, [["a", "b"]])
 
-        #expect(vm.openTrailingDragPage() == false)
-        #expect(!vm.hasTrailingDragPage)
+        #expect(vm.editing.openTrailingDragPage() == false)
+        #expect(!vm.editing.hasTrailingDragPage)
         #expect(vm.displayedPageCount == 1)
     }
 
@@ -384,15 +384,15 @@ struct TrailingDragPageTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, [["a", "b"]])
 
-        vm.beginDragSession()
-        #expect(vm.openTrailingDragPage())
-        #expect(vm.openTrailingDragPage() == false)
+        vm.editing.beginDragSession()
+        #expect(vm.editing.openTrailingDragPage())
+        #expect(vm.editing.openTrailingDragPage() == false)
         #expect(vm.displayedPageCount == 2)
         #expect(pageIDs(vm) == [["a", "b"]])
 
         // Cancelled: nothing was dropped there.
-        vm.endDragSession()
-        #expect(!vm.hasTrailingDragPage)
+        vm.editing.endDragSession()
+        #expect(!vm.editing.hasTrailingDragPage)
         #expect(vm.displayedPageCount == 1)
         #expect(try storedPageIDs(db) == [["a", "b"]])
     }
@@ -402,10 +402,10 @@ struct TrailingDragPageTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, [["a", "b"]])
 
-        vm.beginDragSession()
-        vm.openTrailingDragPage()
-        #expect(vm.moveItem(.app("a"), toPage: 1, slot: 0))
-        vm.endDragSession()
+        vm.editing.beginDragSession()
+        vm.editing.openTrailingDragPage()
+        #expect(vm.editing.moveItem(.app("a"), toPage: 1, slot: 0))
+        vm.editing.endDragSession()
 
         #expect(pageIDs(vm) == [["b"], ["a"]])
         #expect(vm.displayedPageCount == 2)
@@ -417,9 +417,9 @@ struct TrailingDragPageTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, [["a"], ["b", "c"]])
 
-        vm.beginDragSession()
-        #expect(vm.moveItem(.app("a"), toPage: 1, slot: 2))
-        vm.endDragSession()
+        vm.editing.beginDragSession()
+        #expect(vm.editing.moveItem(.app("a"), toPage: 1, slot: 2))
+        vm.editing.endDragSession()
 
         #expect(pageIDs(vm) == [["b", "c", "a"]])
         #expect(try storedPageIDs(db) == [["b", "c", "a"]])
@@ -431,9 +431,9 @@ struct TrailingDragPageTests {
         let full = (0..<Grid.appsPerPage).map { "p\($0)" }
         let vm = try makeViewModel(db, [["m", "n"], full])
 
-        vm.beginDragSession()
-        #expect(vm.moveItem(.app("m"), toPage: 1, slot: 0))
-        vm.endDragSession()
+        vm.editing.beginDragSession()
+        #expect(vm.editing.moveItem(.app("m"), toPage: 1, slot: 0))
+        vm.editing.endDragSession()
 
         let expected = [["n"], ["m"] + full.dropLast(), [full[full.count - 1]]]
         #expect(pageIDs(vm) == expected)
@@ -445,14 +445,14 @@ struct TrailingDragPageTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, [["a", "b"]])
 
-        #expect(vm.cancelDrag() == false)
-        #expect(vm.dragCancelRequest == 0)
+        #expect(vm.editing.cancelDrag() == false)
+        #expect(vm.editing.dragCancelRequest == 0)
 
-        vm.beginDragSession()
-        #expect(vm.cancelDrag())
-        #expect(vm.dragCancelRequest == 1)
-        vm.endDragSession()
-        #expect(vm.cancelDrag() == false)
+        vm.editing.beginDragSession()
+        #expect(vm.editing.cancelDrag())
+        #expect(vm.editing.dragCancelRequest == 1)
+        vm.editing.endDragSession()
+        #expect(vm.editing.cancelDrag() == false)
         #expect(try storedPageIDs(db) == [["a", "b"]])
     }
 }

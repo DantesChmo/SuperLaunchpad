@@ -3,7 +3,7 @@ import Testing
 @testable import SuperLaunchpad
 
 @MainActor
-struct LaunchpadViewModelEditModeTests {
+struct EditingModelEditModeTests {
 
     private func makeVM() -> LaunchpadViewModel {
         let vm = LaunchpadViewModel(database: nil)
@@ -25,137 +25,137 @@ struct LaunchpadViewModelEditModeTests {
     // MARK: - Enter / exit
 
     @Test func startsOutOfEditMode() {
-        #expect(!makeVM().isEditing)
+        #expect(!makeVM().editing.isEditing)
     }
 
     @Test func longPressEntersAndExitLeaves() {
         let vm = makeVM()
-        vm.enterEditMode()
-        #expect(vm.isEditing)
-        #expect(vm.exitEditMode())
-        #expect(!vm.isEditing)
-        #expect(!vm.exitEditMode())
+        vm.editing.enterEditMode()
+        #expect(vm.editing.isEditing)
+        #expect(vm.editing.exitEditMode())
+        #expect(!vm.editing.isEditing)
+        #expect(!vm.editing.exitEditMode())
     }
 
     @Test func dragEntersEditModeAndItStaysAfterDrop() {
         let vm = makeVM()
-        vm.beginDragSession()
-        #expect(vm.isEditing)
-        vm.endDragSession()
-        #expect(vm.isEditing)
+        vm.editing.beginDragSession()
+        #expect(vm.editing.isEditing)
+        vm.editing.endDragSession()
+        #expect(vm.editing.isEditing)
     }
 
     @Test func cannotEnterWhileSearching() {
         let vm = makeVM()
-        vm.searchText = "ma"
-        vm.enterEditMode()
-        vm.setOptionHeld(true)
-        #expect(!vm.isEditing)
+        vm.search.searchText = "ma"
+        vm.editing.enterEditMode()
+        vm.editing.setOptionHeld(true)
+        #expect(!vm.editing.isEditing)
     }
 
     @Test func startingSearchExitsEditMode() {
         let vm = makeVM()
-        vm.enterEditMode()
-        vm.searchText = "m"
-        #expect(!vm.isEditing)
+        vm.editing.enterEditMode()
+        vm.search.searchText = "m"
+        #expect(!vm.editing.isEditing)
     }
 
     @Test func whitespaceQueryKeepsEditMode() {
         let vm = makeVM()
-        vm.enterEditMode()
-        vm.searchText = " "
-        #expect(vm.isEditing)
+        vm.editing.enterEditMode()
+        vm.search.searchText = " "
+        #expect(vm.editing.isEditing)
     }
 
     @Test func hideExitsEditModeAndNextShowStartsClean() {
         let vm = makeVM()
-        vm.enterEditMode()
+        vm.editing.enterEditMode()
         vm.hide()
-        #expect(!vm.isEditing)
+        #expect(!vm.editing.isEditing)
         vm.show()
-        #expect(!vm.isEditing)
+        #expect(!vm.editing.isEditing)
     }
 
     // MARK: - Option key
 
     @Test func optionShowsEditModeOnlyWhileHeld() {
         let vm = makeVM()
-        vm.setOptionHeld(true)
-        #expect(vm.isEditing)
-        vm.setOptionHeld(false)
-        #expect(!vm.isEditing)
+        vm.editing.setOptionHeld(true)
+        #expect(vm.editing.isEditing)
+        vm.editing.setOptionHeld(false)
+        #expect(!vm.editing.isEditing)
     }
 
     @Test func longPressWhileOptionHeldStaysAfterRelease() {
         let vm = makeVM()
-        vm.setOptionHeld(true)
-        vm.enterEditMode()
-        vm.setOptionHeld(false)
-        #expect(vm.isEditing)
+        vm.editing.setOptionHeld(true)
+        vm.editing.enterEditMode()
+        vm.editing.setOptionHeld(false)
+        #expect(vm.editing.isEditing)
     }
 
     @Test func dragWhileOptionHeldStaysAfterRelease() {
         let vm = makeVM()
-        vm.setOptionHeld(true)
-        vm.beginDragSession()
-        vm.endDragSession()
-        vm.setOptionHeld(false)
-        #expect(vm.isEditing)
+        vm.editing.setOptionHeld(true)
+        vm.editing.beginDragSession()
+        vm.editing.endDragSession()
+        vm.editing.setOptionHeld(false)
+        #expect(vm.editing.isEditing)
     }
 
     @Test func optionReleaseKeepsStickyEditMode() {
         let vm = makeVM()
-        vm.enterEditMode()
-        vm.setOptionHeld(true)
-        vm.setOptionHeld(false)
-        #expect(vm.isEditing)
+        vm.editing.enterEditMode()
+        vm.editing.setOptionHeld(true)
+        vm.editing.setOptionHeld(false)
+        #expect(vm.editing.isEditing)
     }
 
     @Test func exitWhileOptionHeldNeedsANewPress() {
         let vm = makeVM()
-        vm.setOptionHeld(true)
-        vm.exitEditMode()
-        #expect(!vm.isEditing)
-        vm.setOptionHeld(false)
-        #expect(!vm.isEditing)
-        vm.setOptionHeld(true)
-        #expect(vm.isEditing)
+        vm.editing.setOptionHeld(true)
+        vm.editing.exitEditMode()
+        #expect(!vm.editing.isEditing)
+        vm.editing.setOptionHeld(false)
+        #expect(!vm.editing.isEditing)
+        vm.editing.setOptionHeld(true)
+        #expect(vm.editing.isEditing)
     }
 
     @Test func optionIgnoredWhileRenamingFolderOrHidden() {
         let vm = makeVM()
-        vm.isRenamingFolder = true
-        vm.setOptionHeld(true)
-        #expect(!vm.isEditing)
+        vm.editing.isRenamingFolder = true
+        vm.editing.setOptionHeld(true)
+        #expect(!vm.editing.isEditing)
 
-        vm.isRenamingFolder = false
+        vm.editing.isRenamingFolder = false
         vm.hide()
-        vm.setOptionHeld(true)
-        #expect(!vm.isEditing)
+        vm.editing.setOptionHeld(true)
+        #expect(!vm.editing.isEditing)
     }
 
     @Test func optionReleaseDuringRenameStillLeaves() {
         let vm = makeVM()
-        vm.setOptionHeld(true)
-        vm.isRenamingFolder = true
-        vm.setOptionHeld(false)
-        #expect(!vm.isEditing)
+        vm.editing.setOptionHeld(true)
+        vm.editing.isRenamingFolder = true
+        vm.editing.setOptionHeld(false)
+        #expect(!vm.editing.isEditing)
     }
 
     // MARK: - Launching
 
     @Test func launchIsSuppressedWhileEditing() {
         let vm = makeVM()
-        vm.enterEditMode()
-        #expect(!vm.launchApp(vm.apps[0]))
+        vm.editing.enterEditMode()
+        #expect(!vm.itemActions.launchApp(vm.apps[0]))
         #expect(vm.isVisible)
-        #expect(vm.isEditing)
+        #expect(vm.editing.isEditing)
     }
 
     @Test func launchIsSuppressedWhileOptionHeld() {
         let vm = makeVM()
-        vm.setOptionHeld(true)
-        #expect(!vm.launchApp(vm.apps[0]))
+        vm.editing.setOptionHeld(true)
+        #expect(!vm.itemActions.launchApp(vm.apps[0]))
         #expect(vm.isVisible)
     }
 
@@ -164,14 +164,14 @@ struct LaunchpadViewModelEditModeTests {
     @Test func escapeCancelsDragThenExitsEditModeThenClosesFolderThenHides() {
         let vm = makeVM()
         vm.openFolderID = "folder"
-        vm.beginDragSession()
+        vm.editing.beginDragSession()
 
         #expect(vm.handleEscape() == .cancelledDrag)
-        #expect(vm.isEditing)
-        vm.endDragSession()
+        #expect(vm.editing.isEditing)
+        vm.editing.endDragSession()
 
         #expect(vm.handleEscape() == .exitedEditMode)
-        #expect(!vm.isEditing)
+        #expect(!vm.editing.isEditing)
         #expect(vm.openFolderID == "folder")
 
         #expect(vm.handleEscape() == .closedFolder)
@@ -180,10 +180,10 @@ struct LaunchpadViewModelEditModeTests {
 
     @Test func escapeExitsEditModeBeforeClearingWhitespaceQuery() {
         let vm = makeVM()
-        vm.enterEditMode()
-        vm.searchText = " "
+        vm.editing.enterEditMode()
+        vm.search.searchText = " "
         #expect(vm.handleEscape() == .exitedEditMode)
-        #expect(vm.searchText == " ")
+        #expect(vm.search.searchText == " ")
         #expect(vm.handleEscape() == .clearedSearch)
     }
 }

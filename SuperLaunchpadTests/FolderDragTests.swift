@@ -319,7 +319,7 @@ struct FolderDragViewModelTests {
         let bPath = try makeBundle(in: dir, name: "B", category: "public.app-category.developer-tools")
         let vm = try makeViewModel(db, bPath: bPath)
 
-        let outcome = try #require(vm.commitDrop(gridSession("a", slot: 0, target: 0, mergeInto: "b")))
+        let outcome = try #require(vm.editing.commitDrop(gridSession("a", slot: 0, target: 0, mergeInto: "b")))
         let folderID = try #require(outcome.createdFolderID)
 
         #expect(pageIDs(vm) == [[folderID, "F", "c"]])
@@ -335,9 +335,9 @@ struct FolderDragViewModelTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        let outcome = try #require(vm.commitDrop(gridSession("c", slot: 3, target: 3, mergeInto: "a")))
+        let outcome = try #require(vm.editing.commitDrop(gridSession("c", slot: 3, target: 3, mergeInto: "a")))
         let folderID = try #require(outcome.createdFolderID)
-        #expect(vm.folders.first { $0.id == folderID }?.title == LaunchpadViewModel.defaultFolderTitle)
+        #expect(vm.folders.first { $0.id == folderID }?.title == EditingModel.defaultFolderTitle)
         #expect(pageIDs(vm) == [[folderID, "b", "F"]])
     }
 
@@ -346,7 +346,7 @@ struct FolderDragViewModelTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        let outcome = try #require(vm.commitDrop(gridSession("a", slot: 0, target: 0, mergeInto: "F")))
+        let outcome = try #require(vm.editing.commitDrop(gridSession("a", slot: 0, target: 0, mergeInto: "F")))
         #expect(outcome.createdFolderID == nil)
         #expect(pageIDs(vm) == [["b", "F", "c"]])
         #expect(outcome.slot == 1)
@@ -361,7 +361,7 @@ struct FolderDragViewModelTests {
         var session = DragSession(itemID: "F", item: .folder("F"), page: 0, slot: 2, grabOffset: .zero)
         session.setMergeTarget("a")
 
-        #expect(vm.commitDrop(session) == nil)
+        #expect(vm.editing.commitDrop(session) == nil)
         #expect(pageIDs(vm) == [["a", "b", "F", "c"]])
     }
 
@@ -372,7 +372,7 @@ struct FolderDragViewModelTests {
         var session = DragSession(appID: "x", folderID: "F", index: 0, grabOffset: .zero)
         session.retarget(2)
 
-        let outcome = try #require(vm.commitDrop(session))
+        let outcome = try #require(vm.editing.commitDrop(session))
         #expect(outcome.slot == 2)
         #expect(vm.folderApps("F").map(\.id) == ["y", "z", "x"])
         #expect(pageIDs(vm) == [["a", "b", "F", "c"]])
@@ -386,7 +386,7 @@ struct FolderDragViewModelTests {
         var session = DragSession(appID: "x", folderID: "F", index: 0, grabOffset: .zero)
         session.leaveFolder(tilePage: 0, tileSlot: 2, page: 0, slot: 1)
 
-        let outcome = try #require(vm.commitDrop(session))
+        let outcome = try #require(vm.editing.commitDrop(session))
         #expect(pageIDs(vm) == [["a", "x", "b", "F", "c"]])
         #expect(outcome.page == 0)
         #expect(outcome.slot == 1)
@@ -402,7 +402,7 @@ struct FolderDragViewModelTests {
         var session = DragSession(appID: "x", folderID: "F", index: 0, grabOffset: .zero)
         session.leaveFolder(tilePage: 0, tileSlot: 2, page: 0, slot: 4)
 
-        #expect(vm.commitDrop(session) != nil)
+        #expect(vm.editing.commitDrop(session) != nil)
         #expect(pageIDs(vm) == [["a", "b", "c", "x"]])
         #expect(vm.folders.isEmpty)
         #expect(vm.openFolderID == nil)
@@ -416,7 +416,7 @@ struct FolderDragViewModelTests {
         var session = DragSession(appID: "y", folderID: "F", index: 1, grabOffset: .zero)
         session.leaveFolder(tilePage: 0, tileSlot: 2, page: 0, slot: 0)
 
-        #expect(vm.commitDrop(session) != nil)
+        #expect(vm.editing.commitDrop(session) != nil)
         #expect(vm.folderApps("F").map(\.id) == ["x"])
         #expect(pageIDs(vm) == [["y", "a", "b", "F", "c"]])
     }
@@ -429,7 +429,7 @@ struct FolderDragViewModelTests {
         session.leaveFolder(tilePage: 0, tileSlot: 2, page: 0, slot: 2)
         session.setMergeTarget("F")
 
-        let outcome = try #require(vm.commitDrop(session))
+        let outcome = try #require(vm.editing.commitDrop(session))
         #expect(outcome.page == 0)
         #expect(outcome.slot == 2)
         #expect(vm.folderApps("F").map(\.id) == ["x", "y"])
@@ -443,7 +443,7 @@ struct FolderDragViewModelTests {
         session.leaveFolder(tilePage: 0, tileSlot: 2, page: 0, slot: 0)
         session.setMergeTarget("c")
 
-        let outcome = try #require(vm.commitDrop(session))
+        let outcome = try #require(vm.editing.commitDrop(session))
         let folderID = try #require(outcome.createdFolderID)
         // F emptied and dissolved; c became the new folder.
         #expect(pageIDs(vm) == [["a", "b", folderID]])
@@ -514,7 +514,7 @@ struct FolderDragViewModelTests {
         #expect(controller.session?.targetSlot == 4)
 
         let landed = controller.end { session in
-            vm.commitDrop(session).map { ($0.page, $0.slot) }
+            vm.editing.commitDrop(session).map { ($0.page, $0.slot) }
         }
         #expect(landed == 0)
         #expect(pageIDs(vm) == [["a", "b", "F", "c", "x"]])

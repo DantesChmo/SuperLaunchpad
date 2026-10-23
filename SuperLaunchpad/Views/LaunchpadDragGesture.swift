@@ -42,22 +42,22 @@ struct LaunchpadDragGesture: ViewModifier {
                 if drag.session?.isDropping == false {
                     drag.cancel()
                 }
-                viewModel.endDragSession()
+                viewModel.editing.endDragSession()
             }
             .onChange(of: viewModel.isVisible) { _, visible in
                 guard !visible else { return }
                 drag.cancel()
-                viewModel.endDragSession()
+                viewModel.editing.endDragSession()
             }
             // The grid is replaced by search results: its slots mean nothing.
-            .onChange(of: viewModel.isSearching) { _, searching in
+            .onChange(of: viewModel.search.isSearching) { _, searching in
                 guard searching else { return }
                 drag.cancel()
-                viewModel.endDragSession()
+                viewModel.editing.endDragSession()
             }
-            .onChange(of: viewModel.dragCancelRequest) {
+            .onChange(of: viewModel.editing.dragCancelRequest) {
                 let page = drag.cancelDrop()
-                viewModel.endDragSession()
+                viewModel.editing.endDragSession()
                 show(page)
             }
     }
@@ -68,7 +68,7 @@ struct LaunchpadDragGesture: ViewModifier {
                 state = true
             }
             .onChanged { value in
-                guard !viewModel.isSearching, viewModel.pendingRemoval == nil else { return }
+                guard !viewModel.search.isSearching, viewModel.removal.pendingRemoval == nil else { return }
                 let lifted = drag.update(
                     start: value.startLocation,
                     pointer: value.location,
@@ -78,17 +78,17 @@ struct LaunchpadDragGesture: ViewModifier {
                     leaveFolder: onLeaveFolder
                 )
                 if lifted {
-                    viewModel.beginDragSession()
+                    viewModel.editing.beginDragSession()
                 }
             }
             .onEnded { _ in
                 var createdFolderID: String?
                 let page = drag.end { session in
-                    guard let outcome = viewModel.commitDrop(session) else { return nil }
+                    guard let outcome = viewModel.editing.commitDrop(session) else { return nil }
                     createdFolderID = outcome.createdFolderID
                     return (outcome.page, outcome.slot)
                 }
-                viewModel.endDragSession()
+                viewModel.editing.endDragSession()
                 onLayoutChange()
                 show(page)
                 if let createdFolderID {
@@ -124,7 +124,7 @@ struct LaunchpadDragGesture: ViewModifier {
     private func flipPage(_ direction: Int) -> Int? {
         let current = viewModel.currentPage
         if direction > 0, current + 1 >= viewModel.displayedPageCount {
-            guard viewModel.openTrailingDragPage() else { return nil }
+            guard viewModel.editing.openTrailingDragPage() else { return nil }
         }
         pager.step(by: direction)
         return viewModel.currentPage == current ? nil : viewModel.currentPage

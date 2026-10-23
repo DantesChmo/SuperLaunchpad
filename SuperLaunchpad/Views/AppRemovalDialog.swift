@@ -4,7 +4,7 @@ import SwiftUI
 // the launcher: an `NSAlert` would open below its `.screenSaver`-level panel.
 // Escape and Return reach the view model through the panel's key monitor.
 struct AppRemovalDialog: View {
-    let removal: LaunchpadViewModel.PendingRemoval
+    let removal: RemovalModel.PendingRemoval
     let onConfirm: () -> Void
     let onCancel: () -> Void
 

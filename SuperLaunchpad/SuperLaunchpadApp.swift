@@ -142,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // XCUI cannot type Latin letters reliably (with a non-Latin keyboard
             // layout it sends them as ⌘+key), so search tests pass the query in.
             if let query = UserDefaults.standard.string(forKey: "UITestSearchQuery") {
-                viewModel.searchText = query
+                viewModel.search.searchText = query
             }
         }
 

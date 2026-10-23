@@ -3,7 +3,7 @@ import Testing
 @testable import SuperLaunchpad
 
 @MainActor
-struct LaunchpadViewModelEditingTests {
+struct EditingModelLayoutEditTests {
 
     private func makeTempDB() throws -> (AppDatabase, URL) {
         let dir = FileManager.default.temporaryDirectory
@@ -63,7 +63,7 @@ struct LaunchpadViewModelEditingTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        #expect(vm.moveItem(.app("c"), toPage: 0, slot: 0))
+        #expect(vm.editing.moveItem(.app("c"), toPage: 0, slot: 0))
         #expect(pageIDs(vm) == [["c", "a", "b", "F"]])
         #expect(try storedLayout(db) == GridLayout(apps: vm.apps, folders: vm.folders))
         #expect(try db.fetchAllApps().first { $0.id == "c" }?.orderIndex == 0)
@@ -75,10 +75,10 @@ struct LaunchpadViewModelEditingTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        let folderID = try #require(vm.mergeApps("c", onto: "a"))
+        let folderID = try #require(vm.editing.mergeApps("c", onto: "a"))
         #expect(pageIDs(vm) == [[folderID, "b", "F"]])
         let folder = try #require(try db.fetchAllFolders().first { $0.id == folderID })
-        #expect(folder.title == LaunchpadViewModel.defaultFolderTitle)
+        #expect(folder.title == EditingModel.defaultFolderTitle)
         #expect(folder.pageIndex == 0 && folder.orderIndex == 0)
         let stored = try db.fetchAllApps().filter { $0.folderID == folderID }
         #expect(stored.map(\.id) == ["a", "c"] || stored.map(\.id) == ["c", "a"])
@@ -90,7 +90,7 @@ struct LaunchpadViewModelEditingTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        #expect(vm.addApp("b", toFolder: "F", at: 0))
+        #expect(vm.editing.addApp("b", toFolder: "F", at: 0))
         #expect(pageIDs(vm) == [["a", "F", "c"]])
         vm.openFolder(try #require(vm.folders.first))
         #expect(vm.openFolderApps.map(\.id) == ["b", "x", "y"])
@@ -103,9 +103,9 @@ struct LaunchpadViewModelEditingTests {
         let vm = try makeViewModel(db)
         vm.openFolder(try #require(vm.folders.first))
 
-        #expect(vm.removeApp("x", fromFolder: "F", toPage: 0, slot: 0))
+        #expect(vm.editing.removeApp("x", fromFolder: "F", toPage: 0, slot: 0))
         #expect(vm.openFolderID == "F")
-        #expect(vm.removeApp("y", fromFolder: "F", toPage: 0, slot: 0))
+        #expect(vm.editing.removeApp("y", fromFolder: "F", toPage: 0, slot: 0))
 
         #expect(vm.folders.isEmpty)
         #expect(vm.openFolderID == nil)
@@ -120,9 +120,9 @@ struct LaunchpadViewModelEditingTests {
         let vm = try makeViewModel(db)
         let apps = vm.apps
 
-        #expect(vm.moveItem(.app("missing"), toPage: 0, slot: 0) == false)
-        #expect(vm.mergeApps("a", onto: "x") == nil)
-        #expect(vm.addApp("F", toFolder: "F") == false)
+        #expect(vm.editing.moveItem(.app("missing"), toPage: 0, slot: 0) == false)
+        #expect(vm.editing.mergeApps("a", onto: "x") == nil)
+        #expect(vm.editing.addApp("F", toFolder: "F") == false)
         #expect(vm.apps == apps)
         #expect(try db.setting(.folderImportDone) == nil)
     }
@@ -132,10 +132,10 @@ struct LaunchpadViewModelEditingTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        #expect(vm.renameFolder("F", to: "  Work "))
+        #expect(vm.editing.renameFolder("F", to: "  Work "))
         #expect(vm.folders.first?.title == "Work")
         #expect(try db.fetchAllFolders().first?.title == "Work")
-        #expect(vm.renameFolder("F", to: "   ") == false)
+        #expect(vm.editing.renameFolder("F", to: "   ") == false)
         #expect(vm.folders.first?.title == "Work")
     }
 
@@ -145,8 +145,8 @@ struct LaunchpadViewModelEditingTests {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
-        #expect(vm.removeApp("x", fromFolder: "F", toPage: 0, slot: 0))
-        #expect(vm.removeApp("y", fromFolder: "F", toPage: 0, slot: 0))
+        #expect(vm.editing.removeApp("x", fromFolder: "F", toPage: 0, slot: 0))
+        #expect(vm.editing.removeApp("y", fromFolder: "F", toPage: 0, slot: 0))
 
         let systemOrdering = LaunchpadOrdering(
             appPositions: [:],

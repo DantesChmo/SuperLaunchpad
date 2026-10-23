@@ -42,7 +42,7 @@ struct LaunchpadView: View {
             let metrics = LayoutMetrics(
                 screenWidth: geo.size.width - dock.leading - dock.trailing,
                 screenHeight: geo.size.height - dock.bottom,
-                extraRows: viewModel.frequentApps.isEmpty ? 0 : 1
+                extraRows: viewModel.search.frequentApps.isEmpty ? 0 : 1
             )
 
             // Layered composition — the visual stack from back to front:
@@ -62,11 +62,11 @@ struct LaunchpadView: View {
                 VStack(spacing: 0) {
                     Spacer().frame(height: metrics.topPadding)
 
-                    SearchBarView(viewModel: viewModel)
+                    SearchBarView(search: viewModel.search)
 
                     Spacer().frame(height: metrics.topPadding * 0.5)
 
-                    if viewModel.isSearching {
+                    if viewModel.search.isSearching {
                         SearchResultsView(
                             viewModel: viewModel,
                             metrics: metrics,
@@ -81,11 +81,11 @@ struct LaunchpadView: View {
                             .foregroundStyle(.white.opacity(contrast == .increased ? LabelContrast.increasedSecondaryOpacity : LabelContrast.secondaryOpacity))
                         Spacer()
                     } else {
-                        if !viewModel.frequentApps.isEmpty {
+                        if !viewModel.search.frequentApps.isEmpty {
                             FrequentAppsRow(
-                                apps: viewModel.frequentApps,
+                                apps: viewModel.search.frequentApps,
                                 metrics: metrics,
-                                isEditing: viewModel.isEditing,
+                                isEditing: viewModel.editing.isEditing,
                                 onLaunch: { app in
                                     click(app)
                                 }
@@ -119,7 +119,7 @@ struct LaunchpadView: View {
                 .padding(dock)
                 // Short crossfade between the grid and search results; no
                 // paging animation.
-                .animation(.easeInOut(duration: Search.resultsTransition), value: viewModel.isSearching)
+                .animation(.easeInOut(duration: Search.resultsTransition), value: viewModel.search.isSearching)
                 // `.contentShape(Rectangle())` makes the otherwise transparent
                 // VStack area tappable — without this, taps would only hit the
                 // actual icon rects, not the gaps between them.
@@ -127,7 +127,7 @@ struct LaunchpadView: View {
                 .onTapGesture {
                     // Click outside any icon → leave edit mode, or hide the
                     // launcher.
-                    guard !viewModel.exitEditMode() else { return }
+                    guard !viewModel.editing.exitEditMode() else { return }
                     NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                 }
 
@@ -175,14 +175,14 @@ struct LaunchpadView: View {
                             // The popup shows the snapshot, so refresh it
                             // unless it is already gone (a commit on close);
                             // the grid tile follows `viewModel.folders`.
-                            guard viewModel.renameFolder(folder.id, to: title),
+                            guard viewModel.editing.renameFolder(folder.id, to: title),
                                   displayedFolder?.id == folder.id,
                                   let renamed = viewModel.folders.first(where: { $0.id == folder.id }) else { return }
                             displayedFolder = renamed
                         },
                         startsRenaming: folderStartsRenaming,
                         onRenamingChange: { renaming in
-                            viewModel.isRenamingFolder = renaming
+                            viewModel.editing.isRenamingFolder = renaming
                         },
                         hiddenAppID: drag.session?.sourceFolderID == folder.id ? drag.session?.itemID : nil,
                         onFramesChange: { frames in
@@ -198,26 +198,26 @@ struct LaunchpadView: View {
                     .scaleEffect(motion.folderScale(isOpen: folderIsOpen))
                 }
 
-                if let removal = viewModel.pendingRemoval {
+                if let removal = viewModel.removal.pendingRemoval {
                     AppRemovalDialog(
                         removal: removal,
                         onConfirm: {
                             Task {
-                                await viewModel.confirmRemoval {
+                                await viewModel.removal.confirmRemoval {
                                     NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
                                 }
                             }
                         },
                         onCancel: {
-                            viewModel.cancelRemoval()
+                            viewModel.removal.cancelRemoval()
                         }
                     )
                     .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: Uninstall.dialogAnimation), value: viewModel.pendingRemoval != nil)
+            .animation(.easeInOut(duration: Uninstall.dialogAnimation), value: viewModel.removal.pendingRemoval != nil)
             // Below the drag modifier, so the lifted icon doesn't wiggle.
-            .environment(\.isEditing, viewModel.isEditing)
+            .environment(\.isEditing, viewModel.editing.isEditing)
             .environment(\.enterEditMode, EnterEditModeAction(viewModel: viewModel))
             .environment(\.removeApp, RemoveAppAction(viewModel: viewModel))
             .environment(\.itemMenu, ItemMenuAction(viewModel: viewModel))
@@ -262,7 +262,7 @@ struct LaunchpadView: View {
                 guard let request, let folder = viewModel.folders.first(where: { $0.id == request.folderID }) else { return }
                 openFolder(folder, renaming: request.renaming)
             }
-            .onChange(of: viewModel.isEditing) { _, editing in
+            .onChange(of: viewModel.editing.isEditing) { _, editing in
                 AccessibilityNotification.Announcement(editing ? "Editing" : "Done editing").post()
             }
             // React to programmatic folder dismissals (e.g. Escape key handled
@@ -300,7 +300,7 @@ struct LaunchpadView: View {
     // A click on an app, launching it or showing it in Finder by its
     // modifiers (none in edit mode).
     private func click(_ app: AppEntry) {
-        guard viewModel.click(app, modifiers: NSEvent.modifierFlags) else { return }
+        guard viewModel.itemActions.click(app, modifiers: NSEvent.modifierFlags) else { return }
         // Notification → AppDelegate → hidePanel. We don't call panel
         // directly because views shouldn't know about AppKit windows.
         NotificationCenter.default.post(name: .hideLaunchpad, object: nil)

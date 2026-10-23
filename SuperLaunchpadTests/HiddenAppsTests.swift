@@ -67,7 +67,7 @@ struct HiddenAppsTests {
     @Test func hideTakesAppOffTheGridAndClosesTheGap() throws {
         let vm = try makeViewModel(nil)
 
-        #expect(vm.hideApp("a"))
+        #expect(vm.editing.hideApp("a"))
 
         #expect(pageIDs(vm) == [["F", "b"], ["c"]])
         let hidden = try entry(vm, "a")
@@ -80,7 +80,7 @@ struct HiddenAppsTests {
     @Test func hideOnlyAppOfAPageDropsThePage() throws {
         let vm = try makeViewModel(nil)
 
-        #expect(vm.hideApp("c"))
+        #expect(vm.editing.hideApp("c"))
 
         #expect(pageIDs(vm) == [["a", "F", "b"]])
     }
@@ -90,7 +90,7 @@ struct HiddenAppsTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        #expect(vm.hideApp("a"))
+        #expect(vm.editing.hideApp("a"))
 
         let stored = try db.fetchAllApps()
         let hidden = try #require(stored.first { $0.bundleIdentifier == "a" })
@@ -102,7 +102,7 @@ struct HiddenAppsTests {
     @Test func hideFolderMemberShrinksTheFolder() throws {
         let vm = try makeViewModel(nil)
 
-        #expect(vm.hideApp("y"))
+        #expect(vm.editing.hideApp("y"))
 
         #expect(vm.folderApps("F").map(\.bundleIdentifier) == ["x", "z"])
         #expect(try entry(vm, "z").folderOrderIndex == 1)
@@ -120,7 +120,7 @@ struct HiddenAppsTests {
         vm.apps = [app("a", page: 0, order: 0), app("x", folderID: "F", folderOrder: 0), app("b", page: 0, order: 2)]
         vm.openFolder(try #require(vm.folders.first))
 
-        #expect(vm.hideApp("x"))
+        #expect(vm.editing.hideApp("x"))
 
         #expect(vm.folders.isEmpty)
         #expect(pageIDs(vm) == [["a", "b"]])
@@ -133,7 +133,7 @@ struct HiddenAppsTests {
         vm.apps.append(app("hidden", hidden: true))
         let before = vm.apps
 
-        #expect(!vm.hideApp(appID))
+        #expect(!vm.editing.hideApp(appID))
 
         #expect(vm.apps == before)
     }
@@ -144,9 +144,9 @@ struct HiddenAppsTests {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
-        #expect(vm.hideApp("a"))
+        #expect(vm.editing.hideApp("a"))
 
-        #expect(vm.unhideApp("a"))
+        #expect(vm.editing.unhideApp("a"))
 
         #expect(pageIDs(vm) == [["F", "b"], ["c", "a"]])
         let shown = try entry(vm, "a")
@@ -161,7 +161,7 @@ struct HiddenAppsTests {
         let vm = LaunchpadViewModel(database: nil)
         vm.apps = (0..<Grid.appsPerPage).map { app("app\($0)", page: 0, order: $0) } + [app("h", hidden: true)]
 
-        #expect(vm.unhideApp("h"))
+        #expect(vm.editing.unhideApp("h"))
 
         #expect(vm.pages.count == 2)
         #expect(pageIDs(vm)[1] == ["h"])
@@ -172,7 +172,7 @@ struct HiddenAppsTests {
         vm.apps = [app("h", hidden: true)]
         #expect(vm.pages.isEmpty)
 
-        #expect(vm.unhideApp("h"))
+        #expect(vm.editing.unhideApp("h"))
 
         #expect(pageIDs(vm) == [["h"]])
     }
@@ -182,7 +182,7 @@ struct HiddenAppsTests {
         let vm = try makeViewModel(nil)
         let before = vm.apps
 
-        #expect(!vm.unhideApp(appID))
+        #expect(!vm.editing.unhideApp(appID))
 
         #expect(vm.apps == before)
     }
@@ -191,7 +191,7 @@ struct HiddenAppsTests {
         let vm = try makeViewModel(nil)
         vm.apps += [app("h1", name: "zebra", hidden: true), app("h2", name: "Émile", hidden: true), app("h3", name: "apple", hidden: true)]
 
-        #expect(vm.hiddenApps.map(\.displayName) == ["apple", "Émile", "zebra"])
+        #expect(vm.editing.hiddenApps.map(\.displayName) == ["apple", "Émile", "zebra"])
     }
 
     // MARK: - Menu
@@ -199,12 +199,12 @@ struct HiddenAppsTests {
     @Test func menuHidesAndUnhides() throws {
         let vm = try makeViewModel(nil)
 
-        #expect(vm.menuItems(for: try entry(vm, "a")).joined().contains { $0.action == .hide })
-        #expect(!vm.perform(.hide, on: try entry(vm, "a")))
+        #expect(vm.itemActions.menuItems(for: try entry(vm, "a")).joined().contains { $0.action == .hide })
+        #expect(!vm.itemActions.perform(.hide, on: try entry(vm, "a")))
         #expect(try entry(vm, "a").isHidden)
 
-        #expect(vm.menuItems(for: try entry(vm, "a")).joined().contains { $0.action == .unhide })
-        #expect(!vm.perform(.unhide, on: try entry(vm, "a")))
+        #expect(vm.itemActions.menuItems(for: try entry(vm, "a")).joined().contains { $0.action == .unhide })
+        #expect(!vm.itemActions.perform(.unhide, on: try entry(vm, "a")))
         #expect(try entry(vm, "a").isHidden == false)
     }
 
@@ -214,24 +214,24 @@ struct HiddenAppsTests {
         let vm = try makeViewModel(nil)
         vm.apps.append(app("com.secret", name: "Secret Agent", hidden: true))
 
-        vm.searchText = "secret"
+        vm.search.searchText = "secret"
 
-        let result = try #require(vm.searchResults.first?.appEntry)
-        #expect(vm.searchResults.count == 1)
+        let result = try #require(vm.search.searchResults.first?.appEntry)
+        #expect(vm.search.searchResults.count == 1)
         #expect(result.bundleIdentifier == "com.secret")
         #expect(result.isHidden)
     }
 
     @Test func searchResultFollowsHideAndUnhide() throws {
         let vm = try makeViewModel(nil)
-        vm.searchText = "a"
-        #expect(vm.searchResults.first { $0.id == "a" }?.appEntry?.isHidden == false)
+        vm.search.searchText = "a"
+        #expect(vm.search.searchResults.first { $0.id == "a" }?.appEntry?.isHidden == false)
 
-        #expect(vm.hideApp("a"))
-        #expect(vm.searchResults.first { $0.id == "a" }?.appEntry?.isHidden == true)
+        #expect(vm.editing.hideApp("a"))
+        #expect(vm.search.searchResults.first { $0.id == "a" }?.appEntry?.isHidden == true)
 
-        #expect(vm.unhideApp("a"))
-        #expect(vm.searchResults.first { $0.id == "a" }?.appEntry?.isHidden == false)
+        #expect(vm.editing.unhideApp("a"))
+        #expect(vm.search.searchResults.first { $0.id == "a" }?.appEntry?.isHidden == false)
     }
 
     // MARK: - Rescan
@@ -290,7 +290,7 @@ struct HiddenAppsTests {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
-        #expect(vm.hideApp("y"))
+        #expect(vm.editing.hideApp("y"))
 
         // Next launch: what a rescan reads back from the DB after its merge.
         let relaunched = LaunchpadViewModel(database: db)

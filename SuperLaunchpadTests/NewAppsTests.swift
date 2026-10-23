@@ -270,9 +270,9 @@ struct NewAppsTests {
         try db.saveApps([app("com.a", page: 0, order: 0, isNew: true)])
         let vm = LaunchpadViewModel(database: db)
         vm.apps = try db.fetchAllApps()
-        vm.enterEditMode()
+        vm.editing.enterEditMode()
 
-        let launched = vm.launchApp(try #require(vm.apps.first))
+        let launched = vm.itemActions.launchApp(try #require(vm.apps.first))
 
         #expect(launched == false)
         #expect(vm.apps.first?.isNew == true)

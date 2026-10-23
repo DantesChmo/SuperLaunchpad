@@ -11,7 +11,7 @@ Instructions for AI coding agents (Claude Code, Cursor, Codex, Aider, Continue, 
 - **Database:** GRDB 7.0+ (SQLite)
 - **Platform:** macOS 15.4+ (Sequoia)
 - **Tests:** swift-testing (`import Testing`) — **not** XCTest
-- **Architecture:** MVVM with `@Observable`, single `LaunchpadViewModel` as source of truth
+- **Architecture:** MVVM with `@Observable`: `LaunchpadViewModel` is the source of truth and coordinator; focused models (`search`, `editing`, `removal`, `layoutFiles`, `itemActions`) hang off it
 
 ## Build, run, test
 
@@ -41,14 +41,14 @@ For UI-affecting changes, open `SuperLaunchpad.xcodeproj` in Xcode and **⌘R** 
 
 ## Architecture in 60 seconds
 
-`LaunchpadViewModel` (`@Observable`, `@MainActor`) is the single source of truth. `LaunchpadPanel` (`NSPanel`) hosts the SwiftUI hierarchy. `AppDatabase` (GRDB) persists app/folder ordering across launches.
+`LaunchpadViewModel` (`@Observable`, `@MainActor`) is the single source of truth and the coordinator of the focused models (see "View model split"). `LaunchpadPanel` (`NSPanel`) hosts the SwiftUI hierarchy. `AppDatabase` (GRDB) persists app/folder ordering across launches.
 
 Data flow:
 
 1. `AppDelegate.applicationDidFinishLaunching()` → creates `LaunchpadPanel`, calls `viewModel.loadApps()`.
 2. `loadApps()` reads DB cache first, then `Task.detached` scans `/Applications` + `/System/Applications` via `AppEnumerator`, syncs back to `@MainActor`.
 3. First launch only: `SystemLaunchpadDB` reads `~/.com.apple.dock.launchpad/db/db` for ordering and folders; otherwise alphabetical fallback.
-4. Subsequent launches: existing positions preserved; new apps (no DB row yet) get `isNew` and go where Settings → New Apps says (`Helpers/NewAppPlacement.swift`: end / category folder / "New" folder). The rescan's DB work is the pure-ish `LaunchpadViewModel.syncScan`, testable with a temp DB.
+4. Subsequent launches: existing positions preserved; new apps (no DB row yet) get `isNew` and go where Settings → New Apps says (`Helpers/NewAppPlacement.swift`: end / category folder / "New" folder). The rescan's DB work is the pure-ish `LaunchpadViewModel.syncScan` (`LaunchpadViewModel+Ordering.swift`), testable with a temp DB.
 5. `AppDirectoryWatcher` (DispatchSource) triggers `loadApps()` on install/uninstall.
 6. `GestureMonitor` listens for global trackpad pinch (threshold 0.5) to show/hide.
 
@@ -59,7 +59,13 @@ Data flow:
 | Path | Role |
 |------|------|
 | `SuperLaunchpadApp.swift` | `@main`, `AppDelegate`, `MenuBarExtra` |
-| `ViewModels/LaunchpadViewModel.swift` | source of truth — apps, pages, currentPage, show/hide/launch |
+| `ViewModels/LaunchpadViewModel.swift` | source of truth and coordinator — apps, folders, pages, currentPage, visibility, open folder, DB, rescan, `layoutRevision`, the layout write path (`applyEdit` / `replaceLayout` / `recordLaunch`), show/hide, Escape ladder, `folderOpenRequest`; owns the models below |
+| `ViewModels/LaunchpadViewModel+Ordering.swift` | pure `nonisolated static` rescan steps: `syncScan`, `applyOrdering` (first run), `mergeNewApps` |
+| `ViewModels/SearchModel.swift` | `viewModel.search` — query, results, keyboard selection, focus request, Frequently Used row |
+| `ViewModels/EditingModel.swift` | `viewModel.editing` — edit mode (⌥, sticky), drag session (trailing page, cancel), `commitDrop`, layout edits (move, merge / create folder, add / remove from folder, disband, sort, rename), hide / unhide |
+| `ViewModels/RemovalModel.swift` | `viewModel.removal` — Trash dialog (`PendingRemoval`), quit before Trash, `isRemovable` cache, `dropUninstalledApp` |
+| `ViewModels/LayoutFileModel.swift` | `viewModel.layoutFiles` — current `layoutFile`, reset, load, restore previous, `layoutBackups` |
+| `ViewModels/ItemActionsModel.swift` | `viewModel.itemActions` — `launchApp`, clicks with modifiers, context-menu items and `perform(_:on:)`; `opener` |
 | `Models/AppEntry.swift` | GRDB record — bundleIdentifier (PK), pageIndex, orderIndex, folderID, folderOrderIndex, isHidden, isNew (blue dot), launchCount |
 | `Models/FolderEntry.swift` | GRDB record — id (PK), title, pageIndex, orderIndex |
 | `Models/GridItem.swift` | `LaunchpadItem` enum: `.app(AppEntry)` / `.folder(FolderEntry, apps)` |
@@ -98,7 +104,7 @@ Data flow:
 
 - **Naming:** `PascalCase` for types, `camelCase` for methods and properties. No Hungarian notation, no `m_` prefixes.
 - **Visibility:** mark members `private` aggressively. Default to `private`, widen only when needed.
-- **`// MARK: - …`** to group methods in large classes (`AppDatabase`, `LaunchpadPanel`, `LaunchpadViewModel`).
+- **`// MARK: - …`** to group methods in large classes (`AppDatabase`, `LaunchpadPanel`, `LaunchpadViewModel`, `EditingModel`).
 - **Error handling:** prefer `try?` with an explicit default over `do/catch`:
   ```swift
   let apps = (try? database?.fetchAllApps()) ?? []
@@ -109,7 +115,7 @@ Data flow:
 
 ### SwiftUI
 
-- `LaunchpadViewModel` is the only source of truth. Pass it (or a slice of it) to child views **through parameters** — do not reach for a global singleton.
+- `LaunchpadViewModel` is the only source of truth. Pass it (or one of its models, e.g. `viewModel.search` to `SearchBarView`) to child views **through parameters** — do not reach for a global singleton.
 - `@State` is reserved for **local UI state only** (hover, animation toggles, open/closed flags). Anything persistent or shared lives on the ViewModel.
 - `@Bindable` (Swift 5.9+) when a child needs to write back to the `@Observable` model.
 - Use `NSViewRepresentable` for AppKit bridges (see `VisualEffectBackground.swift`). For a top-level window use `NSPanel` directly, not a SwiftUI overlay.
@@ -137,7 +143,7 @@ Data flow:
 
 - `Task.detached` for background work (file scans, icon extraction). Always capture `[weak self]`.
 - Return to the main thread with explicit `await MainActor.run { … }` for state mutation.
-- The ViewModel is `@MainActor`. Do not call its setters from a background queue.
+- The ViewModel and its models are `@MainActor`. Do not call their setters from a background queue.
 - No `actor` types in this codebase — concurrency is structured around `@MainActor` + `Task.detached`.
 - `DispatchQueue.main.asyncAfter` is used only for deferred UI cosmetics (folder close delays). Don't put logic in it.
 
@@ -176,10 +182,21 @@ Data flow:
       }
   }
   ```
-- `@MainActor` is required on test suites that touch the ViewModel.
+- `@MainActor` is required on test suites that touch the ViewModel. Tests build a `LaunchpadViewModel` and reach a model through it (`vm.editing.hideApp(…)`, `vm.removal.trash = …`); suites are named after the model they cover (`SearchModelTests`, `EditingModel…Tests`, `RemovalModelTests`, `ItemActionsModelTests`).
 - Use `makeTempDB()` helper from `AppDatabaseTests.swift` for a fresh on-disk SQLite per test, cleaned up via `defer`. Do **not** share a database between tests.
 - Fixtures: small private helpers like `func app(_ id: String = "com.test.app") -> AppEntry { … }` inside the test struct. Don't build a fixture framework.
 - `throws` on the test function — propagate, don't `try?` inside the test (failures should surface).
+
+## View model split
+
+`LaunchpadViewModel` is a thin coordinator; behaviour lives in five `@MainActor @Observable` models it creates and owns: `search`, `editing`, `removal`, `layoutFiles`, `itemActions`.
+
+- **Ownership.** The coordinator holds each model in an `@ObservationIgnored private(set) lazy var` (lazy so `self` can be passed in); each model holds `private unowned let launchpad: LaunchpadViewModel`. The models never outlive the coordinator, so `unowned` is safe and there is no retain cycle. Don't store a model anywhere that outlives its view model, and don't create one outside the coordinator.
+- **Shared state stays on the coordinator:** `apps`, `folders`, `pages`, `currentPage`, `isVisible`, `openFolderID`, `dockInsets`, `database`, `runningApps`, `layoutRevision`, `folderOpenRequest`. A model owns only its own state (query and results, edit mode and drag flags, the Trash dialog, backups, the opener) and reads the rest through `launchpad`.
+- **One write path.** A layout change goes through `LaunchpadViewModel.applyEdit` (one `GridLayout` operation → `apps`/`folders` in one `updateContents`, `layoutRevision += 1`, one DB transaction) or `replaceLayout` (reset / load). `renameFolder` and `recordLaunch` are the only other writers and bump `layoutRevision` too. A new edit is a method on `EditingModel` (or the model it belongs to) that calls `applyEdit`; don't add DB writes elsewhere.
+- **Cross-model calls go through the coordinator:** a model reaches a sibling as `launchpad.editing`, `launchpad.search`, …. The coordinator calls into models for its own flows: `updateContents` → `search.contentsDidChange()`, `show()` → `search.launcherDidShow()` / `editing.resetOptionKey()`, `hide()` / `handleEscape()` → `removal` / `editing` / `search`, a rescan result checks `editing.isDragSessionActive` and `editing.endDragSession()` hands the parked one back (`receiveParkedRescan`).
+- **Views** take `viewModel` and read `viewModel.search.isSearching`, `viewModel.editing.isEditing`, …; observation tracks the model's own properties. A view that binds to a model's property takes the model (`SearchBarView(search:)`), since `$viewModel.search.x` can't bind through a `private(set)` property.
+- **1.8.0 multi-select** belongs in `EditingModel`: the selection set next to `isEditing` (cleared by `exitEditMode`, which hide, search and Escape already call), group drag in the drag-session / `commitDrop` sections, group actions (new folder, hide, Trash) as single `applyEdit` calls so a group is one DB transaction and one `layoutRevision` bump; `ItemActionsModel` dispatches the menu items, `RemovalModel` gets the group Trash flow.
 
 ## Domain gotchas
 
@@ -194,7 +211,7 @@ Things a new developer cannot guess from the code:
 - **`NSHostingView` needs an explicit frame of the screen's size at origin `.zero`** on resize when embedded in `NSPanel` — SwiftUI doesn't propagate sizing to the AppKit host automatically here. Not `screen.frame` itself: a secondary display has a non-zero origin.
 - **Multi-monitor:** `LaunchpadPanel` opens on the screen under the cursor (`Helpers/ScreenSelection.swift`, pure and tested). On `didChangeScreenParametersNotification` a visible panel stays on its display (by display ID) with the new frame, or moves under the cursor if that display was unplugged.
 - **Context menus open below the `.screenSaver` panel.** NSMenu windows sit at the pop-up menu level, so `LaunchpadPanel` steps down to just below it on `NSMenu.didBeginTrackingNotification` and back up on `didEndTrackingNotification` — still above the Dock and menu bar. `NSAlert` has the same problem, which is why the Trash dialog is drawn inside the launcher.
-- **Context menu items are built in one place:** `ItemMenu.items(for:)`, one function per item kind (app, folder). A new action (Hide, Quit, …) is a new `ItemMenu.Action` case, a line there and a branch in `LaunchpadViewModel.perform(_:on:)`; the menu and the VoiceOver actions pick it up. Actions returning `true` want the launcher hidden — the view posts `.hideLaunchpad`, it is not the view model's job.
+- **Context menu items are built in one place:** `ItemMenu.items(for:)`, one function per item kind (app, folder). A new action (Hide, Quit, …) is a new `ItemMenu.Action` case, a line there and a branch in `ItemActionsModel.perform(_:on:)`; the menu and the VoiceOver actions pick it up. Actions returning `true` want the launcher hidden — the view posts `.hideLaunchpad`, it is not the view model's job.
 - **Hidden apps (`appEntry.isHidden`) have no position at all** — `pageIndex`, `orderIndex`, `folderID`, `folderOrderIndex` are all nil, so they take no slot on a page or in a folder (a folder they leave empty is dissolved). `rebuildPages` and `GridLayout.init` skip them; only search (`AppSearch` runs over every app) and Settings → Hidden Apps show them. `hideApp` / `unhideApp` go through `applyEdit`; unhiding appends to the end of the last page (`GridLayout.append`). A rescan keeps the flag (`mergeNewApps` copies existing rows and never attaches a hidden app to a re-imported folder), and `hasOrderingData` counts hidden rows so they are never re-imported as visible.
 - **Running apps:** `RunningApps` is seeded from `NSWorkspace.runningApplications` and then follows `didLaunch`/`didTerminateApplicationNotification` on the *workspace's* notification center; nothing polls. An app matches a process by bundle ID, else by standardized bundle path. Views read it through `\.runningApps` (the dot, `runningDot(_:)` in `GridItemContainer.swift`, sits in the gap between icon and label — the name row is left to other badges). Tests use `FakeWorkspace` (`RunningAppsTests.swift`) and never touch real processes.
 - **Menu alternates:** an `ItemMenu.Item` may carry an `alternate` action shown while ⌥ is held (`modifierKeyAlternate`); VoiceOver gets it as an action of its own. Quit → Force Quit is the only one.
@@ -205,7 +222,7 @@ Things a new developer cannot guess from the code:
 - **Search** (`AppSearch`, pure) runs on every keystroke over all apps — hidden ones too, shown dimmed with an eye — and over folder titles. Match kinds, best first: name prefix, word prefix, word initials (`vsc` → Visual Studio Code, `sysset` → System Settings; words also split at camelCase), contains, fuzzy (letters in order). Order: name-prefix matches first and fuzzy matches last; in between, and inside each of those groups, `launchCount` beats match kind. A folder result (Return or click) clears the query and opens the folder over the grid via `folderOpenRequest`.
 - **Launch counter.** Every launch from the launcher (click, `⌘`-click, menu Open, Return in search) goes through `recordLaunch`: `launchCount + 1` and `isNew = false` in memory and in one DB update, and a `layoutRevision` bump so a rescan running at that moment doesn't write back the row it read before. Show in Finder and clicks in edit mode don't count.
 - **Frequently Used row** (Settings → Search, `Preferences.showsFrequentApps`, off by default): up to `FrequentApps.maxCount` most launched visible apps, picked on `show()` and kept in that order while the launcher is open (a `⌘`-click must not move the icon under the pointer). While it has apps, `LayoutMetrics(extraRows: 1)` shares the grid's height with it, also during search, and the icon shrinks if the shorter cell needs it. Click only; arrows and Return keep paging; in edit mode it is dimmed and ignores clicks.
-- **Layout file and reset.** `LayoutFile` stores no folder IDs and no icons; `apply(to:)` makes new folder IDs, skips apps that aren't installed, drops folders left empty, spills pages longer than a page, puts apps the file doesn't have after the last item by name, and keeps an app hidden here that the file doesn't mention hidden. `decode` checks `formatVersion` first: a newer one is `LayoutFileError.newerFormat` and nothing is changed — bump `currentFormatVersion` whenever older builds can't read the file (2.0.0 grid size). `LaunchpadViewModel.resetLayout` / `loadLayout` save the current layout to `layoutBackups` first and change nothing if that throws; `restorePreviousLayout` loads the newest backup (after backing up, so a second restore undoes the first). A reset keeps hidden apps hidden and the new-app dot; the system Launchpad mode puts apps its DB doesn't know at the end (the first-run import drops them). Tests pass a temp `LayoutBackupStore`; the test init has none.
+- **Layout file and reset.** `LayoutFile` stores no folder IDs and no icons; `apply(to:)` makes new folder IDs, skips apps that aren't installed, drops folders left empty, spills pages longer than a page, puts apps the file doesn't have after the last item by name, and keeps an app hidden here that the file doesn't mention hidden. `decode` checks `formatVersion` first: a newer one is `LayoutFileError.newerFormat` and nothing is changed — bump `currentFormatVersion` whenever older builds can't read the file (2.0.0 grid size). `LayoutFileModel.resetLayout` / `loadLayout` save the current layout to `layoutBackups` first and change nothing if that throws; `restorePreviousLayout` loads the newest backup (after backing up, so a second restore undoes the first). A reset keeps hidden apps hidden and the new-app dot; the system Launchpad mode puts apps its DB doesn't know at the end (the first-run import drops them). Tests pass a temp `LayoutBackupStore`; the test init has none.
 
 ## Forbidden patterns
 
@@ -218,12 +235,6 @@ Things a new developer cannot guess from the code:
 - ❌ Hardcoded filesystem paths. Use `FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)`.
 - ❌ Inventing new persistence layers. There is one `AppDatabase` — extend it.
 - ❌ Running `xcodebuild` via Bash. Hard rule — use `xcodebuildmcp` MCP tools. Only fall back if the MCP server itself fails to start. See "Build, run, test".
-
-## Known limitations / dead ends
-
-These are intentionally unimplemented. Don't half-implement them as a side effect of another task.
-
-- **Drag-and-drop reorder** — not feasible inside SwiftUI `ScrollView` on macOS as of Sequoia. Several attempts have been ruled out; consult before re-attempting.
 
 ## Workflow
 

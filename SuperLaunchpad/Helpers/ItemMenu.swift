@@ -3,7 +3,7 @@ import AppKit
 // What a right-click on an icon offers. The same list feeds the context menu
 // and the icon's VoiceOver actions, so a new action (Hide, Quit, …) is a new
 // `Action` case plus a line in `items(for:)`; both pick it up. The view model
-// carries the actions out (`LaunchpadViewModel.perform`).
+// carries the actions out (`ItemActionsModel.perform`).
 enum ItemMenu {
     enum Action: Hashable {
         case open

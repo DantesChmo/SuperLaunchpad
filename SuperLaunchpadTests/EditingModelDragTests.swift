@@ -3,7 +3,7 @@ import Testing
 @testable import SuperLaunchpad
 
 @MainActor
-struct LaunchpadViewModelDragTests {
+struct EditingModelDragTests {
 
     private func makeTempDB() throws -> (AppDatabase, URL) {
         let dir = FileManager.default.temporaryDirectory
@@ -50,12 +50,12 @@ struct LaunchpadViewModelDragTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        vm.beginDragSession()
+        vm.editing.beginDragSession()
         vm.receiveRescanResult(apps: [app("a", order: 0), app("b", order: 1), app("c", order: 2)], folders: [], startRevision: 0)
         #expect(pageIDs(vm) == [["a", "b"]])
 
-        vm.endDragSession()
-        #expect(!vm.isDragSessionActive)
+        vm.editing.endDragSession()
+        #expect(!vm.editing.isDragSessionActive)
         #expect(pageIDs(vm) == [["a", "b", "c"]])
     }
 
@@ -64,11 +64,11 @@ struct LaunchpadViewModelDragTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        vm.beginDragSession()
-        vm.endDragSession()
-        vm.endDragSession()
+        vm.editing.beginDragSession()
+        vm.editing.endDragSession()
+        vm.editing.endDragSession()
 
-        #expect(!vm.isDragSessionActive)
+        #expect(!vm.editing.isDragSessionActive)
         #expect(pageIDs(vm) == [["a", "b"]])
     }
 
@@ -77,9 +77,9 @@ struct LaunchpadViewModelDragTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        vm.beginDragSession()
-        #expect(vm.moveItem(.app("b"), toPage: 0, slot: 0))
-        vm.endDragSession()
+        vm.editing.beginDragSession()
+        #expect(vm.editing.moveItem(.app("b"), toPage: 0, slot: 0))
+        vm.editing.endDragSession()
 
         #expect(pageIDs(vm) == [["b", "a"]])
         let stored = try db.fetchAllApps().sorted { ($0.orderIndex ?? 0) < ($1.orderIndex ?? 0) }
@@ -90,15 +90,15 @@ struct LaunchpadViewModelDragTests {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
-        vm.searchText = "a"
-        vm.beginDragSession()
-        let request = vm.dragCancelRequest
+        vm.search.searchText = "a"
+        vm.editing.beginDragSession()
+        let request = vm.editing.dragCancelRequest
 
         #expect(vm.handleEscape() == .cancelledDrag)
-        #expect(vm.dragCancelRequest == request + 1)
-        #expect(vm.searchText == "a")
+        #expect(vm.editing.dragCancelRequest == request + 1)
+        #expect(vm.search.searchText == "a")
 
-        vm.endDragSession()
+        vm.editing.endDragSession()
         #expect(vm.handleEscape() == .clearedSearch)
     }
 }

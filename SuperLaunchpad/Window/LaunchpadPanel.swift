@@ -211,14 +211,14 @@ final class LaunchpadPanel: NSPanel {
             guard let self, self.viewModel.isVisible, event.window === self else { return event }
             if event.type == .flagsChanged {
                 let option = event.modifierFlags.intersection([.command, .option, .control, .shift]) == .option
-                self.viewModel.setOptionHeld(option)
+                self.viewModel.editing.setOptionHeld(option)
                 return event
             }
             if event.type == .keyDown {
                 return self.handleKeyDown(event) ? nil : event
             }
-            guard self.viewModel.openFolderID == nil, !self.viewModel.isSearching,
-                  self.viewModel.pendingRemoval == nil else { return event }
+            guard self.viewModel.openFolderID == nil, !self.viewModel.search.isSearching,
+                  self.viewModel.removal.pendingRemoval == nil else { return event }
             self.pager.handleScroll(event)
             return nil
         }
@@ -232,17 +232,17 @@ final class LaunchpadPanel: NSPanel {
         // arrows, Return and Escape.
         if let editor = firstResponder as? NSTextView, editor.hasMarkedText() { return false }
         // The folder title field handles its own Escape (cancel the edit) and arrows.
-        guard !viewModel.isRenamingFolder else { return false }
+        guard !viewModel.editing.isRenamingFolder else { return false }
         // The Trash dialog takes Escape and Return; other keys must not page
         // or start a search behind it.
-        if viewModel.pendingRemoval != nil {
+        if viewModel.removal.pendingRemoval != nil {
             guard !event.modifierFlags.contains(.command) else { return false }
             switch Int(event.keyCode) {
             case kVK_Escape:
-                viewModel.cancelRemoval()
+                viewModel.removal.cancelRemoval()
             case kVK_Return, kVK_ANSI_KeypadEnter:
                 Task { [weak self] in
-                    await self?.viewModel.confirmRemoval { self?.hidePanel() }
+                    await self?.viewModel.removal.confirmRemoval { self?.hidePanel() }
                 }
             default:
                 break
@@ -251,31 +251,31 @@ final class LaunchpadPanel: NSPanel {
         }
         guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return false }
 
-        let searching = viewModel.isSearching
+        let searching = viewModel.search.isSearching
         switch Int(event.keyCode) {
         case kVK_Escape:
             if viewModel.handleEscape() == .hideLauncher {
                 hidePanel()
             }
         case kVK_LeftArrow:
-            if searching { viewModel.moveSelection(by: -1) } else { pager.step(by: -1) }
+            if searching { viewModel.search.moveSelection(by: -1) } else { pager.step(by: -1) }
         case kVK_RightArrow:
-            if searching { viewModel.moveSelection(by: 1) } else { pager.step(by: 1) }
+            if searching { viewModel.search.moveSelection(by: 1) } else { pager.step(by: 1) }
         case kVK_UpArrow where searching:
-            viewModel.moveSelection(by: -Grid.columns)
+            viewModel.search.moveSelection(by: -Grid.columns)
         case kVK_DownArrow where searching:
-            viewModel.moveSelection(by: Grid.columns)
-        case kVK_Return where viewModel.isEditing, kVK_ANSI_KeypadEnter where viewModel.isEditing:
-            viewModel.exitEditMode()
+            viewModel.search.moveSelection(by: Grid.columns)
+        case kVK_Return where viewModel.editing.isEditing, kVK_ANSI_KeypadEnter where viewModel.editing.isEditing:
+            viewModel.editing.exitEditMode()
         case kVK_Return where searching, kVK_ANSI_KeypadEnter where searching:
-            switch viewModel.selectedResult {
+            switch viewModel.search.selectedResult {
             case .app(let app):
                 // Hide first: `launchApp` also hides the view model, after
                 // which `hidePanel` would skip the `orderOut`.
                 hidePanel()
-                viewModel.launchApp(app)
+                viewModel.itemActions.launchApp(app)
             case .folder(let folder, _):
-                viewModel.openFolderFromSearch(folder)
+                viewModel.search.openFolderFromSearch(folder)
             case nil:
                 break
             }

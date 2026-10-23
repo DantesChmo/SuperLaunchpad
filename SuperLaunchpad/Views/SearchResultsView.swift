@@ -13,7 +13,7 @@ struct SearchResultsView: View {
 
     var body: some View {
         Group {
-            if viewModel.searchResults.isEmpty {
+            if viewModel.search.searchResults.isEmpty {
                 VStack {
                     Spacer()
                     Text("No Results")
@@ -23,11 +23,11 @@ struct SearchResultsView: View {
                 .frame(maxWidth: .infinity)
             } else {
                 AppGridPageView(
-                    items: viewModel.searchResults,
+                    items: viewModel.search.searchResults,
                     metrics: metrics,
-                    selectedID: viewModel.selectedResult?.id,
+                    selectedID: viewModel.search.selectedResult?.id,
                     onLaunch: onLaunch,
-                    onOpenFolder: { viewModel.openFolderFromSearch($0) }
+                    onOpenFolder: { viewModel.search.openFolderFromSearch($0) }
                 )
             }
         }

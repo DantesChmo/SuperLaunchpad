@@ -3,7 +3,7 @@ import Testing
 @testable import SuperLaunchpad
 
 @MainActor
-struct LaunchpadViewModelRemovalTests {
+struct RemovalModelTests {
 
     private enum TestError: Error {
         case diskFull
@@ -64,7 +64,7 @@ struct LaunchpadViewModelRemovalTests {
         vm.folders = folders
         vm.apps = apps
         vm.runningApps = RunningApps(source: (workspace ?? FakeWorkspace()).source)
-        vm.trash = AppTrash.Operations(
+        vm.removal.trash = AppTrash.Operations(
             needsAuthorization: { path in log.protected.contains(path) },
             moveToTrash: { path in
                 if let failure = log.failure { throw failure }
@@ -76,7 +76,7 @@ struct LaunchpadViewModelRemovalTests {
             }
         )
         vm.show()
-        vm.enterEditMode()
+        vm.editing.enterEditMode()
         return vm
     }
 
@@ -95,10 +95,10 @@ struct LaunchpadViewModelRemovalTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, log: TrashLog())
 
-        vm.requestRemoval(of: try entry(vm, "a"))
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
 
-        #expect(vm.pendingRemoval?.app.bundleIdentifier == "a")
-        #expect(vm.pendingRemoval?.stage == .confirm)
+        #expect(vm.removal.pendingRemoval?.app.bundleIdentifier == "a")
+        #expect(vm.removal.pendingRemoval?.stage == .confirm)
     }
 
     @Test func requestForRunningAppSaysItIsOpen() throws {
@@ -108,9 +108,9 @@ struct LaunchpadViewModelRemovalTests {
         workspace.launch("a")
         let vm = try makeViewModel(db, log: TrashLog(), workspace: workspace)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
 
-        #expect(vm.pendingRemoval?.stage == .appIsOpen)
+        #expect(vm.removal.pendingRemoval?.stage == .appIsOpen)
     }
 
     @Test func requestIgnoresSystemApps() throws {
@@ -118,8 +118,8 @@ struct LaunchpadViewModelRemovalTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, log: TrashLog())
 
-        vm.requestRemoval(of: try entry(vm, "mail"))
-        #expect(vm.pendingRemoval == nil)
+        vm.removal.requestRemoval(of: try entry(vm, "mail"))
+        #expect(vm.removal.pendingRemoval == nil)
     }
 
     // The context menu's Move to Trash works outside edit mode.
@@ -128,10 +128,10 @@ struct LaunchpadViewModelRemovalTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, log: TrashLog())
 
-        vm.exitEditMode()
-        vm.requestRemoval(of: try entry(vm, "a"))
-        #expect(vm.pendingRemoval?.stage == .confirm)
-        #expect(!vm.isEditing)
+        vm.editing.exitEditMode()
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
+        #expect(vm.removal.pendingRemoval?.stage == .confirm)
+        #expect(!vm.editing.isEditing)
     }
 
     @Test func escapeAndHideCloseTheDialogFirst() throws {
@@ -139,14 +139,14 @@ struct LaunchpadViewModelRemovalTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, log: TrashLog())
 
-        vm.requestRemoval(of: try entry(vm, "a"))
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
         #expect(vm.handleEscape() == .cancelledRemoval)
-        #expect(vm.pendingRemoval == nil)
-        #expect(vm.isEditing)
+        #expect(vm.removal.pendingRemoval == nil)
+        #expect(vm.editing.isEditing)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
         vm.hide()
-        #expect(vm.pendingRemoval == nil)
+        #expect(vm.removal.pendingRemoval == nil)
     }
 
     // MARK: - Confirming
@@ -157,16 +157,16 @@ struct LaunchpadViewModelRemovalTests {
         let log = TrashLog()
         let vm = try makeViewModel(db, log: log)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
         var hidden = false
-        await vm.confirmRemoval { hidden = true }
+        await vm.removal.confirmRemoval { hidden = true }
 
         #expect(log.trashed == ["/Applications/a.app"])
         #expect(!hidden)
-        #expect(vm.pendingRemoval == nil)
+        #expect(vm.removal.pendingRemoval == nil)
         #expect(pageIDs(vm) == [["b", "F", "mail"]])
         #expect(try db.fetchAllApps().map(\.bundleIdentifier).contains("a") == false)
-        #expect(vm.isEditing)
+        #expect(vm.editing.isEditing)
     }
 
     @Test func confirmLastAppOfFolderDissolvesIt() async throws {
@@ -175,8 +175,8 @@ struct LaunchpadViewModelRemovalTests {
         let vm = try makeViewModel(db, log: TrashLog())
         vm.openFolderID = "F"
 
-        vm.requestRemoval(of: try entry(vm, "x"))
-        await vm.confirmRemoval {}
+        vm.removal.requestRemoval(of: try entry(vm, "x"))
+        await vm.removal.confirmRemoval {}
 
         #expect(pageIDs(vm) == [["a", "b", "mail"]])
         #expect(vm.openFolderID == nil)
@@ -190,9 +190,9 @@ struct LaunchpadViewModelRemovalTests {
         log.protected = ["/Applications/a.app"]
         let vm = try makeViewModel(db, log: log)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
         var hidden = false
-        await vm.confirmRemoval { hidden = true }
+        await vm.removal.confirmRemoval { hidden = true }
 
         #expect(hidden)
         #expect(log.trashed.isEmpty)
@@ -208,10 +208,10 @@ struct LaunchpadViewModelRemovalTests {
         log.failure = AppTrash.Failure.cancelled
         let vm = try makeViewModel(db, log: log)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
-        await vm.confirmRemoval {}
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
+        await vm.removal.confirmRemoval {}
 
-        #expect(vm.pendingRemoval == nil)
+        #expect(vm.removal.pendingRemoval == nil)
         #expect(vm.apps.contains { $0.bundleIdentifier == "a" })
     }
 
@@ -227,10 +227,10 @@ struct LaunchpadViewModelRemovalTests {
         log.failure = thrown
         let vm = try makeViewModel(db, log: log)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
-        await vm.confirmRemoval {}
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
+        await vm.removal.confirmRemoval {}
 
-        #expect(vm.pendingRemoval?.stage == .failed(shown))
+        #expect(vm.removal.pendingRemoval?.stage == .failed(shown))
         #expect(vm.apps.contains { $0.bundleIdentifier == "a" })
         #expect(try db.fetchAllApps().contains { $0.bundleIdentifier == "a" })
     }
@@ -239,10 +239,10 @@ struct LaunchpadViewModelRemovalTests {
 
     // Lets a started `confirmRemoval` run up to its wait for the app to quit.
     private func waitForQuitting(_ vm: LaunchpadViewModel) async throws {
-        for _ in 0..<100 where vm.pendingRemoval?.stage != .quitting {
+        for _ in 0..<100 where vm.removal.pendingRemoval?.stage != .quitting {
             await Task.yield()
         }
-        try #require(vm.pendingRemoval?.stage == .quitting)
+        try #require(vm.removal.pendingRemoval?.stage == .quitting)
     }
 
     @Test func confirmOnOpenAppQuitsItThenTrashesIt() async throws {
@@ -253,13 +253,13 @@ struct LaunchpadViewModelRemovalTests {
         let process = workspace.launch("a")
         let vm = try makeViewModel(db, log: log, workspace: workspace)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
-        await vm.confirmRemoval {}
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
+        await vm.removal.confirmRemoval {}
 
         #expect(workspace.terminateRequests.map(\.id) == [process.id])
         #expect(workspace.terminateRequests.map(\.force) == [false])
         #expect(log.trashed == ["/Applications/a.app"])
-        #expect(vm.pendingRemoval == nil)
+        #expect(vm.removal.pendingRemoval == nil)
         #expect(!vm.apps.contains { $0.bundleIdentifier == "a" })
     }
 
@@ -274,20 +274,20 @@ struct LaunchpadViewModelRemovalTests {
         let process = workspace.launch("a")
         let vm = try makeViewModel(db, log: log, workspace: workspace)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
-        let confirming = Task { await vm.confirmRemoval {} }
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
+        let confirming = Task { await vm.removal.confirmRemoval {} }
         try await waitForQuitting(vm)
         #expect(log.trashed.isEmpty)
 
-        await vm.confirmRemoval {}
-        #expect(vm.pendingRemoval?.stage == .quitting)
+        await vm.removal.confirmRemoval {}
+        #expect(vm.removal.pendingRemoval?.stage == .quitting)
         #expect(workspace.terminateRequests.count == 1)
 
         workspace.terminate(process)
         await confirming.value
 
         #expect(log.trashed == ["/Applications/a.app"])
-        #expect(vm.pendingRemoval == nil)
+        #expect(vm.removal.pendingRemoval == nil)
         #expect(!vm.apps.contains { $0.bundleIdentifier == "a" })
     }
 
@@ -299,18 +299,18 @@ struct LaunchpadViewModelRemovalTests {
         workspace.quitsOnRequest = false
         workspace.launch("a")
         let vm = try makeViewModel(db, log: log, workspace: workspace)
-        vm.quitTimeout = .milliseconds(20)
+        vm.removal.quitTimeout = .milliseconds(20)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
-        await vm.confirmRemoval {}
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
+        await vm.removal.confirmRemoval {}
 
-        #expect(vm.pendingRemoval?.stage == .didNotQuit)
+        #expect(vm.removal.pendingRemoval?.stage == .didNotQuit)
         #expect(log.trashed.isEmpty)
         #expect(vm.apps.contains { $0.bundleIdentifier == "a" })
 
         // OK closes it.
-        await vm.confirmRemoval {}
-        #expect(vm.pendingRemoval == nil)
+        await vm.removal.confirmRemoval {}
+        #expect(vm.removal.pendingRemoval == nil)
         #expect(log.trashed.isEmpty)
     }
 
@@ -325,8 +325,8 @@ struct LaunchpadViewModelRemovalTests {
         let process = workspace.launch("a")
         let vm = try makeViewModel(db, log: log, workspace: workspace)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
-        let confirming = Task { await vm.confirmRemoval {} }
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
+        let confirming = Task { await vm.removal.confirmRemoval {} }
         try await waitForQuitting(vm)
         if byHiding {
             vm.hide()
@@ -337,7 +337,7 @@ struct LaunchpadViewModelRemovalTests {
         await confirming.value
 
         #expect(log.trashed.isEmpty)
-        #expect(vm.pendingRemoval == nil)
+        #expect(vm.removal.pendingRemoval == nil)
         #expect(vm.apps.contains { $0.bundleIdentifier == "a" })
     }
 
@@ -350,9 +350,9 @@ struct LaunchpadViewModelRemovalTests {
         let process = workspace.launch("a")
         let vm = try makeViewModel(db, log: log, workspace: workspace)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
         workspace.terminate(process)
-        await vm.confirmRemoval {}
+        await vm.removal.confirmRemoval {}
 
         #expect(workspace.terminateRequests.isEmpty)
         #expect(log.trashed == ["/Applications/a.app"])
@@ -367,9 +367,9 @@ struct LaunchpadViewModelRemovalTests {
         workspace.launch("a")
         let vm = try makeViewModel(db, log: log, workspace: workspace)
 
-        vm.requestRemoval(of: try entry(vm, "a"))
+        vm.removal.requestRemoval(of: try entry(vm, "a"))
         var hidden = false
-        await vm.confirmRemoval { hidden = true }
+        await vm.removal.confirmRemoval { hidden = true }
 
         #expect(workspace.terminateRequests.count == 1)
         #expect(hidden)
@@ -382,7 +382,7 @@ struct LaunchpadViewModelRemovalTests {
         let vm = try makeViewModel(db, log: TrashLog())
         let before = vm.apps
 
-        #expect(!vm.dropUninstalledApp("missing"))
+        #expect(!vm.removal.dropUninstalledApp("missing"))
         #expect(vm.apps == before)
     }
 }

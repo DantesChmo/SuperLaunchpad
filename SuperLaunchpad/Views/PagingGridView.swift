@@ -99,7 +99,7 @@ struct PagingGridView: View {
     }
 
     private var shownPages: [[LaunchpadItem]] {
-        viewModel.hasTrailingDragPage ? pages + [[]] : pages
+        viewModel.editing.hasTrailingDragPage ? pages + [[]] : pages
     }
 
     private func previewItems(_ items: [LaunchpadItem], index: Int) -> [LaunchpadItem] {

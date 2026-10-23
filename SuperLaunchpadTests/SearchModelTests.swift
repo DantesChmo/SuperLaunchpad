@@ -3,7 +3,7 @@ import Testing
 @testable import SuperLaunchpad
 
 @MainActor
-struct LaunchpadViewModelSearchTests {
+struct SearchModelTests {
 
     private func makeVM(apps: [AppEntry] = []) -> LaunchpadViewModel {
         let vm = LaunchpadViewModel(database: nil)
@@ -31,16 +31,16 @@ struct LaunchpadViewModelSearchTests {
 
     @Test func emptyQueryIsNotSearching() {
         let vm = makeVM(apps: [app("Safari")])
-        #expect(vm.isSearching == false)
-        #expect(vm.searchResults.isEmpty)
-        #expect(vm.selectedResult == nil)
+        #expect(vm.search.isSearching == false)
+        #expect(vm.search.searchResults.isEmpty)
+        #expect(vm.search.selectedResult == nil)
     }
 
     @Test func whitespaceQueryIsNotSearching() {
         let vm = makeVM(apps: [app("Safari")])
-        vm.searchText = "  "
-        #expect(vm.isSearching == false)
-        #expect(vm.searchResults.isEmpty)
+        vm.search.searchText = "  "
+        #expect(vm.search.isSearching == false)
+        #expect(vm.search.searchResults.isEmpty)
     }
 
     @Test func typingFiltersAppsIncludingFolderApps() {
@@ -49,29 +49,29 @@ struct LaunchpadViewModelSearchTests {
             app("Calculator", page: nil, order: nil, folderID: "utilities"),
             app("Mail"),
         ])
-        vm.searchText = "cal"
-        #expect(vm.isSearching)
-        #expect(vm.searchResults.map(\.name) == ["Calculator", "Calendar"])
-        #expect(vm.selectedResult?.name == "Calculator")
+        vm.search.searchText = "cal"
+        #expect(vm.search.isSearching)
+        #expect(vm.search.searchResults.map(\.name) == ["Calculator", "Calendar"])
+        #expect(vm.search.selectedResult?.name == "Calculator")
     }
 
     @Test func resultsAreCappedAtOnePage() {
         let vm = makeVM(apps: numberedApps(Grid.appsPerPage + 5))
-        vm.searchText = "app"
-        #expect(vm.searchResults.count == Grid.appsPerPage)
+        vm.search.searchText = "app"
+        #expect(vm.search.searchResults.count == Grid.appsPerPage)
     }
 
     @Test func resultsFollowAppListChanges() {
         let vm = makeVM(apps: [app("Safari")])
-        vm.searchText = "s"
+        vm.search.searchText = "s"
         vm.apps = [app("Safari"), app("Stocks")]
-        #expect(vm.searchResults.map(\.name) == ["Safari", "Stocks"])
+        #expect(vm.search.searchResults.map(\.name) == ["Safari", "Stocks"])
     }
 
     @Test func typingClosesOpenFolder() {
         let vm = makeVM(apps: [app("Mail")])
         vm.openFolderID = "folder"
-        vm.searchText = "m"
+        vm.search.searchText = "m"
         #expect(vm.openFolderID == nil)
     }
 
@@ -88,10 +88,10 @@ struct LaunchpadViewModelSearchTests {
 
     @Test func foldersAreFoundByTitle() throws {
         let vm = makeVMWithFolder()
-        vm.searchText = "util"
+        vm.search.searchText = "util"
 
-        #expect(vm.searchResults.map(\.name) == ["Utilities", "Utility Belt"])
-        guard case .folder(let folder, let apps) = try #require(vm.selectedResult) else {
+        #expect(vm.search.searchResults.map(\.name) == ["Utilities", "Utility Belt"])
+        guard case .folder(let folder, let apps) = try #require(vm.search.selectedResult) else {
             Issue.record("expected the folder to be selected")
             return
         }
@@ -101,25 +101,25 @@ struct LaunchpadViewModelSearchTests {
 
     @Test func resultsFollowFolderChanges() {
         let vm = makeVMWithFolder()
-        vm.searchText = "tools"
-        #expect(vm.searchResults.isEmpty)
+        vm.search.searchText = "tools"
+        #expect(vm.search.searchResults.isEmpty)
         vm.folders = [FolderEntry(id: "F", title: "Tools", pageIndex: 0, orderIndex: 1)]
-        #expect(vm.searchResults.map(\.name) == ["Tools"])
+        #expect(vm.search.searchResults.map(\.name) == ["Tools"])
     }
 
     @Test func openingFolderResultClearsQueryAndRequestsTheFolder() throws {
         let vm = makeVMWithFolder()
         vm.show()
-        vm.searchText = "util"
-        guard case .folder(let folder, _) = try #require(vm.selectedResult) else {
+        vm.search.searchText = "util"
+        guard case .folder(let folder, _) = try #require(vm.search.selectedResult) else {
             Issue.record("expected the folder to be selected")
             return
         }
 
-        vm.openFolderFromSearch(folder)
+        vm.search.openFolderFromSearch(folder)
 
-        #expect(vm.searchText.isEmpty)
-        #expect(vm.isSearching == false)
+        #expect(vm.search.searchText.isEmpty)
+        #expect(vm.search.isSearching == false)
         #expect(vm.isVisible)
         let request = try #require(vm.folderOpenRequest)
         #expect(request.folderID == "F")
@@ -130,50 +130,50 @@ struct LaunchpadViewModelSearchTests {
 
     @Test func selectionMovesAndClamps() {
         let vm = makeVM(apps: numberedApps(10))
-        vm.searchText = "app"
-        vm.moveSelection(by: -1)
-        #expect(vm.selectedResultIndex == 0)
-        vm.moveSelection(by: 1)
-        #expect(vm.selectedResultIndex == 1)
-        vm.moveSelection(by: Grid.columns)
-        #expect(vm.selectedResultIndex == 1 + Grid.columns)
-        vm.moveSelection(by: Grid.columns)
-        #expect(vm.selectedResultIndex == 9)
-        #expect(vm.selectedResult?.name == "App 09")
+        vm.search.searchText = "app"
+        vm.search.moveSelection(by: -1)
+        #expect(vm.search.selectedResultIndex == 0)
+        vm.search.moveSelection(by: 1)
+        #expect(vm.search.selectedResultIndex == 1)
+        vm.search.moveSelection(by: Grid.columns)
+        #expect(vm.search.selectedResultIndex == 1 + Grid.columns)
+        vm.search.moveSelection(by: Grid.columns)
+        #expect(vm.search.selectedResultIndex == 9)
+        #expect(vm.search.selectedResult?.name == "App 09")
     }
 
     @Test func selectionResetsWhenQueryChanges() {
         let vm = makeVM(apps: numberedApps(10))
-        vm.searchText = "app"
-        vm.moveSelection(by: 3)
-        vm.searchText = "app 0"
-        #expect(vm.selectedResultIndex == 0)
+        vm.search.searchText = "app"
+        vm.search.moveSelection(by: 3)
+        vm.search.searchText = "app 0"
+        #expect(vm.search.selectedResultIndex == 0)
     }
 
     @Test func selectionClampsWhenResultsShrink() {
         let vm = makeVM(apps: numberedApps(5))
-        vm.searchText = "app"
-        vm.moveSelection(by: 4)
+        vm.search.searchText = "app"
+        vm.search.moveSelection(by: 4)
         vm.apps = numberedApps(2)
-        #expect(vm.selectedResultIndex == 1)
+        #expect(vm.search.selectedResultIndex == 1)
     }
 
     @Test func moveSelectionWithoutResultsIsNoOp() {
         let vm = makeVM(apps: [app("Mail")])
-        vm.searchText = "zzz"
-        vm.moveSelection(by: 1)
-        #expect(vm.selectedResultIndex == 0)
-        #expect(vm.selectedResult == nil)
+        vm.search.searchText = "zzz"
+        vm.search.moveSelection(by: 1)
+        #expect(vm.search.selectedResultIndex == 0)
+        #expect(vm.search.selectedResult == nil)
     }
 
     // MARK: - Escape ladder
 
     @Test func escapeClearsQueryThenClosesFolderThenHides() {
         let vm = makeVM(apps: [app("Mail")])
-        vm.searchText = "m"
+        vm.search.searchText = "m"
         vm.openFolderID = "folder"
         #expect(vm.handleEscape() == .clearedSearch)
-        #expect(vm.searchText.isEmpty)
+        #expect(vm.search.searchText.isEmpty)
         #expect(vm.openFolderID == "folder")
         #expect(vm.handleEscape() == .closedFolder)
         #expect(vm.openFolderID == nil)
@@ -182,9 +182,9 @@ struct LaunchpadViewModelSearchTests {
 
     @Test func escapeClearsWhitespaceOnlyQuery() {
         let vm = makeVM()
-        vm.searchText = " "
+        vm.search.searchText = " "
         #expect(vm.handleEscape() == .clearedSearch)
-        #expect(vm.searchText.isEmpty)
+        #expect(vm.search.searchText.isEmpty)
     }
 
     // MARK: - show / hide
@@ -192,16 +192,16 @@ struct LaunchpadViewModelSearchTests {
     @Test func hideClearsQuery() {
         let vm = makeVM(apps: [app("Mail")])
         vm.show()
-        vm.searchText = "m"
+        vm.search.searchText = "m"
         vm.hide()
-        #expect(vm.searchText.isEmpty)
-        #expect(vm.searchResults.isEmpty)
+        #expect(vm.search.searchText.isEmpty)
+        #expect(vm.search.searchResults.isEmpty)
     }
 
     @Test func showRequestsSearchFocus() {
         let vm = makeVM()
-        let before = vm.searchFocusRequest
+        let before = vm.search.searchFocusRequest
         vm.show()
-        #expect(vm.searchFocusRequest == before + 1)
+        #expect(vm.search.searchFocusRequest == before + 1)
     }
 }

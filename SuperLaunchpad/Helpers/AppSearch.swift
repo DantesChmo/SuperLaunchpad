@@ -1,7 +1,7 @@
 import Foundation
 
 // Filters and ranks the launcher's search results. Pure, so it is tested
-// directly; `LaunchpadViewModel` calls it whenever the query, the apps or the
+// directly; `SearchModel` calls it whenever the query, the apps or the
 // folders change.
 //
 // Every app is a candidate, including apps inside folders and hidden apps,

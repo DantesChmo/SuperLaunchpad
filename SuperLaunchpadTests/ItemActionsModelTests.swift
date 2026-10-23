@@ -3,7 +3,7 @@ import Testing
 @testable import SuperLaunchpad
 
 @MainActor
-struct LaunchpadViewModelItemActionsTests {
+struct ItemActionsModelTests {
 
     // Records what the view model asked to open or show in Finder.
     private final class OpenerLog {
@@ -55,7 +55,7 @@ struct LaunchpadViewModelItemActionsTests {
         let vm = LaunchpadViewModel(database: db)
         vm.folders = folders
         vm.apps = apps
-        vm.opener = AppOpener.Operations(
+        vm.itemActions.opener = AppOpener.Operations(
             open: { path, activates in log.opened.append((path, activates)) },
             showInFinder: { path in log.shownInFinder.append(path) }
         )
@@ -86,7 +86,7 @@ struct LaunchpadViewModelItemActionsTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        #expect(vm.disbandFolder("F"))
+        #expect(vm.editing.disbandFolder("F"))
 
         #expect(pageIDs(vm) == [["a", "z", "e", "o", "mail", "b"]])
         #expect(vm.folders.isEmpty)
@@ -100,7 +100,7 @@ struct LaunchpadViewModelItemActionsTests {
         let vm = try makeViewModel(nil)
         vm.openFolder(try folder(vm, "F"))
 
-        #expect(vm.disbandFolder("F"))
+        #expect(vm.editing.disbandFolder("F"))
 
         #expect(vm.openFolderID == nil)
     }
@@ -109,7 +109,7 @@ struct LaunchpadViewModelItemActionsTests {
         let vm = try makeViewModel(nil)
         let before = pageIDs(vm)
 
-        #expect(!vm.disbandFolder("missing"))
+        #expect(!vm.editing.disbandFolder("missing"))
 
         #expect(pageIDs(vm) == before)
     }
@@ -121,7 +121,7 @@ struct LaunchpadViewModelItemActionsTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db)
 
-        #expect(vm.sortFolderByName("F"))
+        #expect(vm.editing.sortFolderByName("F"))
 
         #expect(vm.folderApps("F").map(\.displayName) == ["bob", "Émile", "zed"])
         #expect(pageIDs(vm) == [["a", "F", "mail", "b"]])
@@ -138,7 +138,7 @@ struct LaunchpadViewModelItemActionsTests {
             app("com.a", name: "notes", folderID: "F", folderOrder: 1)
         ]
 
-        #expect(vm.sortFolderByName("F"))
+        #expect(vm.editing.sortFolderByName("F"))
 
         #expect(vm.folderApps("F").map(\.bundleIdentifier) == ["com.a", "com.b"])
     }
@@ -147,31 +147,31 @@ struct LaunchpadViewModelItemActionsTests {
 
     @Test func appMenuDisablesTrashForSystemApps() throws {
         let vm = try makeViewModel(nil)
-        #expect(isEnabled(.moveToTrash, in: vm.menuItems(for: try entry(vm, "a"))) == true)
-        #expect(isEnabled(.moveToTrash, in: vm.menuItems(for: try entry(vm, "mail"))) == false)
+        #expect(isEnabled(.moveToTrash, in: vm.itemActions.menuItems(for: try entry(vm, "a"))) == true)
+        #expect(isEnabled(.moveToTrash, in: vm.itemActions.menuItems(for: try entry(vm, "mail"))) == false)
     }
 
     @Test func editLayoutIsDisabledWhileEditingOrSearching() throws {
         let vm = try makeViewModel(nil)
         let a = try entry(vm, "a")
-        #expect(isEnabled(.editLayout, in: vm.menuItems(for: a)) == true)
+        #expect(isEnabled(.editLayout, in: vm.itemActions.menuItems(for: a)) == true)
 
-        vm.enterEditMode()
-        #expect(isEnabled(.editLayout, in: vm.menuItems(for: a)) == false)
-        #expect(isEnabled(.editLayout, in: vm.menuItems(for: try folder(vm, "F"))) == false)
+        vm.editing.enterEditMode()
+        #expect(isEnabled(.editLayout, in: vm.itemActions.menuItems(for: a)) == false)
+        #expect(isEnabled(.editLayout, in: vm.itemActions.menuItems(for: try folder(vm, "F"))) == false)
 
-        vm.exitEditMode()
-        vm.searchText = "a"
-        #expect(isEnabled(.editLayout, in: vm.menuItems(for: a)) == false)
+        vm.editing.exitEditMode()
+        vm.search.searchText = "a"
+        #expect(isEnabled(.editLayout, in: vm.itemActions.menuItems(for: a)) == false)
     }
 
     @Test func folderMenuCountsItsApps() throws {
         let vm = try makeViewModel(nil)
-        #expect(isEnabled(.sortByName, in: vm.menuItems(for: try folder(vm, "F"))) == true)
+        #expect(isEnabled(.sortByName, in: vm.itemActions.menuItems(for: try folder(vm, "F"))) == true)
 
         vm.folders.append(FolderEntry(id: "G", title: "One", pageIndex: 0, orderIndex: 4))
         vm.apps.append(app("solo", folderID: "G", folderOrder: 0))
-        #expect(isEnabled(.sortByName, in: vm.menuItems(for: try folder(vm, "G"))) == false)
+        #expect(isEnabled(.sortByName, in: vm.itemActions.menuItems(for: try folder(vm, "G"))) == false)
     }
 
     // MARK: - App menu actions
@@ -179,9 +179,9 @@ struct LaunchpadViewModelItemActionsTests {
     @Test func openLaunchesInFrontAndHidesLauncher() throws {
         let log = OpenerLog()
         let vm = try makeViewModel(nil, log: log)
-        vm.enterEditMode()
+        vm.editing.enterEditMode()
 
-        #expect(vm.perform(.open, on: try entry(vm, "a")))
+        #expect(vm.itemActions.perform(.open, on: try entry(vm, "a")))
 
         #expect(log.opened.map(\.path) == ["/Applications/a.app"])
         #expect(log.opened.map(\.activates) == [true])
@@ -191,7 +191,7 @@ struct LaunchpadViewModelItemActionsTests {
         let log = OpenerLog()
         let vm = try makeViewModel(nil, log: log)
 
-        #expect(vm.perform(.showInFinder, on: try entry(vm, "a")))
+        #expect(vm.itemActions.perform(.showInFinder, on: try entry(vm, "a")))
 
         #expect(log.shownInFinder == ["/Applications/a.app"])
         #expect(log.opened.isEmpty)
@@ -200,19 +200,19 @@ struct LaunchpadViewModelItemActionsTests {
     @Test func moveToTrashAsksOutsideEditModeButNotForSystemApps() throws {
         let vm = try makeViewModel(nil)
         vm.runningApps = RunningApps(source: FakeWorkspace().source)
-        vm.trash = AppTrash.Operations(
+        vm.removal.trash = AppTrash.Operations(
             needsAuthorization: { _ in false },
             moveToTrash: { _ in },
             moveToTrashWithFinder: { _ in }
         )
 
-        #expect(!vm.perform(.moveToTrash, on: try entry(vm, "mail")))
-        #expect(vm.pendingRemoval == nil)
+        #expect(!vm.itemActions.perform(.moveToTrash, on: try entry(vm, "mail")))
+        #expect(vm.removal.pendingRemoval == nil)
 
-        #expect(!vm.perform(.moveToTrash, on: try entry(vm, "a")))
-        #expect(vm.pendingRemoval?.app.bundleIdentifier == "a")
-        #expect(vm.pendingRemoval?.stage == .confirm)
-        #expect(!vm.isEditing)
+        #expect(!vm.itemActions.perform(.moveToTrash, on: try entry(vm, "a")))
+        #expect(vm.removal.pendingRemoval?.app.bundleIdentifier == "a")
+        #expect(vm.removal.pendingRemoval?.stage == .confirm)
+        #expect(!vm.editing.isEditing)
     }
 
     // MARK: - Quit
@@ -222,14 +222,14 @@ struct LaunchpadViewModelItemActionsTests {
         let vm = try makeViewModel(nil)
         vm.runningApps = RunningApps(source: workspace.source)
         let a = try entry(vm, "a")
-        #expect(isEnabled(.quit, in: vm.menuItems(for: a)) == nil)
+        #expect(isEnabled(.quit, in: vm.itemActions.menuItems(for: a)) == nil)
 
         let process = workspace.launch("a")
-        #expect(isEnabled(.quit, in: vm.menuItems(for: a)) == true)
-        #expect(isEnabled(.quit, in: vm.menuItems(for: try entry(vm, "b"))) == nil)
+        #expect(isEnabled(.quit, in: vm.itemActions.menuItems(for: a)) == true)
+        #expect(isEnabled(.quit, in: vm.itemActions.menuItems(for: try entry(vm, "b"))) == nil)
 
         workspace.terminate(process)
-        #expect(isEnabled(.quit, in: vm.menuItems(for: a)) == nil)
+        #expect(isEnabled(.quit, in: vm.itemActions.menuItems(for: a)) == nil)
     }
 
     @Test(arguments: [(ItemMenu.Action.quit, false), (.forceQuit, true)])
@@ -240,7 +240,7 @@ struct LaunchpadViewModelItemActionsTests {
         vm.runningApps = RunningApps(source: workspace.source)
         let process = workspace.launch("a")
 
-        #expect(!vm.perform(action, on: try entry(vm, "a")))
+        #expect(!vm.itemActions.perform(action, on: try entry(vm, "a")))
 
         #expect(workspace.terminateRequests.map(\.id) == [process.id])
         #expect(workspace.terminateRequests.map(\.force) == [forced])
@@ -249,12 +249,12 @@ struct LaunchpadViewModelItemActionsTests {
 
     @Test func editLayoutEntersEditMode() throws {
         let vm = try makeViewModel(nil)
-        #expect(!vm.perform(.editLayout, on: try entry(vm, "a")))
-        #expect(vm.isEditing)
+        #expect(!vm.itemActions.perform(.editLayout, on: try entry(vm, "a")))
+        #expect(vm.editing.isEditing)
 
-        vm.exitEditMode()
-        vm.perform(.editLayout, on: try folder(vm, "F"))
-        #expect(vm.isEditing)
+        vm.editing.exitEditMode()
+        vm.itemActions.perform(.editLayout, on: try folder(vm, "F"))
+        #expect(vm.editing.isEditing)
     }
 
     // MARK: - Folder menu actions
@@ -263,27 +263,27 @@ struct LaunchpadViewModelItemActionsTests {
         let vm = try makeViewModel(nil)
         let f = try folder(vm, "F")
 
-        vm.perform(.open, on: f)
+        vm.itemActions.perform(.open, on: f)
         let open = try #require(vm.folderOpenRequest)
         #expect(open.folderID == "F")
         #expect(!open.renaming)
 
-        vm.perform(.rename, on: f)
+        vm.itemActions.perform(.rename, on: f)
         let rename = try #require(vm.folderOpenRequest)
         #expect(rename.renaming)
 
         // A repeat of the same request is still a change the view sees.
-        vm.perform(.rename, on: f)
+        vm.itemActions.perform(.rename, on: f)
         #expect(vm.folderOpenRequest != rename)
     }
 
     @Test func folderSortAndDisbandActionsEditTheLayout() throws {
         let vm = try makeViewModel(nil)
 
-        vm.perform(.sortByName, on: try folder(vm, "F"))
+        vm.itemActions.perform(.sortByName, on: try folder(vm, "F"))
         #expect(vm.folderApps("F").map(\.bundleIdentifier) == ["o", "e", "z"])
 
-        vm.perform(.disband, on: try folder(vm, "F"))
+        vm.itemActions.perform(.disband, on: try folder(vm, "F"))
         #expect(pageIDs(vm) == [["a", "o", "e", "z", "mail", "b"]])
     }
 
@@ -293,7 +293,7 @@ struct LaunchpadViewModelItemActionsTests {
         let log = OpenerLog()
         let vm = try makeViewModel(nil, log: log)
 
-        #expect(vm.click(try entry(vm, "a"), modifiers: []))
+        #expect(vm.itemActions.click(try entry(vm, "a"), modifiers: []))
 
         #expect(log.opened.map(\.activates) == [true])
     }
@@ -302,8 +302,8 @@ struct LaunchpadViewModelItemActionsTests {
         let log = OpenerLog()
         let vm = try makeViewModel(nil, log: log)
 
-        #expect(!vm.click(try entry(vm, "a"), modifiers: .command))
-        #expect(!vm.click(try entry(vm, "b"), modifiers: .command))
+        #expect(!vm.itemActions.click(try entry(vm, "a"), modifiers: .command))
+        #expect(!vm.itemActions.click(try entry(vm, "b"), modifiers: .command))
 
         #expect(log.opened.map(\.path) == ["/Applications/a.app", "/Applications/b.app"])
         #expect(log.opened.map(\.activates) == [false, false])
@@ -314,7 +314,7 @@ struct LaunchpadViewModelItemActionsTests {
         let log = OpenerLog()
         let vm = try makeViewModel(nil, log: log)
 
-        #expect(vm.click(try entry(vm, "a"), modifiers: [.option, .command]))
+        #expect(vm.itemActions.click(try entry(vm, "a"), modifiers: [.option, .command]))
 
         #expect(log.shownInFinder == ["/Applications/a.app"])
         #expect(log.opened.isEmpty)
@@ -323,10 +323,10 @@ struct LaunchpadViewModelItemActionsTests {
     @Test func clicksDoNothingInEditMode() throws {
         let log = OpenerLog()
         let vm = try makeViewModel(nil, log: log)
-        vm.enterEditMode()
+        vm.editing.enterEditMode()
 
-        #expect(!vm.click(try entry(vm, "a"), modifiers: []))
-        #expect(!vm.click(try entry(vm, "a"), modifiers: [.option, .command]))
+        #expect(!vm.itemActions.click(try entry(vm, "a"), modifiers: []))
+        #expect(!vm.itemActions.click(try entry(vm, "a"), modifiers: [.option, .command]))
 
         #expect(log.opened.isEmpty)
         #expect(log.shownInFinder.isEmpty)

@@ -181,7 +181,7 @@ struct LayoutFileTests {
     @Test func applyNamesUntitledFolder() {
         let file = LayoutFile(pages: [[.folder(title: "  ", apps: ["a"])]])
         let applied = file.apply(to: [app("a")])
-        #expect(applied.folders.map(\.title) == [LaunchpadViewModel.defaultFolderTitle])
+        #expect(applied.folders.map(\.title) == [EditingModel.defaultFolderTitle])
     }
 
     // MARK: - View model
@@ -195,17 +195,17 @@ struct LayoutFileTests {
         let vm = LaunchpadViewModel(database: db, layoutBackups: backups)
         vm.folders = folders
         vm.apps = apps
-        let before = vm.layoutFile
+        let before = vm.layoutFiles.layoutFile
 
         let file = LayoutFile(pages: [[.app("c"), .folder(title: "New", apps: ["a", "b"])]], hiddenApps: ["x"])
-        let result = try vm.loadLayout(file)
+        let result = try vm.layoutFiles.loadLayout(file)
 
         let backup = try #require(result.backup)
         #expect(try LayoutFile.decode(Data(contentsOf: backup)) == before)
         #expect(vm.folders.map(\.title) == ["New"])
-        #expect(LayoutFile(apps: try db.fetchAllApps(), folders: try db.fetchAllFolders()) == vm.layoutFile)
-        #expect(vm.layoutFile.pages == [[.app("c"), .folder(title: "New", apps: ["a", "b"]), .app("y")]])
-        #expect(vm.layoutFile.hiddenApps.sorted() == ["h", "x"])
+        #expect(LayoutFile(apps: try db.fetchAllApps(), folders: try db.fetchAllFolders()) == vm.layoutFiles.layoutFile)
+        #expect(vm.layoutFiles.layoutFile.pages == [[.app("c"), .folder(title: "New", apps: ["a", "b"]), .app("y")]])
+        #expect(vm.layoutFiles.layoutFile.hiddenApps.sorted() == ["h", "x"])
     }
 
     @Test func restorePreviousLayoutUndoesLoad() throws {
@@ -215,13 +215,13 @@ struct LayoutFileTests {
         let vm = LaunchpadViewModel(database: nil, layoutBackups: backups)
         vm.folders = folders
         vm.apps = apps
-        let before = vm.layoutFile
+        let before = vm.layoutFiles.layoutFile
 
-        try vm.loadLayout(LayoutFile(pages: [[.app("y"), .app("x")]]))
-        #expect(vm.layoutFile != before)
-        try vm.restorePreviousLayout()
+        try vm.layoutFiles.loadLayout(LayoutFile(pages: [[.app("y"), .app("x")]]))
+        #expect(vm.layoutFiles.layoutFile != before)
+        try vm.layoutFiles.restorePreviousLayout()
 
-        #expect(vm.layoutFile == before)
+        #expect(vm.layoutFiles.layoutFile == before)
         #expect(backups.backups().count == 2)
     }
 
@@ -231,7 +231,7 @@ struct LayoutFileTests {
         let vm = LaunchpadViewModel(database: nil, layoutBackups: LayoutBackupStore(directory: dir))
         vm.folders = folders
         vm.apps = apps
-        #expect(try vm.restorePreviousLayout() == nil)
+        #expect(try vm.layoutFiles.restorePreviousLayout() == nil)
         #expect(vm.apps == apps)
     }
 }

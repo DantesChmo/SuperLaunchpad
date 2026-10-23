@@ -10,20 +10,20 @@ struct ItemMenuAction: Equatable {
     let viewModel: LaunchpadViewModel?
 
     @MainActor func items(for app: AppEntry) -> ItemMenu.Sections {
-        viewModel?.menuItems(for: app) ?? []
+        viewModel?.itemActions.menuItems(for: app) ?? []
     }
 
     @MainActor func items(for folder: FolderEntry) -> ItemMenu.Sections {
-        viewModel?.menuItems(for: folder) ?? []
+        viewModel?.itemActions.menuItems(for: folder) ?? []
     }
 
     @MainActor func perform(_ action: ItemMenu.Action, on app: AppEntry) {
-        guard viewModel?.perform(action, on: app) == true else { return }
+        guard viewModel?.itemActions.perform(action, on: app) == true else { return }
         NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
     }
 
     @MainActor func perform(_ action: ItemMenu.Action, on folder: FolderEntry) {
-        viewModel?.perform(action, on: folder)
+        viewModel?.itemActions.perform(action, on: folder)
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {

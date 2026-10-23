@@ -65,7 +65,7 @@ struct RemoveAppAction: Equatable {
     let viewModel: LaunchpadViewModel?
 
     @MainActor func callAsFunction(_ app: AppEntry) {
-        viewModel?.requestRemoval(of: app)
+        viewModel?.removal.requestRemoval(of: app)
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -80,7 +80,7 @@ struct EnterEditModeAction: Equatable {
     let viewModel: LaunchpadViewModel?
 
     @MainActor func callAsFunction() {
-        viewModel?.enterEditMode()
+        viewModel?.editing.enterEditMode()
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {

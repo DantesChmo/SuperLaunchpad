@@ -129,16 +129,16 @@ struct LayoutResetTests {
         vm.folders = folders
         vm.apps = apps
         vm.openFolderID = "F"
-        let before = vm.layoutFile
+        let before = vm.layoutFiles.layoutFile
 
-        let backup = try #require(try vm.resetLayout(.alphabetical, systemOrdering: nil, categoryOf: categoryOf))
+        let backup = try #require(try vm.layoutFiles.resetLayout(.alphabetical, systemOrdering: nil, categoryOf: categoryOf))
 
         #expect(backups.backups().map(\.lastPathComponent) == [backup.lastPathComponent])
         #expect(try LayoutFile.decode(Data(contentsOf: backup)) == before)
         #expect(vm.folders.isEmpty)
         #expect(vm.openFolderID == nil)
         #expect(try db.fetchAllFolders().isEmpty)
-        #expect(LayoutFile(apps: try db.fetchAllApps(), folders: []) == vm.layoutFile)
+        #expect(LayoutFile(apps: try db.fetchAllApps(), folders: []) == vm.layoutFiles.layoutFile)
     }
 
     @Test func resetChangesNothingWhenBackupFails() throws {
@@ -152,7 +152,7 @@ struct LayoutResetTests {
         vm.apps = apps
 
         #expect(throws: (any Error).self) {
-            try vm.resetLayout(.alphabetical, systemOrdering: nil, categoryOf: categoryOf)
+            try vm.layoutFiles.resetLayout(.alphabetical, systemOrdering: nil, categoryOf: categoryOf)
         }
         #expect(vm.apps == apps)
         #expect(vm.folders == folders)
