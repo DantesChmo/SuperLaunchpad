@@ -14,14 +14,12 @@ enum AppTrash {
 
     // What the view model calls; tests swap in their own.
     struct Operations {
-        var isRunning: (String) -> Bool
         var needsAuthorization: (String) -> Bool
         var moveToTrash: (String) throws -> Void
         var moveToTrashWithFinder: @MainActor (String) throws -> Void
 
         static var live: Operations {
             Operations(
-                isRunning: AppTrash.isRunning(bundleIdentifier:),
                 needsAuthorization: AppTrash.needsAuthorization(appPath:),
                 moveToTrash: AppTrash.moveToTrash(appPath:),
                 moveToTrashWithFinder: AppTrash.moveToTrashWithFinder(appPath:)
@@ -34,10 +32,6 @@ enum AppTrash {
     static func isRemovable(appPath: String) -> Bool {
         let resolved = URL(fileURLWithPath: appPath).resolvingSymlinksInPath().path
         return !resolved.hasPrefix("/System/")
-    }
-
-    static func isRunning(bundleIdentifier: String) -> Bool {
-        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
     }
 
     // Moving a bundle to another folder takes write access to the bundle and

@@ -305,6 +305,7 @@ private struct FolderAppIconView: View {
                     .frame(width: iconSize, height: iconSize)
                     .removeAppBadge(app, iconSize: iconSize)
                     .hideAppBadge(app, iconSize: iconSize)
+                    .runningDot(app)
 
                 Text.launcherLabel(app.displayName, isNew: app.isNew, fontSize: labelFont)
                     .foregroundStyle(.white)

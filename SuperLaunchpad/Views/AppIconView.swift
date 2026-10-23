@@ -33,6 +33,7 @@ struct AppIconView: View {
                 .opacity(app.isHidden ? HiddenApp.iconOpacity : 1)
                 .removeAppBadge(app, iconSize: metrics.iconSize)
                 .hideAppBadge(app, iconSize: metrics.iconSize)
+                .runningDot(app)
         } label: {
             nameText
                 .font(.system(size: metrics.labelFont))

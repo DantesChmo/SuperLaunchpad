@@ -204,6 +204,7 @@ struct LaunchpadView: View {
             .environment(\.enterEditMode, EnterEditModeAction(viewModel: viewModel))
             .environment(\.removeApp, RemoveAppAction(viewModel: viewModel))
             .environment(\.itemMenu, ItemMenuAction(viewModel: viewModel))
+            .environment(\.runningApps, viewModel.runningApps)
             .modifier(LaunchpadDragGesture(
                 viewModel: viewModel,
                 pager: pager,

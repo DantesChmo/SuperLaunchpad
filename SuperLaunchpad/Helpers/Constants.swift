@@ -227,6 +227,15 @@ enum Uninstall {
     static let dialogAnimation: Double = 0.15
     // Seconds Finder may wait for the administrator password.
     static let finderTimeout = 600
+    // Seconds a running app gets to quit before it goes to the Trash.
+    static let quitTimeout: Double = 10
+}
+
+// The dot under a running app's icon. Centered in the gap between icon and
+// label (`LayoutMetrics.iconLabelSpacing`), so it must stay smaller than it.
+enum RunningIndicator {
+    static let size: CGFloat = 4
+    static let opacity: Double = 0.85
 }
 
 // Tuning for the main-grid pager. Positions and velocities are in "pages"

@@ -11,6 +11,8 @@ enum ItemMenu {
         case moveToTrash
         case hide
         case unhide
+        case quit
+        case forceQuit
         case rename
         case sortByName
         case disband
@@ -23,6 +25,8 @@ enum ItemMenu {
             case .moveToTrash: "Move to Trash"
             case .hide: "Hide"
             case .unhide: "Unhide"
+            case .quit: "Quit"
+            case .forceQuit: "Force Quit"
             case .rename: "Rename"
             case .sortByName: "Sort by Name"
             case .disband: "Disband Folder"
@@ -37,6 +41,8 @@ enum ItemMenu {
             case .moveToTrash: "trash"
             case .hide: "eye.slash"
             case .unhide: "eye"
+            case .quit: "xmark.circle"
+            case .forceQuit: "xmark.octagon"
             case .rename: "pencil"
             case .sortByName: "arrow.up.arrow.down"
             case .disband: "folder.badge.minus"
@@ -48,6 +54,8 @@ enum ItemMenu {
     struct Item: Hashable {
         let action: Action
         var isEnabled = true
+        // Shown in its place while ⌥ is held.
+        var alternate: Action?
     }
 
     // Sections, separated by dividers in the menu.
@@ -60,6 +68,7 @@ enum ItemMenu {
         var canEditLayout: Bool
         // Only search shows a hidden app; its menu offers Unhide for Hide.
         var isHidden = false
+        var isRunning = false
     }
 
     struct FolderState: Equatable {
@@ -70,9 +79,10 @@ enum ItemMenu {
     static func items(for app: AppState) -> Sections {
         [
             [Item(action: .open), Item(action: .showInFinder)],
+            app.isRunning ? [Item(action: .quit, alternate: .forceQuit)] : [],
             [Item(action: app.isHidden ? .unhide : .hide), Item(action: .moveToTrash, isEnabled: app.isRemovable)],
             [Item(action: .editLayout, isEnabled: app.canEditLayout)]
-        ]
+        ].filter { !$0.isEmpty }
     }
 
     static func items(for folder: FolderState) -> Sections {

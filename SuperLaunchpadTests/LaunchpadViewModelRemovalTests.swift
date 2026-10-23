@@ -11,7 +11,6 @@ struct LaunchpadViewModelRemovalTests {
 
     // Records what the view model asked of the Trash.
     private final class TrashLog {
-        var running: Set<String> = []
         var protected: Set<String> = []
         var failure: Error?
         var trashed: [String] = []
@@ -46,8 +45,12 @@ struct LaunchpadViewModelRemovalTests {
     }
 
     // Page a, b, folder F(x), mail — stored in the DB, in edit mode, with a
-    // fake Trash.
-    private func makeViewModel(_ db: AppDatabase, log: TrashLog) throws -> LaunchpadViewModel {
+    // fake Trash and fake running apps.
+    private func makeViewModel(
+        _ db: AppDatabase,
+        log: TrashLog,
+        workspace: FakeWorkspace? = nil
+    ) throws -> LaunchpadViewModel {
         let folders = [FolderEntry(id: "F", title: "Tools", pageIndex: 0, orderIndex: 2)]
         let apps = [
             app("a", page: 0, order: 0),
@@ -60,8 +63,8 @@ struct LaunchpadViewModelRemovalTests {
         let vm = LaunchpadViewModel(database: db)
         vm.folders = folders
         vm.apps = apps
+        vm.runningApps = RunningApps(source: (workspace ?? FakeWorkspace()).source)
         vm.trash = AppTrash.Operations(
-            isRunning: { log.running.contains($0) },
             needsAuthorization: { path in log.protected.contains(path) },
             moveToTrash: { path in
                 if let failure = log.failure { throw failure }
@@ -101,9 +104,9 @@ struct LaunchpadViewModelRemovalTests {
     @Test func requestForRunningAppSaysItIsOpen() throws {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let log = TrashLog()
-        log.running = ["a"]
-        let vm = try makeViewModel(db, log: log)
+        let workspace = FakeWorkspace()
+        workspace.launch("a")
+        let vm = try makeViewModel(db, log: TrashLog(), workspace: workspace)
 
         vm.requestRemoval(of: try entry(vm, "a"))
 
@@ -232,19 +235,145 @@ struct LaunchpadViewModelRemovalTests {
         #expect(try db.fetchAllApps().contains { $0.bundleIdentifier == "a" })
     }
 
-    @Test func confirmOnOpenAppDialogOnlyClosesIt() async throws {
+    // MARK: - Quitting first
+
+    // Lets a started `confirmRemoval` run up to its wait for the app to quit.
+    private func waitForQuitting(_ vm: LaunchpadViewModel) async throws {
+        for _ in 0..<100 where vm.pendingRemoval?.stage != .quitting {
+            await Task.yield()
+        }
+        try #require(vm.pendingRemoval?.stage == .quitting)
+    }
+
+    @Test func confirmOnOpenAppQuitsItThenTrashesIt() async throws {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
         let log = TrashLog()
-        log.running = ["a"]
-        let vm = try makeViewModel(db, log: log)
+        let workspace = FakeWorkspace()
+        let process = workspace.launch("a")
+        let vm = try makeViewModel(db, log: log, workspace: workspace)
 
         vm.requestRemoval(of: try entry(vm, "a"))
         await vm.confirmRemoval {}
 
+        #expect(workspace.terminateRequests.map(\.id) == [process.id])
+        #expect(workspace.terminateRequests.map(\.force) == [false])
+        #expect(log.trashed == ["/Applications/a.app"])
         #expect(vm.pendingRemoval == nil)
+        #expect(!vm.apps.contains { $0.bundleIdentifier == "a" })
+    }
+
+    // The dialog says it is quitting until the app is gone, and Return
+    // doesn't start a second removal meanwhile.
+    @Test func trashWaitsForTheAppToTerminate() async throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let log = TrashLog()
+        let workspace = FakeWorkspace()
+        workspace.quitsOnRequest = false
+        let process = workspace.launch("a")
+        let vm = try makeViewModel(db, log: log, workspace: workspace)
+
+        vm.requestRemoval(of: try entry(vm, "a"))
+        let confirming = Task { await vm.confirmRemoval {} }
+        try await waitForQuitting(vm)
+        #expect(log.trashed.isEmpty)
+
+        await vm.confirmRemoval {}
+        #expect(vm.pendingRemoval?.stage == .quitting)
+        #expect(workspace.terminateRequests.count == 1)
+
+        workspace.terminate(process)
+        await confirming.value
+
+        #expect(log.trashed == ["/Applications/a.app"])
+        #expect(vm.pendingRemoval == nil)
+        #expect(!vm.apps.contains { $0.bundleIdentifier == "a" })
+    }
+
+    @Test func appThatDoesNotQuitStaysAndTheDialogSaysSo() async throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let log = TrashLog()
+        let workspace = FakeWorkspace()
+        workspace.quitsOnRequest = false
+        workspace.launch("a")
+        let vm = try makeViewModel(db, log: log, workspace: workspace)
+        vm.quitTimeout = .milliseconds(20)
+
+        vm.requestRemoval(of: try entry(vm, "a"))
+        await vm.confirmRemoval {}
+
+        #expect(vm.pendingRemoval?.stage == .didNotQuit)
         #expect(log.trashed.isEmpty)
         #expect(vm.apps.contains { $0.bundleIdentifier == "a" })
+
+        // OK closes it.
+        await vm.confirmRemoval {}
+        #expect(vm.pendingRemoval == nil)
+        #expect(log.trashed.isEmpty)
+    }
+
+    // The app still gets the quit request, but isn't trashed once it's gone.
+    @Test(arguments: [true, false])
+    func cancellingWhileQuittingKeepsTheApp(byHiding: Bool) async throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let log = TrashLog()
+        let workspace = FakeWorkspace()
+        workspace.quitsOnRequest = false
+        let process = workspace.launch("a")
+        let vm = try makeViewModel(db, log: log, workspace: workspace)
+
+        vm.requestRemoval(of: try entry(vm, "a"))
+        let confirming = Task { await vm.confirmRemoval {} }
+        try await waitForQuitting(vm)
+        if byHiding {
+            vm.hide()
+        } else {
+            #expect(vm.handleEscape() == .cancelledRemoval)
+        }
+        workspace.terminate(process)
+        await confirming.value
+
+        #expect(log.trashed.isEmpty)
+        #expect(vm.pendingRemoval == nil)
+        #expect(vm.apps.contains { $0.bundleIdentifier == "a" })
+    }
+
+    // Quit by hand while the dialog was up: nothing left to wait for.
+    @Test func appQuitBeforeConfirmingIsTrashedStraightAway() async throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let log = TrashLog()
+        let workspace = FakeWorkspace()
+        let process = workspace.launch("a")
+        let vm = try makeViewModel(db, log: log, workspace: workspace)
+
+        vm.requestRemoval(of: try entry(vm, "a"))
+        workspace.terminate(process)
+        await vm.confirmRemoval {}
+
+        #expect(workspace.terminateRequests.isEmpty)
+        #expect(log.trashed == ["/Applications/a.app"])
+    }
+
+    @Test func protectedRunningAppIsQuitThenGoesThroughFinder() async throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let log = TrashLog()
+        log.protected = ["/Applications/a.app"]
+        let workspace = FakeWorkspace()
+        workspace.launch("a")
+        let vm = try makeViewModel(db, log: log, workspace: workspace)
+
+        vm.requestRemoval(of: try entry(vm, "a"))
+        var hidden = false
+        await vm.confirmRemoval { hidden = true }
+
+        #expect(workspace.terminateRequests.count == 1)
+        #expect(hidden)
+        #expect(log.trashedWithFinder == ["/Applications/a.app"])
     }
 
     @Test func dropUnknownAppChangesNothing() throws {

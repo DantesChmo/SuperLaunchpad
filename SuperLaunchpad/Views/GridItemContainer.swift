@@ -119,6 +119,11 @@ extension View {
         modifier(HideAppBadge(app: app, iconSize: iconSize))
     }
 
+    // The Dock's dot under the icon of a running app, in the gap above the label.
+    func runningDot(_ app: AppEntry) -> some View {
+        modifier(RunningDot(app: app))
+    }
+
     // Long press to enter edit mode, plus the wiggle while in it. Shared by
     // grid icons and the open folder's icons.
     func editModeGestures(_ enterEditMode: EnterEditModeAction) -> some View {
@@ -145,6 +150,26 @@ private struct LauncherItemAccessibility: ViewModifier {
             .accessibilityHint(hint)
             .accessibilityAction {
                 onActivate()
+            }
+    }
+}
+
+private struct RunningDot: ViewModifier {
+    let app: AppEntry
+
+    @Environment(\.runningApps) private var runningApps
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .bottom) {
+                if runningApps?.isRunning(app) == true {
+                    Circle()
+                        .fill(.white.opacity(RunningIndicator.opacity))
+                        .frame(width: RunningIndicator.size, height: RunningIndicator.size)
+                        .offset(y: (LayoutMetrics.iconLabelSpacing + RunningIndicator.size) / 2)
+                        .launcherLabelShadow()
+                        .accessibilityHidden(true)
+                }
             }
     }
 }

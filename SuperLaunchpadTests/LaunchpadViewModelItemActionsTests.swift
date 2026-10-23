@@ -199,8 +199,8 @@ struct LaunchpadViewModelItemActionsTests {
 
     @Test func moveToTrashAsksOutsideEditModeButNotForSystemApps() throws {
         let vm = try makeViewModel(nil)
+        vm.runningApps = RunningApps(source: FakeWorkspace().source)
         vm.trash = AppTrash.Operations(
-            isRunning: { _ in false },
             needsAuthorization: { _ in false },
             moveToTrash: { _ in },
             moveToTrashWithFinder: { _ in }
@@ -213,6 +213,38 @@ struct LaunchpadViewModelItemActionsTests {
         #expect(vm.pendingRemoval?.app.bundleIdentifier == "a")
         #expect(vm.pendingRemoval?.stage == .confirm)
         #expect(!vm.isEditing)
+    }
+
+    // MARK: - Quit
+
+    @Test func menuOffersQuitOnlyWhileTheAppRuns() throws {
+        let workspace = FakeWorkspace()
+        let vm = try makeViewModel(nil)
+        vm.runningApps = RunningApps(source: workspace.source)
+        let a = try entry(vm, "a")
+        #expect(isEnabled(.quit, in: vm.menuItems(for: a)) == nil)
+
+        let process = workspace.launch("a")
+        #expect(isEnabled(.quit, in: vm.menuItems(for: a)) == true)
+        #expect(isEnabled(.quit, in: vm.menuItems(for: try entry(vm, "b"))) == nil)
+
+        workspace.terminate(process)
+        #expect(isEnabled(.quit, in: vm.menuItems(for: a)) == nil)
+    }
+
+    @Test(arguments: [(ItemMenu.Action.quit, false), (.forceQuit, true)])
+    func quitAndForceQuitAskTheAppAndKeepTheLauncher(action: ItemMenu.Action, forced: Bool) throws {
+        let workspace = FakeWorkspace()
+        workspace.quitsOnRequest = false
+        let vm = try makeViewModel(nil)
+        vm.runningApps = RunningApps(source: workspace.source)
+        let process = workspace.launch("a")
+
+        #expect(!vm.perform(action, on: try entry(vm, "a")))
+
+        #expect(workspace.terminateRequests.map(\.id) == [process.id])
+        #expect(workspace.terminateRequests.map(\.force) == [forced])
+        #expect(vm.isVisible)
     }
 
     @Test func editLayoutEntersEditMode() throws {

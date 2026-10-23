@@ -69,30 +69,45 @@ private struct FolderContextMenu: ViewModifier {
 
 private extension View {
     // Open is left out of the VoiceOver actions: it is the icon's default
-    // action already.
+    // action already. An item's ⌥ alternate is an action of its own there.
     func launcherMenu(_ sections: ItemMenu.Sections, perform: @escaping (ItemMenu.Action) -> Void) -> some View {
-        let actions = sections.joined().filter { $0.isEnabled && $0.action != .open }
+        let actions = sections.joined()
+            .filter { $0.isEnabled }
+            .flatMap { [$0.action] + ($0.alternate.map { [$0] } ?? []) }
+            .filter { $0 != .open }
         return contextMenu {
             ForEach(sections.indices, id: \.self) { index in
                 if index > 0 {
                     Divider()
                 }
                 ForEach(sections[index], id: \.action) { item in
-                    Button {
-                        perform(item.action)
-                    } label: {
-                        Label(item.action.title, systemImage: item.action.systemImage)
+                    if let alternate = item.alternate {
+                        menuButton(item.action, perform: perform)
+                            .modifierKeyAlternate(.option) {
+                                menuButton(alternate, perform: perform)
+                            }
+                            .disabled(!item.isEnabled)
+                    } else {
+                        menuButton(item.action, perform: perform)
+                            .disabled(!item.isEnabled)
                     }
-                    .disabled(!item.isEnabled)
                 }
             }
         }
         .accessibilityActions {
-            ForEach(actions, id: \.action) { item in
-                Button(item.action.title) {
-                    perform(item.action)
+            ForEach(actions, id: \.self) { action in
+                Button(action.title) {
+                    perform(action)
                 }
             }
+        }
+    }
+
+    func menuButton(_ action: ItemMenu.Action, perform: @escaping (ItemMenu.Action) -> Void) -> some View {
+        Button {
+            perform(action)
+        } label: {
+            Label(action.title, systemImage: action.systemImage)
         }
     }
 }

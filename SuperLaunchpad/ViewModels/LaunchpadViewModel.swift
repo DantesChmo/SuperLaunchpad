@@ -919,6 +919,7 @@ final class LaunchpadViewModel {
     // panel, which hides the view model as well.
 
     @ObservationIgnored var opener = AppOpener.Operations.live
+    @ObservationIgnored var runningApps = RunningApps(source: .live)
 
     // A folder the launcher view should open, from a menu. A fresh value on
     // every request, so asking twice for the same folder still reaches it.
@@ -946,7 +947,8 @@ final class LaunchpadViewModel {
         ItemMenu.items(for: ItemMenu.AppState(
             isRemovable: isRemovable(app),
             canEditLayout: canEditLayout,
-            isHidden: app.isHidden
+            isHidden: app.isHidden,
+            isRunning: runningApps.isRunning(app)
         ))
     }
 
@@ -996,6 +998,10 @@ final class LaunchpadViewModel {
             hideApp(app.bundleIdentifier)
         case .unhide:
             unhideApp(app.bundleIdentifier)
+        case .quit:
+            runningApps.quit(app)
+        case .forceQuit:
+            runningApps.quit(app, force: true)
         case .editLayout:
             enterEditMode()
         case .rename, .sortByName, .disband:
@@ -1016,7 +1022,7 @@ final class LaunchpadViewModel {
             disbandFolder(folder.id)
         case .editLayout:
             enterEditMode()
-        case .showInFinder, .moveToTrash, .hide, .unhide:
+        case .showInFinder, .moveToTrash, .hide, .unhide, .quit, .forceQuit:
             break
         }
     }
@@ -1033,13 +1039,17 @@ final class LaunchpadViewModel {
     //
     // The × on an app in edit mode, or Move to Trash in its context menu,
     // asks for confirmation, then moves the app to the Trash and drops it
-    // from the layout.
+    // from the layout. A running app is quit first.
 
     struct PendingRemoval: Equatable {
         enum Stage: Equatable {
             case confirm
-            // A running app is not moved; the user quits it first.
+            // Confirming quits the app, then moves it.
             case appIsOpen
+            // Waiting for the app to quit; only Cancel works.
+            case quitting
+            // Still running after `quitTimeout`, likely asking to save changes.
+            case didNotQuit
             case failed(AppTrash.Failure)
         }
 
@@ -1050,11 +1060,12 @@ final class LaunchpadViewModel {
     // The dialog on screen, if any.
     private(set) var pendingRemoval: PendingRemoval?
     @ObservationIgnored var trash = AppTrash.Operations.live
+    @ObservationIgnored var quitTimeout = Duration.seconds(Uninstall.quitTimeout)
 
     // Apps that are part of macOS can't be removed: no ×, a disabled menu item.
     func requestRemoval(of app: AppEntry) {
         guard isRemovable(app) else { return }
-        let stage: PendingRemoval.Stage = trash.isRunning(app.bundleIdentifier) ? .appIsOpen : .confirm
+        let stage: PendingRemoval.Stage = runningApps.isRunning(app) ? .appIsOpen : .confirm
         pendingRemoval = PendingRemoval(app: app, stage: stage)
     }
 
@@ -1062,12 +1073,21 @@ final class LaunchpadViewModel {
         pendingRemoval = nil
     }
 
-    // The dialog's default button: moves the app to the Trash when asked to,
-    // otherwise just closes the dialog. Finder's password prompt would open
-    // behind the launcher, so the launcher hides before Finder is asked; a
-    // failure there shows its dialog when the launcher opens next.
+    // The dialog's default button: moves the app to the Trash when asked to
+    // (quitting it first if it is open), otherwise just closes the dialog.
+    // Finder's password prompt would open behind the launcher, so the
+    // launcher hides before Finder is asked; a failure there shows its
+    // dialog when the launcher opens next.
     func confirmRemoval(hideLauncher: () -> Void) async {
-        guard let removal = pendingRemoval, removal.stage == .confirm else {
+        guard let removal = pendingRemoval else { return }
+        switch removal.stage {
+        case .confirm:
+            break
+        case .appIsOpen:
+            guard await quitBeforeRemoval(removal.app) else { return }
+        case .quitting:
+            return
+        case .didNotQuit, .failed:
             pendingRemoval = nil
             return
         }
@@ -1089,6 +1109,21 @@ final class LaunchpadViewModel {
             return
         }
         dropUninstalledApp(app.bundleIdentifier)
+    }
+
+    // False if the dialog was closed meanwhile (the app still gets the quit
+    // request), or the app didn't quit in time; the dialog then says so.
+    private func quitBeforeRemoval(_ app: AppEntry) async -> Bool {
+        let quitting = PendingRemoval(app: app, stage: .quitting)
+        pendingRemoval = quitting
+        runningApps.quit(app)
+        let quit = await runningApps.waitUntilQuit(app, timeout: quitTimeout)
+        guard pendingRemoval == quitting else { return false }
+        guard quit else {
+            pendingRemoval = PendingRemoval(app: app, stage: .didNotQuit)
+            return false
+        }
+        return true
     }
 
     // Takes an app that is gone from disk out of the layout right away,

@@ -26,6 +26,29 @@ struct ItemMenuTests {
         #expect(isEnabled(.unhide, in: sections) == true)
     }
 
+    @Test func runningAppOffersQuitWithForceQuitBehindOption() throws {
+        let sections = ItemMenu.items(for: ItemMenu.AppState(isRemovable: true, canEditLayout: true, isRunning: true))
+        #expect(actions(sections) == [[.open, .showInFinder], [.quit], [.hide, .moveToTrash], [.editLayout]])
+        let quit = try #require(sections.joined().first { $0.action == .quit })
+        #expect(quit.alternate == .forceQuit)
+        #expect(quit.isEnabled)
+    }
+
+    // Only Quit has an alternate.
+    @Test func otherItemsHaveNoAlternate() {
+        let app = ItemMenu.items(for: ItemMenu.AppState(isRemovable: true, canEditLayout: true, isRunning: true))
+        let folder = ItemMenu.items(for: ItemMenu.FolderState(appCount: 2, canEditLayout: true))
+        #expect(app.joined().filter { $0.alternate != nil }.map(\.action) == [.quit])
+        #expect(folder.joined().allSatisfy { $0.alternate == nil })
+    }
+
+    // A system app that is running can be quit, not moved to the Trash.
+    @Test func runningSystemAppCanBeQuitButNotTrashed() {
+        let sections = ItemMenu.items(for: ItemMenu.AppState(isRemovable: false, canEditLayout: true, isRunning: true))
+        #expect(isEnabled(.quit, in: sections) == true)
+        #expect(isEnabled(.moveToTrash, in: sections) == false)
+    }
+
     @Test func moveToTrashIsDisabledForSystemApps() {
         let sections = ItemMenu.items(for: ItemMenu.AppState(isRemovable: false, canEditLayout: true))
         #expect(isEnabled(.moveToTrash, in: sections) == false)

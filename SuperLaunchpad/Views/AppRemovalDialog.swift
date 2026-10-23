@@ -27,6 +27,10 @@ struct AppRemovalDialog: View {
                 Text(title)
                     .font(.headline)
                     .multilineTextAlignment(.center)
+                if removal.stage == .quitting {
+                    ProgressView()
+                        .controlSize(.small)
+                }
                 if let message {
                     Text(message)
                         .font(.callout)
@@ -49,17 +53,23 @@ struct AppRemovalDialog: View {
     @ViewBuilder
     private var buttons: some View {
         HStack {
-            if removal.stage == .confirm {
+            switch removal.stage {
+            case .confirm, .appIsOpen:
                 Button(action: onCancel) {
                     Text("Cancel").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 Button(role: .destructive, action: onConfirm) {
-                    Text("Move to Trash").frame(maxWidth: .infinity)
+                    Text(removal.stage == .confirm ? "Move to Trash" : "Quit and Move").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.red)
-            } else {
+            case .quitting:
+                Button(action: onCancel) {
+                    Text("Cancel").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+            case .didNotQuit, .failed:
                 Button(action: onConfirm) {
                     Text("OK").frame(maxWidth: .infinity)
                 }
@@ -79,6 +89,10 @@ struct AppRemovalDialog: View {
             String(localized: "Move “\(name)” to the Trash?")
         case .appIsOpen:
             String(localized: "“\(name)” is open")
+        case .quitting:
+            String(localized: "Quitting “\(name)”…")
+        case .didNotQuit:
+            String(localized: "“\(name)” didn’t quit")
         case .failed:
             String(localized: "Couldn’t move “\(name)” to the Trash")
         }
@@ -89,7 +103,11 @@ struct AppRemovalDialog: View {
         case .confirm:
             nil
         case .appIsOpen:
-            String(localized: "Quit it, then move it to the Trash.")
+            String(localized: "Quit it and move it to the Trash?")
+        case .quitting:
+            nil
+        case .didNotQuit:
+            String(localized: "It may be asking to save changes. Quit it yourself, then move it to the Trash.")
         case .failed(.finderNotPermitted):
             String(localized: "Allow SuperLaunchpad to control Finder in System Settings → Privacy & Security → Automation.")
         case .failed(.other(let reason)):
