@@ -149,6 +149,9 @@ enum FrequentApps {
     static let maxCount = Grid.columns
     // The row is dimmed and ignores clicks in edit mode.
     static let editingOpacity: Double = 0.4
+    // The shelf that sets the row apart from the grid below it.
+    static let shelfOpacity: Double = 0.08
+    static let shelfCornerRatio: CGFloat = 0.3
 }
 
 // The blue dot in front of a new app's label.

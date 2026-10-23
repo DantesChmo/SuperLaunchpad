@@ -84,6 +84,7 @@ struct FolderDetailView: View {
                         ForEach(Array(folderPages.enumerated()), id: \.offset) { index, page in
                             folderPageGrid(page)
                                 .frame(width: gridWidth, height: folderGridHeight)
+                                .padding(.vertical, ringMargin)
                                 .containerRelativeFrame(.horizontal)
                                 .id(index)
                         }
@@ -98,13 +99,15 @@ struct FolderDetailView: View {
                     get: { currentPage },
                     set: { if let v = $0 { currentPage = v } }
                 ))
-                .frame(width: gridWidth, height: folderGridHeight)
+                .frame(width: gridWidth, height: folderGridHeight + ringMargin * 2)
+                // Drags hit-test against the grid itself, without the ring margin.
                 .onGeometryChange(for: CGRect.self) { proxy in
                     proxy.frame(in: .named(Drag.coordinateSpace))
                 } action: { frame in
-                    gridFrame = frame
+                    gridFrame = frame.insetBy(dx: 0, dy: ringMargin)
                     reportFrames()
                 }
+                .padding(.vertical, -ringMargin)
 
                 if folderPages.count > 1 {
                     PageIndicatorView(
@@ -262,6 +265,14 @@ struct FolderDetailView: View {
 
     private var folderGridHeight: CGFloat {
         geometry.gridSize.height
+    }
+
+    // How far the keyboard focus ring sticks out of an icon's cell. The
+    // pager's scroll view clips to its bounds, so it is that much taller
+    // (and pulled back by the same negative padding) to keep the ring of the
+    // first and last row whole.
+    private var ringMargin: CGFloat {
+        folderIconSize * Search.selectionOutsetRatio
     }
 
     private func folderPageGrid(_ page: [AppEntry]) -> some View {

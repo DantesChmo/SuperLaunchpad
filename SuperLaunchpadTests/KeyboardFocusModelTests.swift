@@ -226,6 +226,8 @@ struct KeyboardFocusModelTests {
         #expect(vm.openFolderID == "F")
         #expect(vm.keyboardFocus.focusedFolderAppID == "f-0")
         #expect(vm.keyboardFocus.focusedItem?.id == "f-0")
+        // Only one ring at a time: the tile behind the open folder has none.
+        #expect(vm.keyboardFocus.focusedGridItemID == nil)
     }
 
     @Test func closingTheFolderLeavesTheFocusOnItsTile() throws {

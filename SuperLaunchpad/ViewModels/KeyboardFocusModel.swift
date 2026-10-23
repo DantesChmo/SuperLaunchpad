@@ -32,9 +32,10 @@ final class KeyboardFocusModel {
     @ObservationIgnored private var lastGridIndex = 0
 
     // The grid item that draws the ring: on the shown page only, and not
-    // while search results replace the grid.
+    // while search results replace the grid or an open folder covers it (the
+    // folder's app has the ring then; the grid focus comes back on close).
     var focusedGridItemID: String? {
-        guard isActive, !launchpad.search.isSearching, let gridItemID,
+        guard isActive, !launchpad.search.isSearching, launchpad.openFolderID == nil, let gridItemID,
               launchpad.gridLocation(of: gridItemID)?.page == launchpad.currentPage else { return nil }
         return gridItemID
     }

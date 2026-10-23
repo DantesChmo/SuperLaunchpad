@@ -17,6 +17,12 @@ struct FrequentAppsRow: View {
             }
             Spacer(minLength: 0)
         }
+        // A shelf behind the row, like the Dock's: without it the row reads
+        // as the grid's first row with duplicated icons.
+        .background {
+            RoundedRectangle(cornerRadius: metrics.iconSize * FrequentApps.shelfCornerRatio)
+                .fill(.white.opacity(FrequentApps.shelfOpacity))
+        }
         .padding(.horizontal, metrics.horizontalPadding)
         .frame(height: metrics.itemHeight)
         .environment(\.isEditing, false)
