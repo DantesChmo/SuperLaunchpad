@@ -347,6 +347,55 @@ struct GridLayoutTests {
         #expect(renamed == false)
     }
 
+    // MARK: - Disband / sort
+
+    @Test func disbandPutsAppsInFolderPlaceInOrder() {
+        var layout = layout([["a", "#F", "b"], ["c"]], folders: ["F": ["x", "y", "z"]])
+        let disbanded = layout.disband("F")
+        #expect(disbanded)
+        #expect(names(layout) == [["a", "x", "y", "z", "b"], ["c"]])
+        #expect(layout.folders["F"] == nil)
+    }
+
+    @Test func disbandOnFullPageSpillsOverflowOntoNextPages() {
+        var layout = layout([["a", "#F", "b"], ["c", "d", "e"]], folders: ["F": ["x", "y"]], capacity: 3)
+        let disbanded = layout.disband("F")
+        #expect(disbanded)
+        #expect(names(layout) == [["a", "x", "y"], ["b", "c", "d"], ["e"]])
+    }
+
+    @Test func disbandEmptyFolderClosesGapAndDropsEmptyPage() {
+        var layout = layout([["a"], ["#E"]], folders: ["E": []])
+        let disbanded = layout.disband("E")
+        #expect(disbanded)
+        #expect(names(layout) == [["a"]])
+    }
+
+    @Test func disbandRejectsUnknownFolderAndApps() {
+        var layout = layout([["a", "#F"]], folders: ["F": ["x"]])
+        let before = layout
+        let disbandedMissing = layout.disband("missing")
+        let disbandedApp = layout.disband("a")
+        #expect(!disbandedMissing)
+        #expect(!disbandedApp)
+        #expect(layout == before)
+    }
+
+    @Test func sortFolderReordersOnlyThatFolder() {
+        var layout = layout([["#F", "#G"]], folders: ["F": ["c", "a", "b"], "G": ["z", "y"]])
+        let sorted = layout.sortFolder("F", by: <)
+        #expect(sorted)
+        #expect(layout.folders["F"]?.appIDs == ["a", "b", "c"])
+        #expect(layout.folders["G"]?.appIDs == ["z", "y"])
+        #expect(names(layout) == [["#F", "#G"]])
+    }
+
+    @Test func sortRejectsUnknownFolder() {
+        var layout = layout([["a"]])
+        let sorted = layout.sortFolder("F", by: <)
+        #expect(!sorted)
+    }
+
     // MARK: - Apply
 
     @Test func applyWritesDensePositionsAndKeepsInvariant() throws {

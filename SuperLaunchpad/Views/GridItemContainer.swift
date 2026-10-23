@@ -109,11 +109,6 @@ extension View {
         modifier(RemoveAppBadge(app: app, iconSize: iconSize))
     }
 
-    // The VoiceOver counterpart of the ×, on the icon's accessibility element.
-    func removeAppAccessibilityAction(_ app: AppEntry) -> some View {
-        modifier(RemoveAppAccessibilityAction(app: app))
-    }
-
     // Long press to enter edit mode, plus the wiggle while in it. Shared by
     // grid icons and the open folder's icons.
     func editModeGestures(_ enterEditMode: EnterEditModeAction) -> some View {
@@ -124,15 +119,14 @@ extension View {
     }
 }
 
-// Icon, name and backplate read as one element: the name, a hint, the click
-// as the default action, and an "Edit Layout" action standing in for the
-// long press, which VoiceOver can't perform.
+// Icon, name and backplate read as one element: the name, a hint and the
+// click as the default action. The context menu adds the other actions (see
+// `ItemContextMenu`), Edit Layout among them, standing in for the long press,
+// which VoiceOver can't perform.
 private struct LauncherItemAccessibility: ViewModifier {
     let label: String
     let hint: String
     let onActivate: () -> Void
-
-    @Environment(\.enterEditMode) private var enterEditMode
 
     func body(content: Content) -> some View {
         content
@@ -141,9 +135,6 @@ private struct LauncherItemAccessibility: ViewModifier {
             .accessibilityHint(hint)
             .accessibilityAction {
                 onActivate()
-            }
-            .accessibilityAction(named: Text("Edit Layout")) {
-                enterEditMode()
             }
     }
 }
@@ -182,23 +173,6 @@ private struct RemoveAppBadge: ViewModifier {
         .buttonStyle(.plain)
         .offset(x: -size * Uninstall.badgeOutset, y: -size * Uninstall.badgeOutset)
         .accessibilityIdentifier("remove-app-badge")
-    }
-}
-
-private struct RemoveAppAccessibilityAction: ViewModifier {
-    let app: AppEntry
-
-    @Environment(\.isEditing) private var isEditing
-    @Environment(\.removeApp) private var removeApp
-
-    func body(content: Content) -> some View {
-        content.accessibilityActions {
-            if isEditing, AppTrash.isRemovable(appPath: app.appPath) {
-                Button("Move to Trash") {
-                    removeApp(app)
-                }
-            }
-        }
     }
 }
 

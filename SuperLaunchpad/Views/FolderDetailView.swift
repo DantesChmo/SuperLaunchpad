@@ -328,7 +328,7 @@ private struct FolderAppIconView: View {
             hint: isEditing ? String(localized: "Drag to move") : String(localized: "Opens the app"),
             onActivate: onTap
         )
-        .removeAppAccessibilityAction(app)
+        .appContextMenu(app)
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("folder-app-icon")
     }

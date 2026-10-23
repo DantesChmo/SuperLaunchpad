@@ -183,6 +183,28 @@ struct GridLayout: Equatable {
         normalize()
     }
 
+    // Removes the folder; its apps take its place on the page, in folder
+    // order, pushing the items after it along (overflow spills onto the next
+    // page).
+    @discardableResult
+    mutating func disband(_ folderID: String) -> Bool {
+        guard let folder = folders[folderID],
+              case .page(let page, let slot) = location(of: .folder(folderID)) else { return false }
+        folders[folderID] = nil
+        pages[page].replaceSubrange(slot...slot, with: folder.appIDs.map { Item.app($0) })
+        normalize()
+        return true
+    }
+
+    // Reorders the folder's apps; the folder keeps its place.
+    @discardableResult
+    mutating func sortFolder(_ folderID: String, by areInIncreasingOrder: (String, String) -> Bool) -> Bool {
+        guard var folder = folders[folderID] else { return false }
+        folder.appIDs.sort(by: areInIncreasingOrder)
+        folders[folderID] = folder
+        return true
+    }
+
     // Empty or whitespace-only titles are rejected, so the old title stays.
     @discardableResult
     mutating func rename(folder folderID: String, to title: String) -> Bool {

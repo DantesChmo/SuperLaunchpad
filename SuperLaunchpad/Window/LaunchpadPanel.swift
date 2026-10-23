@@ -83,6 +83,18 @@ final class LaunchpadPanel: NSPanel {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(menuDidBeginTracking),
+            name: NSMenu.didBeginTrackingNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(menuDidEndTracking),
+            name: NSMenu.didEndTrackingNotification,
+            object: nil
+        )
     }
 
     func showPanel() {
@@ -159,6 +171,21 @@ final class LaunchpadPanel: NSPanel {
         if viewModel.dockInsets != dockInsets {
             viewModel.dockInsets = dockInsets
         }
+    }
+
+    // MARK: - Menus
+
+    // An icon's context menu opens at the pop-up menu level, below this
+    // `.screenSaver` panel, and would be hidden behind it. While a menu is
+    // open the panel steps down to just below menus: still above the Dock
+    // and the menu bar.
+    @objc private func menuDidBeginTracking(_ notification: Notification) {
+        guard viewModel.isVisible else { return }
+        level = .belowMenus
+    }
+
+    @objc private func menuDidEndTracking(_ notification: Notification) {
+        level = .screenSaver
     }
 
     // `NSPanel` defaults to NOT becoming key/main (panels are usually auxiliary).
@@ -258,6 +285,10 @@ final class LaunchpadPanel: NSPanel {
         }
         eventMonitor = nil
     }
+}
+
+private extension NSWindow.Level {
+    static let belowMenus = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue - 1)
 }
 
 private extension NSScreen {

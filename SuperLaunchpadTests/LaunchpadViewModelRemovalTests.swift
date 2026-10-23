@@ -110,17 +110,25 @@ struct LaunchpadViewModelRemovalTests {
         #expect(vm.pendingRemoval?.stage == .appIsOpen)
     }
 
-    @Test func requestIgnoresSystemAppsAndWorksOnlyInEditMode() throws {
+    @Test func requestIgnoresSystemApps() throws {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
         let vm = try makeViewModel(db, log: TrashLog())
 
         vm.requestRemoval(of: try entry(vm, "mail"))
         #expect(vm.pendingRemoval == nil)
+    }
+
+    // The context menu's Move to Trash works outside edit mode.
+    @Test func requestWorksOutsideEditMode() throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let vm = try makeViewModel(db, log: TrashLog())
 
         vm.exitEditMode()
         vm.requestRemoval(of: try entry(vm, "a"))
-        #expect(vm.pendingRemoval == nil)
+        #expect(vm.pendingRemoval?.stage == .confirm)
+        #expect(!vm.isEditing)
     }
 
     @Test func escapeAndHideCloseTheDialogFirst() throws {

@@ -491,17 +491,15 @@ final class LaunchpadViewModel {
         return (result, existingFolders)
     }
 
-    // `NSWorkspace.open(_:)` launches the app at the given URL via Launch
-    // Services — the same mechanism Finder uses on double-click. We hide
-    // the launcher straight after so the user lands on the launched app.
+    // Launches the app (see `AppOpener`) and hides the launcher straight
+    // after so the user lands on the launched app.
     //
     // Does nothing in edit mode, where a click on an app only selects it for
     // dragging. Returns whether the app was launched.
     @discardableResult
     func launchApp(_ app: AppEntry) -> Bool {
         guard !isEditing else { return false }
-        let url = URL(fileURLWithPath: app.appPath)
-        NSWorkspace.shared.open(url)
+        opener.open(app.appPath, true)
         hide()
         return true
     }
@@ -638,6 +636,26 @@ final class LaunchpadViewModel {
             .sorted { ($0.folderOrderIndex ?? 0) < ($1.folderOrderIndex ?? 0) }
     }
 
+    // The folder's apps take its place on the grid, in folder order.
+    @discardableResult
+    func disbandFolder(_ folderID: String) -> Bool {
+        applyEdit { $0.disband(folderID) }
+    }
+
+    @discardableResult
+    func sortFolderByName(_ folderID: String) -> Bool {
+        let names = Dictionary(apps.map { ($0.bundleIdentifier, $0.displayName) }) { first, _ in first }
+        return applyEdit { layout in
+            layout.sortFolder(folderID) { a, b in
+                switch (names[a] ?? a).localizedCaseInsensitiveCompare(names[b] ?? b) {
+                case .orderedAscending: true
+                case .orderedDescending: false
+                case .orderedSame: a < b
+                }
+            }
+        }
+    }
+
     @discardableResult
     func renameFolder(_ folderID: String, to title: String) -> Bool {
         var layout = GridLayout(apps: apps, folders: folders)
@@ -769,10 +787,118 @@ final class LaunchpadViewModel {
         if isEditing != editing { isEditing = editing }
     }
 
+    // MARK: - Item actions
+    //
+    // A click on an app, with its modifiers, and the items of an icon's
+    // context menu (see `ItemMenu`), which VoiceOver offers as actions too.
+    // Those returning true want the launcher hidden: the caller hides the
+    // panel, which hides the view model as well.
+
+    @ObservationIgnored var opener = AppOpener.Operations.live
+
+    // A folder the launcher view should open, from a menu. A fresh value on
+    // every request, so asking twice for the same folder still reaches it.
+    struct FolderOpenRequest: Equatable {
+        let folderID: String
+        // Opens with the title in edit mode.
+        let renaming: Bool
+        let serial: Int
+    }
+
+    private(set) var folderOpenRequest: FolderOpenRequest?
+
+    // Asked for every icon's VoiceOver actions on render; the answer for a
+    // path doesn't change, so the disk is asked once.
+    @ObservationIgnored private var removableByPath: [String: Bool] = [:]
+
+    func isRemovable(_ app: AppEntry) -> Bool {
+        if let known = removableByPath[app.appPath] { return known }
+        let removable = AppTrash.isRemovable(appPath: app.appPath)
+        removableByPath[app.appPath] = removable
+        return removable
+    }
+
+    func menuItems(for app: AppEntry) -> ItemMenu.Sections {
+        ItemMenu.items(for: ItemMenu.AppState(isRemovable: isRemovable(app), canEditLayout: canEditLayout))
+    }
+
+    func menuItems(for folder: FolderEntry) -> ItemMenu.Sections {
+        let appCount = apps.lazy.filter { $0.folderID == folder.id }.count
+        return ItemMenu.items(for: ItemMenu.FolderState(appCount: appCount, canEditLayout: canEditLayout))
+    }
+
+    // Edit mode is already on, or can't be entered while searching.
+    private var canEditLayout: Bool {
+        !isEditing && !isSearching
+    }
+
+    func click(_ app: AppEntry, modifiers: NSEvent.ModifierFlags) -> Bool {
+        switch ItemMenu.clickAction(modifiers: modifiers, isEditing: isEditing) {
+        case .launch:
+            opener.open(app.appPath, true)
+            return true
+        case .launchKeepingLauncher:
+            // The app stays in the background, so the launcher keeps the
+            // keyboard for the next click.
+            opener.open(app.appPath, false)
+            return false
+        case .showInFinder:
+            opener.showInFinder(app.appPath)
+            return true
+        case .none:
+            return false
+        }
+    }
+
+    func perform(_ action: ItemMenu.Action, on app: AppEntry) -> Bool {
+        switch action {
+        case .open:
+            opener.open(app.appPath, true)
+            return true
+        case .showInFinder:
+            // Finder opens below the launcher's panel.
+            opener.showInFinder(app.appPath)
+            return true
+        case .moveToTrash:
+            requestRemoval(of: app)
+        case .editLayout:
+            enterEditMode()
+        case .rename, .sortByName, .disband:
+            break
+        }
+        return false
+    }
+
+    func perform(_ action: ItemMenu.Action, on folder: FolderEntry) {
+        switch action {
+        case .open:
+            requestFolderOpen(folder.id, renaming: false)
+        case .rename:
+            requestFolderOpen(folder.id, renaming: true)
+        case .sortByName:
+            sortFolderByName(folder.id)
+        case .disband:
+            disbandFolder(folder.id)
+        case .editLayout:
+            enterEditMode()
+        case .showInFinder, .moveToTrash:
+            break
+        }
+    }
+
+    private func requestFolderOpen(_ folderID: String, renaming: Bool) {
+        folderOpenRequest = FolderOpenRequest(
+            folderID: folderID,
+            renaming: renaming,
+            serial: (folderOpenRequest?.serial ?? 0) + 1
+        )
+    }
+
     // MARK: - Uninstall
     //
-    // The × on an app in edit mode asks for confirmation, then moves the app
-    // to the Trash and drops it from the layout.
+    // The × on an app in edit mode, or Move to Trash in its context menu,
+    // asks for confirmation, then moves the app to the Trash and drops it
+    // from the layout.
 
     struct PendingRemoval: Equatable {
         enum Stage: Equatable {
@@ -790,9 +916,9 @@ final class LaunchpadViewModel {
     private(set) var pendingRemoval: PendingRemoval?
     @ObservationIgnored var trash = AppTrash.Operations.live
 
-    // Apps that are part of macOS have no ×.
+    // Apps that are part of macOS can't be removed: no ×, a disabled menu item.
     func requestRemoval(of app: AppEntry) {
-        guard isEditing, AppTrash.isRemovable(appPath: app.appPath) else { return }
+        guard isRemovable(app) else { return }
         let stage: PendingRemoval.Stage = trash.isRunning(app.bundleIdentifier) ? .appIsOpen : .confirm
         pendingRemoval = PendingRemoval(app: app, stage: stage)
     }

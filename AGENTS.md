@@ -70,6 +70,9 @@ Data flow:
 | `Views/AppIconView.swift` | icon + label, hover scale 1.08 |
 | `Views/FolderIconView.swift` | 3×3 mini preview |
 | `Views/FolderDetailView.swift` | folder popup, 4×3 grid |
+| `Views/ItemContextMenu.swift` | right-click menu on app icons and folder tiles, same items as VoiceOver actions |
+| `Helpers/ItemMenu.swift` | context-menu items per app / folder and their availability; what a click does by its modifiers |
+| `Services/AppOpener.swift` | open an app (in front or in the background), show it in Finder; injectable like `AppTrash.Operations` |
 | `Window/LaunchpadPanel.swift` | `NSPanel`, borderless, screenSaver level |
 | `Window/VisualEffectBackground.swift` | `NSVisualEffectView` wrapper |
 | `Services/AppEnumerator.swift` | scans `/Applications`, extracts 128×128 PNG icons |
@@ -181,6 +184,9 @@ Things a new developer cannot guess from the code:
 - **System Launchpad DB at `~/.com.apple.dock.launchpad/db/db`** — read-only import on first launch via `Services/SystemLaunchpadDB.swift`. Hierarchy is `Root → Page → Folder(type=2) → FolderPage(type=3) → App`; folder titles in `groups` table. Never write to this DB.
 - **`NSHostingView` needs an explicit frame of the screen's size at origin `.zero`** on resize when embedded in `NSPanel` — SwiftUI doesn't propagate sizing to the AppKit host automatically here. Not `screen.frame` itself: a secondary display has a non-zero origin.
 - **Multi-monitor:** `LaunchpadPanel` opens on the screen under the cursor (`Helpers/ScreenSelection.swift`, pure and tested). On `didChangeScreenParametersNotification` a visible panel stays on its display (by display ID) with the new frame, or moves under the cursor if that display was unplugged.
+- **Context menus open below the `.screenSaver` panel.** NSMenu windows sit at the pop-up menu level, so `LaunchpadPanel` steps down to just below it on `NSMenu.didBeginTrackingNotification` and back up on `didEndTrackingNotification` — still above the Dock and menu bar. `NSAlert` has the same problem, which is why the Trash dialog is drawn inside the launcher.
+- **Context menu items are built in one place:** `ItemMenu.items(for:)`, one function per item kind (app, folder). A new action (Hide, Quit, …) is a new `ItemMenu.Action` case, a line there and a branch in `LaunchpadViewModel.perform(_:on:)`; the menu and the VoiceOver actions pick it up. Actions returning `true` want the launcher hidden — the view posts `.hideLaunchpad`, it is not the view model's job.
+- **Modifier clicks:** `⌘`-click opens the app without activating it (`AppOpener`, `activates = false`) so the launcher keeps the keyboard; `⌥⌘`-click shows it in Finder; `⌃`-click is left to the context menu. None of them act in edit mode.
 - **`searchText` exists on the ViewModel but is not wired.** Don't add filtering downstream of it without also building the search UI and decide on debounce/scope first.
 
 ## Forbidden patterns
@@ -201,7 +207,6 @@ These are intentionally unimplemented. Don't half-implement them as a side effec
 
 - **Search** — `searchText` property exists, not wired. Requires a full UI before backend filtering.
 - **Drag-and-drop reorder** — not feasible inside SwiftUI `ScrollView` on macOS as of Sequoia. Several attempts have been ruled out; consult before re-attempting.
-- **Folder creation / renaming** — folders are read-only, imported once from the system DB. Adding mutation requires schema rework on `FolderEntry`.
 
 ## Workflow
 

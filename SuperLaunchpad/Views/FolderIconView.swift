@@ -34,6 +34,7 @@ struct FolderIconView: View {
                 : String(localized: "Folder with \(apps.count) apps. Opens the folder"),
             onActivate: onTap
         )
+        .folderContextMenu(folder)
         .accessibilityIdentifier("folder-icon")
         .accessibilityAddTraits(.isButton)
     }

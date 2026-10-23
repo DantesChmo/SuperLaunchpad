@@ -67,8 +67,7 @@ struct LaunchpadView: View {
                             viewModel: viewModel,
                             metrics: metrics,
                             onLaunch: { app in
-                                viewModel.launchApp(app)
-                                NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
+                                click(app)
                             }
                         )
                         .transition(.opacity)
@@ -85,12 +84,7 @@ struct LaunchpadView: View {
                             drag: drag,
                             metrics: metrics,
                             onLaunch: { app in
-                                // Edit mode: a click doesn't launch.
-                                guard viewModel.launchApp(app) else { return }
-                                // Notification → AppDelegate → hidePanel. We
-                                // don't call panel directly because views
-                                // shouldn't know about AppKit windows.
-                                NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
+                                click(app)
                             },
                             onOpenFolder: { folder in
                                 openFolder(folder)
@@ -154,8 +148,8 @@ struct LaunchpadView: View {
                         apps: folderPreviewApps,
                         metrics: metrics,
                         onLaunch: { app in
-                            guard !drag.isTapSuppressed, viewModel.launchApp(app) else { return }
-                            NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
+                            guard !drag.isTapSuppressed else { return }
+                            click(app)
                         },
                         onClose: {
                             closeFolder()
@@ -209,6 +203,7 @@ struct LaunchpadView: View {
             .environment(\.isEditing, viewModel.isEditing)
             .environment(\.enterEditMode, EnterEditModeAction(viewModel: viewModel))
             .environment(\.removeApp, RemoveAppAction(viewModel: viewModel))
+            .environment(\.itemMenu, ItemMenuAction(viewModel: viewModel))
             .modifier(LaunchpadDragGesture(
                 viewModel: viewModel,
                 pager: pager,
@@ -244,6 +239,11 @@ struct LaunchpadView: View {
             .onChange(of: viewModel.apps.count) {
                 refreshFolderSnapshot()
             }
+            // Open or Rename in a folder's context menu.
+            .onChange(of: viewModel.folderOpenRequest) { _, request in
+                guard let request, let folder = viewModel.folders.first(where: { $0.id == request.folderID }) else { return }
+                openFolder(folder, renaming: request.renaming)
+            }
             .onChange(of: viewModel.isEditing) { _, editing in
                 AccessibilityNotification.Announcement(editing ? "Editing" : "Done editing").post()
             }
@@ -277,6 +277,15 @@ struct LaunchpadView: View {
                 }
             }
         }
+    }
+
+    // A click on an app, launching it or showing it in Finder by its
+    // modifiers (none in edit mode).
+    private func click(_ app: AppEntry) {
+        guard viewModel.click(app, modifiers: NSEvent.modifierFlags) else { return }
+        // Notification → AppDelegate → hidePanel. We don't call panel
+        // directly because views shouldn't know about AppKit windows.
+        NotificationCenter.default.post(name: .hideLaunchpad, object: nil)
     }
 
     private func openFolder(_ folder: FolderEntry, renaming: Bool = false) {
