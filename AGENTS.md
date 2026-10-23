@@ -76,12 +76,12 @@ Data flow:
 | `Services/RunningApps.swift` | which apps run (dot under the icon, Quit / Force Quit, quit before Trash); `@Observable`, fed by an injectable `Source` (live: `NSWorkspace` + launch/terminate notifications) |
 | `Window/LaunchpadPanel.swift` | `NSPanel`, borderless, screenSaver level |
 | `Window/VisualEffectBackground.swift` | `NSVisualEffectView` wrapper |
-| `Services/AppEnumerator.swift` | scans `/Applications`, extracts 128×128 PNG icons |
+| `Services/AppEnumerator.swift` | scans `/Applications`, extracts `AppIcon.pixelSize` (256 px) PNG icons |
 | `Services/SystemLaunchpadDB.swift` | parses macOS Launchpad DB |
 | `Services/GestureMonitor.swift` | global+local `NSEvent.magnify` monitors |
 | `Services/AppDirectoryWatcher.swift` | DispatchSource on `/Applications` |
 | `Helpers/Constants.swift` | `Grid`, `FolderGrid`, `AnimationDuration`, `LayoutMetrics` |
-| `Helpers/NSImageExtensions.swift` | `pngData()`, `resized(to:)` |
+| `Helpers/NSImageExtensions.swift` | `pngData(pixelSize:)` — exact-pixel PNG for `iconData` |
 | `Helpers/NewAppPlacement.swift` | Settings → New Apps: where a rescan puts a new app; category folder title matching |
 | `SuperLaunchpadTests/` | swift-testing test suites |
 
@@ -194,6 +194,7 @@ Things a new developer cannot guess from the code:
 - **Trash of a running app** quits it first: stage `.appIsOpen` → `.quitting` (only Cancel works; Return is ignored) → trash once it terminates, or `.didNotQuit` after `Uninstall.quitTimeout` (it is probably asking to save changes, behind the launcher's panel). Cancelling or hiding while quitting keeps the app on disk; the quit request has already gone out.
 - **Modifier clicks:** `⌘`-click opens the app without activating it (`AppOpener`, `activates = false`) so the launcher keeps the keyboard; `⌥⌘`-click shows it in Finder; `⌃`-click is left to the context menu. None of them act in edit mode.
 - **New apps (blue dot).** An app is marked `isNew` only when a rescan finds it without a DB row *and* `AppSetting.Key.newAppTracking` is set. The flag is set by the v6 migration for an existing layout, or by the first scan after which every app on disk has a row — so the first-run import (and apps the system Launchpad import skipped, added on the next rescan) never get the dot. Opening it from the launcher (click, `⌘`-click, menu Open) clears it (`clearNew`); a folder's label shows the dot while it holds a new app.
+- **Stored icons are `AppIcon.pixelSize` (256) px, whatever the display.** `NSImage.pngData(pixelSize:)` draws into an explicit 8-bit `NSBitmapImageRep`; `lockFocus` would render at the main screen's backing scale (128 px on a non-Retina main display, 16-bit 256 px on Retina). Migration v7 cleared the older icons; the launch rescan writes them back (`mergeNewApps` always refreshes `iconData`), and `IconCache` re-decodes because the fingerprint changes. Changing the size again needs another migration like v7.
 - **`searchText` exists on the ViewModel but is not wired.** Don't add filtering downstream of it without also building the search UI and decide on debounce/scope first.
 
 ## Forbidden patterns

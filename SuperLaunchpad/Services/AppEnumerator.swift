@@ -23,6 +23,14 @@ struct AppEnumerator {
         return results
     }
 
+    // `NSWorkspace.icon(forFile:)` returns the best-resolution icon macOS
+    // knows about (often 1024×1024 from the .icns inside the bundle). We
+    // downsize it to `AppIcon.pixelSize` PNG once and persist that — decoding
+    // the full resolution for every grid cell would be wasteful.
+    static func iconData(forAppAt path: String) -> Data? {
+        NSWorkspace.shared.icon(forFile: path).pngData(pixelSize: AppIcon.pixelSize)
+    }
+
     // `inout` lets us mutate the caller's `results`/`seen` instead of returning
     // and merging on every recursive call. Cheap and idiomatic for recursive
     // accumulation patterns in Swift.
@@ -51,19 +59,11 @@ struct AppEnumerator {
                     ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
                     ?? url.deletingPathExtension().lastPathComponent
 
-                // `NSWorkspace.icon(forFile:)` returns the best-resolution icon
-                // macOS knows about (often 1024×1024 from the .icns inside the
-                // bundle). We downsize to 128×128 PNG once and persist that —
-                // SwiftUI rendering at full resolution is wasteful for a grid.
-                let icon = NSWorkspace.shared.icon(forFile: url.path)
-                let resized = icon.resized(to: NSSize(width: 128, height: 128))
-                let iconData = resized.pngData()
-
                 results.append(AppEntry(
                     bundleIdentifier: bundleID,
                     displayName: displayName,
                     appPath: url.path,
-                    iconData: iconData
+                    iconData: iconData(forAppAt: url.path)
                 ))
             } else if url.hasDirectoryPath, url.pathExtension != "bundle" {
                 // Recurse into plain subdirectories like /Applications/Utilities/.

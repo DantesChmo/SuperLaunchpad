@@ -62,6 +62,19 @@ struct IconCacheTests {
         #expect(second.size.width == 32)
     }
 
+    // Migration v7 clears the old 128 px icons and the rescan stores 256 px
+    // ones: the cache must not keep serving the old image meanwhile or after.
+    @Test func clearedThenRebuiltIconReplacesOldImage() throws {
+        let cache = makeCache()
+        let old = try #require(cache.image(for: app(iconData: try png(side: 128))))
+
+        #expect(cache.image(for: app(iconData: nil)) == nil)
+        let rebuilt = try #require(cache.image(for: app(iconData: try png(side: AppIcon.pixelSize))))
+
+        #expect(rebuilt !== old)
+        #expect(rebuilt.size.width == CGFloat(AppIcon.pixelSize))
+    }
+
     @Test func nilDataReturnsNil() throws {
         let cache = makeCache()
         _ = cache.image(for: app(iconData: try png(side: 16)))

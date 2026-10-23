@@ -21,6 +21,13 @@ enum FolderGrid {
     static let cardHorizontalPadding: CGFloat = 30
 }
 
+// App icons as stored in `AppEntry.iconData`.
+enum AppIcon {
+    // Side of the stored PNG in pixels. Icons are drawn at ~90–110 pt, about
+    // 200 px on a Retina display; anything less is upscaled and looks soft.
+    static let pixelSize = 256
+}
+
 enum Rescan {
     // Directory events closer together than this collapse into one rescan.
     static let debounceInterval: Double = 0.5

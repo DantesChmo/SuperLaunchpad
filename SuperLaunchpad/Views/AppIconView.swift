@@ -81,7 +81,7 @@ struct AppIconView: View {
         if let nsImage = IconCache.shared.image(for: app) {
             // `.resizable()` lets the image scale to fit `.frame(...)`. By
             // default, `Image` shows at its intrinsic (native) size — which
-            // for a 128×128 PNG would always render at 128 pt regardless of
+            // for a 256×256 PNG would always render at 256 pt regardless of
             // our `iconSize`.
             // `.interpolation(.high)` enables smooth downscaling for HiDPI.
             Image(nsImage: nsImage)

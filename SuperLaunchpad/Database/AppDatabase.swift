@@ -108,6 +108,14 @@ final class AppDatabase {
                 try AppSetting(key: AppSetting.Key.newAppTracking.rawValue, value: "1").insert(db)
             }
         }
+        migrator.registerMigration("v7") { db in
+            // Icons stored before this were 128 px, or 256 px with 16-bit
+            // samples, depending on the display. Dropping them is one quick
+            // UPDATE at launch; the rescan that follows every launch renders
+            // them again at `AppIcon.pixelSize`. Until it lands the grid
+            // shows the placeholder icon. Positions and flags are untouched.
+            try AppEntry.updateAll(db, AppEntry.Columns.iconData.set(to: nil))
+        }
         return migrator
     }
 

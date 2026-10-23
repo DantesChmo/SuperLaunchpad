@@ -1,33 +1,41 @@
 import AppKit
 
 extension NSImage {
-    // `NSImage` is a vector-ish container of representations (multiple sizes /
-    // formats). To get raw bytes we go via TIFF (a lossless format AppKit can
-    // always produce) and then ask `NSBitmapImageRep` to re-encode as PNG.
-    // PNG is what we store in the SQLite blob column on `AppEntry.iconData`.
-    func pngData() -> Data? {
-        guard let tiffData = tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData) else { return nil }
-        return bitmap.representation(using: .png, properties: [:])
-    }
-
-    // AppKit's old-school drawing API: `lockFocus` makes `self` the current
-    // drawing destination, any subsequent draw calls go into it, and
-    // `unlockFocus` commits. This must always come in pairs — leaking focus
-    // corrupts later drawing.
+    // Draws the image into a square bitmap of exactly `pixelSize` × `pixelSize`
+    // pixels and encodes it as PNG — what we store in the SQLite blob column
+    // on `AppEntry.iconData`.
     //
-    // We use `.high` interpolation because app icons are downscaled from larger
-    // bitmaps (often 512×512) to 128×128; the default produces visibly aliased
-    // edges.
-    func resized(to size: NSSize) -> NSImage {
-        let newImage = NSImage(size: size)
-        newImage.lockFocus()
-        NSGraphicsContext.current?.imageInterpolation = .high
-        draw(in: NSRect(origin: .zero, size: size),
-             from: NSRect(origin: .zero, size: self.size),
+    // An explicit `NSBitmapImageRep` pins the pixel count. `lockFocus` on an
+    // `NSImage` would render at the main screen's backing scale instead, so
+    // the stored size depended on which display was main during the scan
+    // (half of it on a non-Retina one), and its 16-bit samples doubled the
+    // PNG size for nothing.
+    //
+    // `.high` interpolation because app icons are downscaled from larger
+    // bitmaps (often 1024×1024); the default produces visibly aliased edges.
+    func pngData(pixelSize: Int) -> Data? {
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: pixelSize,
+            pixelsHigh: pixelSize,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ), let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        context.imageInterpolation = .high
+        draw(in: NSRect(x: 0, y: 0, width: pixelSize, height: pixelSize),
+             from: .zero,
              operation: .copy,
              fraction: 1.0)
-        newImage.unlockFocus()
-        return newImage
+        NSGraphicsContext.restoreGraphicsState()
+
+        return bitmap.representation(using: .png, properties: [:])
     }
 }
