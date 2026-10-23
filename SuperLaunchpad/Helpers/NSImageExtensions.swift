@@ -14,6 +14,21 @@ extension NSImage {
     // `.high` interpolation because app icons are downscaled from larger
     // bitmaps (often 1024×1024); the default produces visibly aliased edges.
     func pngData(pixelSize: Int) -> Data? {
+        pngData(pixelSize: pixelSize, drawingIn: NSRect(x: 0, y: 0, width: pixelSize, height: pixelSize))
+    }
+
+    // Same square bitmap, with the image scaled to fit and centred, so a
+    // picture that isn't square (a photo, a screenshot) keeps its proportions.
+    func fittedPNGData(pixelSize: Int) -> Data? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        let side = CGFloat(pixelSize)
+        let scale = min(side / size.width, side / size.height)
+        let drawn = NSSize(width: size.width * scale, height: size.height * scale)
+        let rect = NSRect(x: (side - drawn.width) / 2, y: (side - drawn.height) / 2, width: drawn.width, height: drawn.height)
+        return pngData(pixelSize: pixelSize, drawingIn: rect)
+    }
+
+    private func pngData(pixelSize: Int, drawingIn rect: NSRect) -> Data? {
         guard let bitmap = NSBitmapImageRep(
             bitmapDataPlanes: nil,
             pixelsWide: pixelSize,
@@ -30,7 +45,7 @@ extension NSImage {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
         context.imageInterpolation = .high
-        draw(in: NSRect(x: 0, y: 0, width: pixelSize, height: pixelSize),
+        draw(in: rect,
              from: .zero,
              operation: .copy,
              fraction: 1.0)

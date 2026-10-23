@@ -16,6 +16,10 @@ enum ItemMenu {
         case rename
         case sortByName
         case disband
+        case changeIcon
+        case restoreIcon
+        case changeCover
+        case restoreCover
         case editLayout
 
         var title: String {
@@ -30,6 +34,10 @@ enum ItemMenu {
             case .rename: "Rename"
             case .sortByName: "Sort by Name"
             case .disband: "Disband Folder"
+            case .changeIcon: "Change Icon…"
+            case .restoreIcon: "Restore Default Icon"
+            case .changeCover: "Change Cover…"
+            case .restoreCover: "Restore Default Cover"
             case .editLayout: "Edit Layout"
             }
         }
@@ -46,6 +54,8 @@ enum ItemMenu {
             case .rename: "pencil"
             case .sortByName: "arrow.up.arrow.down"
             case .disband: "folder.badge.minus"
+            case .changeIcon, .changeCover: "photo"
+            case .restoreIcon, .restoreCover: "arrow.uturn.backward"
             case .editLayout: "square.grid.3x3"
             }
         }
@@ -69,11 +79,13 @@ enum ItemMenu {
         // Only search shows a hidden app; its menu offers Unhide for Hide.
         var isHidden = false
         var isRunning = false
+        var hasCustomIcon = false
     }
 
     struct FolderState: Equatable {
         var appCount: Int
         var canEditLayout: Bool
+        var hasCover = false
     }
 
     static func items(for app: AppState) -> Sections {
@@ -81,6 +93,7 @@ enum ItemMenu {
             [Item(action: .open), Item(action: .showInFinder)],
             app.isRunning ? [Item(action: .quit, alternate: .forceQuit)] : [],
             [Item(action: app.isHidden ? .unhide : .hide), Item(action: .moveToTrash, isEnabled: app.isRemovable)],
+            [Item(action: .changeIcon)] + (app.hasCustomIcon ? [Item(action: .restoreIcon)] : []),
             [Item(action: .editLayout, isEnabled: app.canEditLayout)]
         ].filter { !$0.isEmpty }
     }
@@ -89,6 +102,7 @@ enum ItemMenu {
         [
             [Item(action: .open), Item(action: .rename)],
             [Item(action: .sortByName, isEnabled: folder.appCount > 1), Item(action: .disband)],
+            [Item(action: .changeCover)] + (folder.hasCover ? [Item(action: .restoreCover)] : []),
             [Item(action: .editLayout, isEnabled: folder.canEditLayout)]
         ]
     }

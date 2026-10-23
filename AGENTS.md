@@ -11,7 +11,7 @@ Instructions for AI coding agents (Claude Code, Cursor, Codex, Aider, Continue, 
 - **Database:** GRDB 7.0+ (SQLite)
 - **Platform:** macOS 15.4+ (Sequoia)
 - **Tests:** swift-testing (`import Testing`) — **not** XCTest
-- **Architecture:** MVVM with `@Observable`: `LaunchpadViewModel` is the source of truth and coordinator; focused models (`search`, `editing`, `removal`, `layoutFiles`, `itemActions`) hang off it
+- **Architecture:** MVVM with `@Observable`: `LaunchpadViewModel` is the source of truth and coordinator; focused models (`search`, `editing`, `removal`, `layoutFiles`, `itemActions`, `customIcons`) hang off it
 
 ## Build, run, test
 
@@ -66,15 +66,19 @@ Data flow:
 | `ViewModels/RemovalModel.swift` | `viewModel.removal` — Trash dialog (`PendingRemoval`, one app or a group), quit before Trash, `isRemovable` cache, `dropUninstalledApp(s)` |
 | `ViewModels/LayoutFileModel.swift` | `viewModel.layoutFiles` — current `layoutFile`, reset, load, restore previous, `layoutBackups` |
 | `ViewModels/ItemActionsModel.swift` | `viewModel.itemActions` — `launchApp`, clicks with modifiers, context-menu items and `perform(_:on:)`; `opener` |
-| `Models/AppEntry.swift` | GRDB record — bundleIdentifier (PK), pageIndex, orderIndex, folderID, folderOrderIndex, isHidden, isNew (blue dot), launchCount |
-| `Models/FolderEntry.swift` | GRDB record — id (PK), title, pageIndex, orderIndex |
+| `ViewModels/CustomIconModel.swift` | `viewModel.customIcons` — Change Icon… / Restore Default Icon, a file dropped on an icon in edit mode, the Change Cover… dialog (`coverEditFolderID`); `picker` |
+| `Models/AppEntry.swift` | GRDB record — bundleIdentifier (PK), pageIndex, orderIndex, folderID, folderOrderIndex, isHidden, isNew (blue dot), launchCount; `customIconData` (not a column, filled by `fetchAllApps`) |
+| `Models/FolderEntry.swift` | GRDB record — id (PK), title, pageIndex, orderIndex, coverEmoji, coverImageData (`cover`) |
+| `Models/CustomIcon.swift` | GRDB record `customIcon` — bundleIdentifier (PK), imageData; `FolderCover` (emoji / image, `emoji(from:)`) |
 | `Models/GridItem.swift` | `LaunchpadItem` enum: `.app(AppEntry)` / `.folder(FolderEntry, apps)` |
 | `Database/AppDatabase.swift` | SQLite, migrations, CRUD |
 | `Views/LaunchpadView.swift` | root, GeometryReader, LayoutMetrics |
 | `Views/PagingGridView.swift` | horizontal ScrollView + `SinglePageBehavior` snap |
 | `Views/AppGridPageView.swift` | LazyVGrid for one page |
 | `Views/AppIconView.swift` | icon + label, hover scale 1.08 |
-| `Views/FolderIconView.swift` | 3×3 mini preview |
+| `Views/FolderIconView.swift` | 3×3 mini preview, or the folder's cover |
+| `Views/FolderCoverDialog.swift` | Change Cover…: emoji field or Choose Image…, drawn inside the launcher |
+| `Views/CustomIconDrop.swift` | `customIconDrop(_:iconSize:)` — file drop target on app icons, edit mode only |
 | `Views/FolderDetailView.swift` | folder popup, 4×3 grid |
 | `Views/SearchResultsView.swift` | one page of search results (apps and folders) with the keyboard selection |
 | `Views/FrequentAppsRow.swift` | Settings → Search: the most launched apps in a row above the grid |
@@ -91,7 +95,8 @@ Data flow:
 | `Services/GestureMonitor.swift` | global+local `NSEvent.magnify` monitors |
 | `Services/AppDirectoryWatcher.swift` | DispatchSource on `/Applications` |
 | `Helpers/Constants.swift` | `Grid`, `FolderGrid`, `AnimationDuration`, `LayoutMetrics` |
-| `Helpers/NSImageExtensions.swift` | `pngData(pixelSize:)` — exact-pixel PNG for `iconData` |
+| `Helpers/NSImageExtensions.swift` | `pngData(pixelSize:)` — exact-pixel PNG for `iconData`; `fittedPNGData` keeps the aspect ratio |
+| `Helpers/CustomIconImage.swift` | a picked / dropped file (png, jpg, heic, icns, or an `.app` for its icon) → 256 px PNG; the `NSOpenPanel` above the launcher (`Picker`) |
 | `Helpers/NewAppPlacement.swift` | Settings → New Apps: where a rescan puts a new app; category folder title matching |
 | `Models/LayoutFile.swift` | layout file (JSON, `formatVersion`): pages, folders by title, hidden apps by bundle ID; pure encode/decode and `apply(to:)` onto the installed apps |
 | `Services/LayoutReset.swift` | Settings → Reset Layout: system Launchpad / categories / alphabetical, pure, reuses the first-run paths |
@@ -190,11 +195,11 @@ Data flow:
 
 ## View model split
 
-`LaunchpadViewModel` is a thin coordinator; behaviour lives in five `@MainActor @Observable` models it creates and owns: `search`, `editing`, `removal`, `layoutFiles`, `itemActions`.
+`LaunchpadViewModel` is a thin coordinator; behaviour lives in six `@MainActor @Observable` models it creates and owns: `search`, `editing`, `removal`, `layoutFiles`, `itemActions`, `customIcons`.
 
 - **Ownership.** The coordinator holds each model in an `@ObservationIgnored private(set) lazy var` (lazy so `self` can be passed in); each model holds `private unowned let launchpad: LaunchpadViewModel`. The models never outlive the coordinator, so `unowned` is safe and there is no retain cycle. Don't store a model anywhere that outlives its view model, and don't create one outside the coordinator.
 - **Shared state stays on the coordinator:** `apps`, `folders`, `pages`, `currentPage`, `isVisible`, `openFolderID`, `dockInsets`, `database`, `runningApps`, `layoutRevision`, `folderOpenRequest`. A model owns only its own state (query and results, edit mode and drag flags, the Trash dialog, backups, the opener) and reads the rest through `launchpad`.
-- **One write path.** A layout change goes through `LaunchpadViewModel.applyEdit` (one `GridLayout` operation → `apps`/`folders` in one `updateContents`, `layoutRevision += 1`, one DB transaction) or `replaceLayout` (reset / load). `renameFolder` and `recordLaunch` are the only other writers and bump `layoutRevision` too. A new edit is a method on `EditingModel` (or the model it belongs to) that calls `applyEdit`; don't add DB writes elsewhere.
+- **One write path.** A layout change goes through `LaunchpadViewModel.applyEdit` (one `GridLayout` operation → `apps`/`folders` in one `updateContents`, `layoutRevision += 1`, one DB transaction) or `replaceLayout` (reset / load). `renameFolder`, `recordLaunch`, `setCustomIcon` and `setFolderCover` are the only other writers and bump `layoutRevision` too. A new edit is a method on `EditingModel` (or the model it belongs to) that calls `applyEdit`; don't add DB writes elsewhere.
 - **Cross-model calls go through the coordinator:** a model reaches a sibling as `launchpad.editing`, `launchpad.search`, …. The coordinator calls into models for its own flows: `updateContents` → `search.contentsDidChange()`, `show()` → `search.launcherDidShow()` / `editing.resetOptionKey()`, `hide()` / `handleEscape()` → `removal` / `editing` / `search`, a rescan result checks `editing.isDragSessionActive` and `editing.endDragSession()` hands the parked one back (`receiveParkedRescan`).
 - **Views** take `viewModel` and read `viewModel.search.isSearching`, `viewModel.editing.isEditing`, …; observation tracks the model's own properties. A view that binds to a model's property takes the model (`SearchBarView(search:)`), since `$viewModel.search.x` can't bind through a `private(set)` property.
 - **Multi-select** lives in `EditingModel` (see "Multi-select" below); `ItemActionsModel.click` toggles it in edit mode, `RemovalModel` has the group Trash flow.
@@ -240,7 +245,8 @@ Things a new developer cannot guess from the code:
 - **Search** (`AppSearch`, pure) runs on every keystroke over all apps — hidden ones too, shown dimmed with an eye — and over folder titles. Match kinds, best first: name prefix, word prefix, word initials (`vsc` → Visual Studio Code, `sysset` → System Settings; words also split at camelCase), contains, fuzzy (letters in order). Order: name-prefix matches first and fuzzy matches last; in between, and inside each of those groups, `launchCount` beats match kind. A folder result (Return or click) clears the query and opens the folder over the grid via `folderOpenRequest`.
 - **Launch counter.** Every launch from the launcher (click, `⌘`-click, menu Open, Return in search) goes through `recordLaunch`: `launchCount + 1` and `isNew = false` in memory and in one DB update, and a `layoutRevision` bump so a rescan running at that moment doesn't write back the row it read before. Show in Finder and clicks in edit mode don't count.
 - **Frequently Used row** (Settings → Search, `Preferences.showsFrequentApps`, off by default): up to `FrequentApps.maxCount` most launched visible apps, picked on `show()` and kept in that order while the launcher is open (a `⌘`-click must not move the icon under the pointer). While it has apps, `LayoutMetrics(extraRows: 1)` shares the grid's height with it, also during search, and the icon shrinks if the shorter cell needs it. Click only; arrows and Return keep paging; in edit mode it is dimmed and ignores clicks.
-- **Layout file and reset.** `LayoutFile` stores no folder IDs and no icons; `apply(to:)` makes new folder IDs, skips apps that aren't installed, drops folders left empty, spills pages longer than a page, puts apps the file doesn't have after the last item by name, and keeps an app hidden here that the file doesn't mention hidden. `decode` checks `formatVersion` first: a newer one is `LayoutFileError.newerFormat` and nothing is changed — bump `currentFormatVersion` whenever older builds can't read the file (2.0.0 grid size). `LayoutFileModel.resetLayout` / `loadLayout` save the current layout to `layoutBackups` first and change nothing if that throws; `restorePreviousLayout` loads the newest backup (after backing up, so a second restore undoes the first). A reset keeps hidden apps hidden and the new-app dot; the system Launchpad mode puts apps its DB doesn't know at the end (the first-run import drops them). Tests pass a temp `LayoutBackupStore`; the test init has none.
+- **Custom icons and folder covers.** A custom app icon lives in its own table `customIcon` (by bundle ID, no foreign key), never in `iconData`, which every rescan rewrites; so it survives rescans and comes back when the app is reinstalled. `fetchAllApps` fills `AppEntry.customIconData` (not a column: `CodingKeys` leaves it out, so `save` never writes it), the rescan result inherits it, and `IconCache` decodes `displayedIconData` (custom else own) — the fingerprint changes on set / restore. A folder cover is two `folderEntry` columns (emoji or image, at most one), so `saveLayout` carries it through every edit; image covers decode via `IconCache.coverImage(for:)`. Both are 256 px PNGs (`CustomIconImage`, aspect fit). The file panel is set above `.screenSaver` (the app isn't sandboxed); the cover dialog is drawn in the launcher and the panel's key monitor leaves every key but Escape to its field. The edit-mode file drop is an `onDrop` delegate on the icon (grid drags are a gesture, not drag-and-drop, so only Finder drags land there) and doesn't depend on clicks. Tests swap `customIcons.picker` and await the `Task` the model returns.
+- **Layout file and reset.** `LayoutFile` stores no folder IDs and no scanned icons; custom icons (`customIcons`, base64 PNG by bundle ID) and folder covers (`"cover": {"emoji"|"image"}` on a folder item) are optional keys older builds skip, so `formatVersion` stays 1. A file without `customIcons` (1.7) keeps the icons set here; one with it sets exactly its own on the installed apps (`replaceLayout` → `saveCustomIcons`); `apply(to:)` makes new folder IDs, skips apps that aren't installed, drops folders left empty, spills pages longer than a page, puts apps the file doesn't have after the last item by name, and keeps an app hidden here that the file doesn't mention hidden. `decode` checks `formatVersion` first: a newer one is `LayoutFileError.newerFormat` and nothing is changed — bump `currentFormatVersion` whenever older builds can't read the file (2.0.0 grid size). `LayoutFileModel.resetLayout` / `loadLayout` save the current layout to `layoutBackups` first and change nothing if that throws; `restorePreviousLayout` loads the newest backup (after backing up, so a second restore undoes the first). A reset keeps hidden apps hidden and the new-app dot; the system Launchpad mode puts apps its DB doesn't know at the end (the first-run import drops them). Tests pass a temp `LayoutBackupStore`; the test init has none.
 
 ## Forbidden patterns
 

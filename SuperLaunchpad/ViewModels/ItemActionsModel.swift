@@ -35,13 +35,18 @@ final class ItemActionsModel {
             isRemovable: launchpad.removal.isRemovable(app),
             canEditLayout: canEditLayout,
             isHidden: app.isHidden,
-            isRunning: launchpad.runningApps.isRunning(app)
+            isRunning: launchpad.runningApps.isRunning(app),
+            hasCustomIcon: app.customIconData != nil
         ))
     }
 
     func menuItems(for folder: FolderEntry) -> ItemMenu.Sections {
         let appCount = launchpad.apps.lazy.filter { $0.folderID == folder.id }.count
-        return ItemMenu.items(for: ItemMenu.FolderState(appCount: appCount, canEditLayout: canEditLayout))
+        return ItemMenu.items(for: ItemMenu.FolderState(
+            appCount: appCount,
+            canEditLayout: canEditLayout,
+            hasCover: folder.cover != nil
+        ))
     }
 
     // Edit mode is already on, or can't be entered while searching.
@@ -94,9 +99,13 @@ final class ItemActionsModel {
             launchpad.runningApps.quit(app)
         case .forceQuit:
             launchpad.runningApps.quit(app, force: true)
+        case .changeIcon:
+            launchpad.customIcons.chooseIcon(for: app.bundleIdentifier)
+        case .restoreIcon:
+            launchpad.customIcons.restoreIcon(for: app.bundleIdentifier)
         case .editLayout:
             launchpad.editing.enterEditMode()
-        case .rename, .sortByName, .disband:
+        case .rename, .sortByName, .disband, .changeCover, .restoreCover:
             break
         }
         return false
@@ -112,9 +121,13 @@ final class ItemActionsModel {
             launchpad.editing.sortFolderByName(folder.id)
         case .disband:
             launchpad.editing.disbandFolder(folder.id)
+        case .changeCover:
+            launchpad.customIcons.beginCoverEdit(folder.id)
+        case .restoreCover:
+            launchpad.customIcons.restoreCover(for: folder.id)
         case .editLayout:
             launchpad.editing.enterEditMode()
-        case .showInFinder, .moveToTrash, .hide, .unhide, .quit, .forceQuit:
+        case .showInFinder, .moveToTrash, .hide, .unhide, .quit, .forceQuit, .changeIcon, .restoreIcon:
             break
         }
     }

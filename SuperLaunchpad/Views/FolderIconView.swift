@@ -2,7 +2,8 @@ import SwiftUI
 
 // A folder tile on the main grid. Looks like macOS Launchpad's folders:
 // a rounded translucent square containing a 3×3 mini-preview of the first
-// nine apps inside the folder.
+// nine apps inside the folder, or the cover the user set (an emoji on the
+// same square, or an image in its place).
 struct FolderIconView: View {
     let folder: FolderEntry
     let apps: [AppEntry]
@@ -47,7 +48,27 @@ struct FolderIconView: View {
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
+    @ViewBuilder
     private var folderIcon: some View {
+        if let image = IconCache.shared.coverImage(for: folder) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: metrics.iconSize * 0.2))
+        } else if let emoji = folder.coverEmoji {
+            RoundedRectangle(cornerRadius: metrics.iconSize * 0.2)
+                .fill(.white.opacity(0.15))
+                .overlay(
+                    Text(emoji)
+                        .font(.system(size: metrics.iconSize * CustomIcons.emojiCoverScale))
+                )
+        } else {
+            previewGrid
+        }
+    }
+
+    private var previewGrid: some View {
         // Sizes are derived from `iconSize` so the preview scales with display
         // resolution. `0.22` and `0.06` are tuned to visually match Launchpad.
         let miniSize = metrics.iconSize * 0.22

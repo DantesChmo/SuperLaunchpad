@@ -76,13 +76,107 @@ struct LayoutFileTests {
         #expect(applied.appendedApps.isEmpty)
     }
 
-    @Test func jsonCarriesFormatVersionAndNoIcons() throws {
+    @Test func jsonCarriesFormatVersionAndNoScannedIcons() throws {
         var withIcon = apps
         withIcon[0].iconData = Data([1, 2, 3])
         let data = try LayoutFile(apps: withIcon, folders: folders).encoded()
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(object["formatVersion"] as? Int == 1)
-        #expect(Set(object.keys) == ["formatVersion", "pages", "hiddenApps"])
+        #expect(Set(object.keys) == ["formatVersion", "pages", "hiddenApps", "customIcons"])
+        #expect((object["customIcons"] as? [String: Any])?.isEmpty == true)
+    }
+
+    // MARK: - Custom icons and covers
+
+    // a and the hidden h have custom icons; Tools has an emoji cover, Games
+    // (on page 1) an image one.
+    private var decorated: (apps: [AppEntry], folders: [FolderEntry]) {
+        var rows = apps + [app("g", folderID: "G", folderOrder: 0)]
+        rows[0].customIconData = Data([1, 2, 3])
+        rows[5].customIconData = Data([4, 5])
+        var tools = folders[0]
+        tools.cover = .emoji("🛠️")
+        var games = FolderEntry(id: "G", title: "Games", pageIndex: 1, orderIndex: 1)
+        games.cover = .image(Data([6, 7, 8]))
+        return (rows, [tools, games])
+    }
+
+    @Test func customIconsAndCoversRoundTrip() throws {
+        let (rows, folderRows) = decorated
+        let file = LayoutFile(apps: rows, folders: folderRows)
+        #expect(file.customIcons == ["a": Data([1, 2, 3]), "h": Data([4, 5])])
+        #expect(file.pages[0][1] == .folder(title: "Tools", apps: ["x", "y"], cover: .emoji("🛠️")))
+        #expect(file.pages[1][1] == .folder(title: "Games", apps: ["g"], cover: .image(Data([6, 7, 8]))))
+
+        let decoded = try LayoutFile.decode(file.encoded())
+        #expect(decoded == file)
+
+        var plain = rows
+        for index in plain.indices {
+            plain[index].customIconData = nil
+        }
+        let applied = decoded.apply(to: plain)
+        #expect(LayoutFile(apps: applied.apps, folders: applied.folders) == file)
+        #expect(try entry(applied.apps, "a").customIconData == Data([1, 2, 3]))
+        #expect(applied.folders.map(\.cover) == [.emoji("🛠️"), .image(Data([6, 7, 8]))])
+    }
+
+    @Test func jsonStoresCoversAndIconsAsBase64() throws {
+        let (rows, folderRows) = decorated
+        let data = try LayoutFile(apps: rows, folders: folderRows).encoded()
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let icons = try #require(object["customIcons"] as? [String: String])
+        #expect(icons["a"] == Data([1, 2, 3]).base64EncodedString())
+        let pages = try #require(object["pages"] as? [[[String: Any]]])
+        #expect(pages[0][1]["cover"] as? [String: String] == ["emoji": "🛠️"])
+        #expect(pages[1][1]["cover"] as? [String: String] == ["image": Data([6, 7, 8]).base64EncodedString()])
+    }
+
+    // A 1.7 file has neither: it loads, and the icons set here stay.
+    @Test func fileWithoutIconsKeepsTheCustomIconsHere() throws {
+        let json = """
+        {
+          "formatVersion": 1,
+          "pages": [[{ "app": "a" }, { "folder": "Tools", "apps": ["x", "y"] }]],
+          "hiddenApps": []
+        }
+        """
+        let file = try LayoutFile.decode(Data(json.utf8))
+        #expect(file.customIcons == nil)
+        #expect(file.pages == [[.app("a"), .folder(title: "Tools", apps: ["x", "y"])]])
+
+        let applied = file.apply(to: decorated.apps)
+        #expect(try entry(applied.apps, "a").customIconData == Data([1, 2, 3]))
+        #expect(applied.folders.allSatisfy { $0.cover == nil })
+    }
+
+    // A file saved with icons sets exactly its own.
+    @Test func fileWithIconsReplacesTheCustomIconsHere() throws {
+        let file = LayoutFile(pages: [[.app("a"), .app("b")]], customIcons: ["b": Data([9])])
+        let applied = file.apply(to: decorated.apps)
+        #expect(try entry(applied.apps, "a").customIconData == nil)
+        #expect(try entry(applied.apps, "b").customIconData == Data([9]))
+    }
+
+    @Test func loadLayoutStoresIconsAndCovers() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try AppDatabase(path: dir.appendingPathComponent("test.db").path)
+        let (rows, folderRows) = decorated
+        try db.saveLayout(apps: apps, folders: folders)
+        try db.setCustomIcon(Data([0]), bundleIdentifier: "c")
+        let vm = LaunchpadViewModel(database: db, layoutBackups: LayoutBackupStore(directory: dir.appendingPathComponent("backups")))
+        vm.folders = folders
+        vm.apps = try db.fetchAllApps()
+
+        try vm.layoutFiles.loadLayout(LayoutFile(apps: rows, folders: folderRows))
+
+        let stored = try db.fetchAllApps()
+        #expect(try entry(stored, "a").customIconData == Data([1, 2, 3]))
+        #expect(try entry(stored, "h").customIconData == Data([4, 5]))
+        #expect(try entry(stored, "c").customIconData == nil)
+        #expect(try db.fetchAllFolders().map(\.cover) == [.emoji("🛠️")])
+        #expect(LayoutFile(apps: stored, folders: try db.fetchAllFolders()) == vm.layoutFiles.layoutFile)
     }
 
     @Test func decodesHandWrittenFile() throws {

@@ -24,10 +24,17 @@ struct AppEntry: Identifiable, Equatable {
     var isNew = false
     // Times the app was opened from the launcher; search ranks by it.
     var launchCount = 0
+    // The user's own icon (`customIcon` table), shown instead of `iconData`.
+    // Not a column of this table: `fetchAllApps` fills it in, and saving the
+    // row leaves it alone (see `CodingKeys`).
+    var customIconData: Data?
 
     // `Identifiable.id` lets SwiftUI's `ForEach` track this row across rebuilds.
     // Bundle ID is globally unique on macOS, so it doubles as our primary key.
     var id: String { bundleIdentifier }
+
+    // What the grid shows: the user's icon, else the app's own.
+    var displayedIconData: Data? { customIconData ?? iconData }
 }
 
 // Persistence conformances live in a separate extension to keep the model
@@ -39,6 +46,12 @@ extension AppEntry: Codable, FetchableRecord, PersistableRecord {
     // e.g. `AppEntry.filter(Columns.pageIndex != nil)`. The raw-string backing
     // matches the column names exactly — never reference columns as raw strings.
     enum Columns: String, ColumnExpression {
+        case bundleIdentifier, displayName, appPath, iconData, pageIndex, orderIndex
+        case folderID, folderOrderIndex, isHidden, isNew, launchCount
+    }
+
+    // The columns, i.e. every property but `customIconData`.
+    private enum CodingKeys: String, CodingKey {
         case bundleIdentifier, displayName, appPath, iconData, pageIndex, orderIndex
         case folderID, folderOrderIndex, isHidden, isNew, launchCount
     }

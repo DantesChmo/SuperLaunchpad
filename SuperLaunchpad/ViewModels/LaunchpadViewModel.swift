@@ -2,10 +2,10 @@ import AppKit
 import SwiftUI
 
 // The single source of truth for the launcher UI, and the coordinator of the
-// models that act on it: `search`, `editing`, `removal`, `layoutFiles` and
-// `itemActions`. It owns the shared state (apps, folders, pages, the current
-// page, visibility, the open folder, the DB) and the one path every layout
-// write takes (`applyEdit` / `replaceLayout`). The models own their own state
+// models that act on it: `search`, `editing`, `removal`, `layoutFiles`,
+// `itemActions` and `customIcons`. It owns the shared state (apps, folders,
+// pages, the current page, visibility, the open folder, the DB) and the one
+// path every layout write takes (`applyEdit` / `replaceLayout`). The models own their own state
 // and hold an `unowned` reference back here; they live exactly as long as
 // this object, which creates them.
 //
@@ -42,6 +42,7 @@ final class LaunchpadViewModel {
     @ObservationIgnored private(set) lazy var removal = RemovalModel(launchpad: self)
     @ObservationIgnored private(set) lazy var layoutFiles = LayoutFileModel(launchpad: self)
     @ObservationIgnored private(set) lazy var itemActions = ItemActionsModel(launchpad: self)
+    @ObservationIgnored private(set) lazy var customIcons = CustomIconModel(launchpad: self)
 
     @ObservationIgnored var runningApps = RunningApps(source: .live)
 
@@ -335,6 +336,8 @@ final class LaunchpadViewModel {
         // A rescan running now read the old layout: make it write this one back.
         layoutRevision += 1
         try? database?.saveLayout(apps: newApps, folders: newFolders)
+        // A loaded file may bring custom icons; they live in their own table.
+        try? database?.saveCustomIcons(of: newApps)
     }
 
     // Every way of opening an app from the launcher counts a launch, which
@@ -348,6 +351,25 @@ final class LaunchpadViewModel {
         // A rescan running now read the row before this launch.
         layoutRevision += 1
         try? database?.recordLaunch(bundleIdentifier: appID)
+    }
+
+    // The user's own icon for an app, or `nil` for its own again. Stored
+    // apart from `iconData`, so a rescan keeps it.
+    func setCustomIcon(_ imageData: Data?, for appID: String) {
+        guard let index = apps.firstIndex(where: { $0.bundleIdentifier == appID }) else { return }
+        apps[index].customIconData = imageData
+        // A rescan running now read the apps without it.
+        layoutRevision += 1
+        try? database?.setCustomIcon(imageData, bundleIdentifier: appID)
+    }
+
+    // An emoji or image on the folder tile, or `nil` for the 3×3 preview.
+    func setFolderCover(_ cover: FolderCover?, for folderID: String) {
+        guard let index = folders.firstIndex(where: { $0.id == folderID }) else { return }
+        folders[index].cover = cover
+        // A rescan running now read the folder without it.
+        layoutRevision += 1
+        try? database?.setFolderCover(id: folderID, cover: cover)
     }
 
     // MARK: - Show / hide
@@ -366,6 +388,7 @@ final class LaunchpadViewModel {
         openFolderID = nil
         search.searchText = ""
         removal.cancelRemoval()
+        customIcons.cancelCoverEdit()
         editing.exitEditMode()
         isVisible = false
     }
@@ -406,6 +429,7 @@ final class LaunchpadViewModel {
 
     enum EscapeAction: Equatable {
         case cancelledRemoval
+        case cancelledCoverEdit
         case cancelledDrag
         case clearedSelection
         case exitedEditMode
@@ -414,13 +438,16 @@ final class LaunchpadViewModel {
         case hideLauncher
     }
 
-    // Escape acts on the innermost context: the Trash dialog, a dragged icon,
+    // Escape acts on the innermost context: the Trash or cover dialog, a dragged icon,
     // the selection, edit mode, the query, then an open folder, then the launcher itself
     // (which the caller hides).
     func handleEscape() -> EscapeAction {
         if removal.pendingRemoval != nil {
             removal.cancelRemoval()
             return .cancelledRemoval
+        }
+        if customIcons.cancelCoverEdit() {
+            return .cancelledCoverEdit
         }
         if editing.cancelDrag() {
             return .cancelledDrag

@@ -16,19 +16,19 @@ struct ItemMenuTests {
 
     @Test func appMenuListsActionsInSections() {
         let sections = ItemMenu.items(for: ItemMenu.AppState(isRemovable: true, canEditLayout: true))
-        #expect(actions(sections) == [[.open, .showInFinder], [.hide, .moveToTrash], [.editLayout]])
+        #expect(actions(sections) == [[.open, .showInFinder], [.hide, .moveToTrash], [.changeIcon], [.editLayout]])
         #expect(sections.joined().allSatisfy { $0.isEnabled })
     }
 
     @Test func hiddenAppOffersUnhideInsteadOfHide() {
         let sections = ItemMenu.items(for: ItemMenu.AppState(isRemovable: true, canEditLayout: true, isHidden: true))
-        #expect(actions(sections) == [[.open, .showInFinder], [.unhide, .moveToTrash], [.editLayout]])
+        #expect(actions(sections) == [[.open, .showInFinder], [.unhide, .moveToTrash], [.changeIcon], [.editLayout]])
         #expect(isEnabled(.unhide, in: sections) == true)
     }
 
     @Test func runningAppOffersQuitWithForceQuitBehindOption() throws {
         let sections = ItemMenu.items(for: ItemMenu.AppState(isRemovable: true, canEditLayout: true, isRunning: true))
-        #expect(actions(sections) == [[.open, .showInFinder], [.quit], [.hide, .moveToTrash], [.editLayout]])
+        #expect(actions(sections) == [[.open, .showInFinder], [.quit], [.hide, .moveToTrash], [.changeIcon], [.editLayout]])
         let quit = try #require(sections.joined().first { $0.action == .quit })
         #expect(quit.alternate == .forceQuit)
         #expect(quit.isEnabled)
@@ -66,8 +66,18 @@ struct ItemMenuTests {
 
     @Test func folderMenuListsActionsInSections() {
         let sections = ItemMenu.items(for: ItemMenu.FolderState(appCount: 3, canEditLayout: true))
-        #expect(actions(sections) == [[.open, .rename], [.sortByName, .disband], [.editLayout]])
+        #expect(actions(sections) == [[.open, .rename], [.sortByName, .disband], [.changeCover], [.editLayout]])
         #expect(sections.joined().allSatisfy { $0.isEnabled })
+    }
+
+    @Test func customIconAddsRestore() {
+        let sections = ItemMenu.items(for: ItemMenu.AppState(isRemovable: true, canEditLayout: true, hasCustomIcon: true))
+        #expect(actions(sections) == [[.open, .showInFinder], [.hide, .moveToTrash], [.changeIcon, .restoreIcon], [.editLayout]])
+    }
+
+    @Test func folderCoverAddsRestore() {
+        let sections = ItemMenu.items(for: ItemMenu.FolderState(appCount: 3, canEditLayout: true, hasCover: true))
+        #expect(actions(sections) == [[.open, .rename], [.sortByName, .disband], [.changeCover, .restoreCover], [.editLayout]])
     }
 
     @Test(arguments: [(0, false), (1, false), (2, true)])

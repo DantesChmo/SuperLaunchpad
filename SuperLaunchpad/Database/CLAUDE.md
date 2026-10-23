@@ -6,17 +6,18 @@ Single GRDB-backed SQLite at `~/Library/Application Support/com.dantes.SuperLaun
 
 Versions are `"v1"`, `"v2"`, `"v3"`, … Add a new `"vN+1"` block to `migrate()` in `AppDatabase.swift`. **Never edit a shipped migration**, never `DROP TABLE`. Use `.add(column:)` / `.create(table:)` only.
 
-Current schema (after v8):
+Current schema (after v9):
 
 - `appEntry` — PK `bundleIdentifier`. Cols: `displayName`, `appPath`, `iconData`, `pageIndex?`, `orderIndex?`, `folderID?` (FK → `folderEntry.id`, `.setNull` on delete), `folderOrderIndex?`, `isHidden` (v5, not null, default false; a hidden app has all four position columns nil), `isNew` (v6, not null, default false), `launchCount` (v8, integer, not null, default 0; launches from the launcher, search ranks by it). `iconData` is a PNG of `AppIcon.pixelSize` px; v7 set it to NULL in every row (no schema change) so the launch rescan renders it again at 256 px, positions and flags untouched.
-- `folderEntry` — PK `id` (UUID string, generated in code), `title`, `pageIndex`, `orderIndex`.
+- `folderEntry` — PK `id` (UUID string, generated in code), `title`, `pageIndex`, `orderIndex`, `coverEmoji?`, `coverImageData?` (v9; the folder's cover, at most one set, read as `FolderEntry.cover`; written by `saveLayout` with the row, or alone by `setFolderCover(id:cover:)`).
+- `customIcon` (v9) — PK `bundleIdentifier`, `imageData` (not null, PNG of `AppIcon.pixelSize` px). The user's own app icon. No FK to `appEntry`: `deleteStale` / `deleteApp` leave it, so a reinstalled app gets it back. `fetchAllApps` attaches it as `AppEntry.customIconData` (not a column of `appEntry`; `AppEntry.CodingKeys` keeps it out of `save`). Written by `setCustomIcon(_:bundleIdentifier:)` and, for a loaded layout file, `saveCustomIcons(of:)`.
 - `appSetting` — PK `key` (`AppSetting.Key` raw value), `value`. Read/write via `setting(_:)` / `setSetting(_:_:)`.
 
 `AppSetting.Key.folderImportDone`: set once the system Launchpad folders were imported (rescan with a system layout), by any `saveLayout`, or backfilled by v4 when apps already sit in folders. While it is set, `mergeNewApps` never re-imports system folders — otherwise dissolving the last folder would bring them back on the next rescan.
 
 `AppSetting.Key.newAppTracking`: set once every app on disk has a row (backfilled by v6 for an existing layout). Only then does a rescan mark apps without a row `isNew`. `recordLaunch(bundleIdentifier:)` clears the flag and adds one to `launchCount`, in one update, on every launch from the launcher. A rescan copies existing rows, so the count survives it.
 
-Migration tests that fill an older schema must insert only that schema's columns (raw `INSERT`): `AppEntry.insert` writes every current column.
+Migration tests that fill an older schema must insert only that schema's columns (raw `INSERT`): `AppEntry.insert` and `FolderEntry.insert` write every current column.
 
 `AppDatabase.migrator` is exposed so tests can `migrate(_:upTo:)` an older version and check what a later migration does to existing rows.
 

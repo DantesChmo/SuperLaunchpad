@@ -233,13 +233,21 @@ struct LaunchpadView: View {
                     )
                     .transition(.opacity)
                 }
+
+                if let folder = viewModel.customIcons.coverEditFolder {
+                    FolderCoverDialog(folder: folder, customIcons: viewModel.customIcons)
+                        .id(folder.id)
+                        .transition(.opacity)
+                }
             }
             .animation(.easeInOut(duration: Uninstall.dialogAnimation), value: viewModel.removal.pendingRemoval != nil)
+            .animation(.easeInOut(duration: Uninstall.dialogAnimation), value: viewModel.customIcons.coverEditFolderID)
             // Below the drag modifier, so the lifted icon doesn't wiggle.
             .environment(\.isEditing, viewModel.editing.isEditing)
             .environment(\.selectedAppIDs, viewModel.editing.selection)
             .environment(\.enterEditMode, EnterEditModeAction(viewModel: viewModel))
             .environment(\.removeApp, RemoveAppAction(viewModel: viewModel))
+            .environment(\.customIconDrop, CustomIconDropAction(viewModel: viewModel))
             .environment(\.itemMenu, ItemMenuAction(viewModel: viewModel))
             .environment(\.runningApps, viewModel.runningApps)
             .modifier(LaunchpadDragGesture(

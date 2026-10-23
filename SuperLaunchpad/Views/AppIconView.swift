@@ -34,6 +34,7 @@ struct AppIconView: View {
                 .removeAppBadge(app, iconSize: metrics.iconSize)
                 .hideAppBadge(app, iconSize: metrics.iconSize)
                 .selectionCheckmark(app, iconSize: metrics.iconSize)
+                .customIconDrop(app, iconSize: metrics.iconSize)
                 .runningDot(app)
         } label: {
             nameText

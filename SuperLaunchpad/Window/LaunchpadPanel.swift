@@ -218,7 +218,8 @@ final class LaunchpadPanel: NSPanel {
                 return self.handleKeyDown(event) ? nil : event
             }
             guard self.viewModel.openFolderID == nil, !self.viewModel.search.isSearching,
-                  self.viewModel.removal.pendingRemoval == nil else { return event }
+                  self.viewModel.removal.pendingRemoval == nil,
+                  self.viewModel.customIcons.coverEditFolderID == nil else { return event }
             self.pager.handleScroll(event)
             return nil
         }
@@ -233,6 +234,12 @@ final class LaunchpadPanel: NSPanel {
         if let editor = firstResponder as? NSTextView, editor.hasMarkedText() { return false }
         // The folder title field handles its own Escape (cancel the edit) and arrows.
         guard !viewModel.editing.isRenamingFolder else { return false }
+        // The cover dialog's emoji field takes every other key, Return included.
+        if viewModel.customIcons.coverEditFolderID != nil {
+            guard Int(event.keyCode) == kVK_Escape else { return false }
+            viewModel.customIcons.cancelCoverEdit()
+            return true
+        }
         // The Trash dialog takes Escape and Return; other keys must not page
         // or start a search behind it.
         if viewModel.removal.pendingRemoval != nil {

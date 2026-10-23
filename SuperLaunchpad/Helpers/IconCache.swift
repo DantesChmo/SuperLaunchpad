@@ -6,8 +6,9 @@ import ImageIO
 // page swipe) ran `NSImage(data:)` on the main thread.
 //
 // An entry remembers a cheap fingerprint of the bytes it was decoded from;
-// when an app's `iconData` changes (app update, rescan) the fingerprint no
-// longer matches and the icon is decoded again.
+// when an app's `iconData` changes (app update, rescan) or the user sets or
+// restores a custom icon, the fingerprint no longer matches and the icon is
+// decoded again. A custom icon wins over the app's own (`displayedIconData`).
 @MainActor
 final class IconCache {
     static let shared = IconCache()
@@ -31,7 +32,13 @@ final class IconCache {
     private var entries: [String: Entry] = [:]
 
     func image(for app: AppEntry) -> NSImage? {
-        image(bundleIdentifier: app.bundleIdentifier, data: app.iconData)
+        image(bundleIdentifier: app.bundleIdentifier, data: app.displayedIconData)
+    }
+
+    // A folder's image cover. Keyed apart from the apps, whose keys are
+    // bundle IDs.
+    func coverImage(for folder: FolderEntry) -> NSImage? {
+        image(bundleIdentifier: "folder-cover/\(folder.id)", data: folder.coverImageData)
     }
 
     func image(bundleIdentifier: String, data: Data?) -> NSImage? {
@@ -57,7 +64,7 @@ final class IconCache {
     // finds its icons ready.
     func prewarm(_ apps: [AppEntry]) async {
         let pending: [(String, Data)] = apps.compactMap { app in
-            guard let data = app.iconData, !containsCurrentIcon(for: app) else { return nil }
+            guard let data = app.displayedIconData, !containsCurrentIcon(for: app) else { return nil }
             return (app.bundleIdentifier, data)
         }
         guard !pending.isEmpty else { return }
@@ -77,10 +84,10 @@ final class IconCache {
         }
     }
 
-    // True when the app's current `iconData` is already decoded, i.e. a
-    // lookup would not decode anything.
+    // True when the app's current icon is already decoded, i.e. a lookup
+    // would not decode anything.
     func containsCurrentIcon(for app: AppEntry) -> Bool {
-        guard let data = app.iconData, let entry = entries[app.bundleIdentifier] else { return false }
+        guard let data = app.displayedIconData, let entry = entries[app.bundleIdentifier] else { return false }
         return entry.fingerprint == Self.fingerprint(of: data)
     }
 

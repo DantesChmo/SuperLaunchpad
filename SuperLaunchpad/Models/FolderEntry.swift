@@ -13,8 +13,32 @@ struct FolderEntry: Identifiable, Equatable, Codable, FetchableRecord, Persistab
     // (it can't be "inside another folder" the way an app can be inside this one).
     var pageIndex: Int
     var orderIndex: Int
+    // Shown instead of the 3×3 preview (v9); at most one of the two is set.
+    var coverEmoji: String?
+    var coverImageData: Data?
 
     enum Columns: String, ColumnExpression {
-        case id, title, pageIndex, orderIndex
+        case id, title, pageIndex, orderIndex, coverEmoji, coverImageData
+    }
+
+    var cover: FolderCover? {
+        get {
+            if let coverEmoji { return .emoji(coverEmoji) }
+            if let coverImageData { return .image(coverImageData) }
+            return nil
+        }
+        set {
+            switch newValue {
+            case .emoji(let emoji):
+                coverEmoji = emoji
+                coverImageData = nil
+            case .image(let data):
+                coverEmoji = nil
+                coverImageData = data
+            case nil:
+                coverEmoji = nil
+                coverImageData = nil
+            }
+        }
     }
 }

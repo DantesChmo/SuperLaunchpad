@@ -28,6 +28,18 @@ enum AppIcon {
     static let pixelSize = 256
 }
 
+// The user's own app icons and folder covers.
+enum CustomIcons {
+    // An emoji cover's glyph, as a share of the folder tile.
+    static let emojiCoverScale: CGFloat = 0.6
+    // The ring around an icon a file is dragged over in edit mode: line
+    // width and how far it sits outside the icon, as shares of the icon.
+    static let dropRingWidthRatio: CGFloat = 0.04
+    static let dropRingOutsetRatio: CGFloat = 0.06
+    static let dialogEmojiFontSize: CGFloat = 40
+    static let dialogEmojiFieldWidth: CGFloat = 96
+}
+
 enum Rescan {
     // Directory events closer together than this collapse into one rescan.
     static let debounceInterval: Double = 0.5

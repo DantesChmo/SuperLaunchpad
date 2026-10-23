@@ -49,6 +49,14 @@ struct AppDatabaseLayoutTests {
         )
     }
 
+    // `FolderEntry.insert` writes the v9 cover columns too.
+    private func insertBeforeV9(_ folder: FolderEntry, _ db: Database) throws {
+        try db.execute(
+            sql: "INSERT INTO folderEntry (id, title, pageIndex, orderIndex) VALUES (?, ?, ?, ?)",
+            arguments: [folder.id, folder.title, folder.pageIndex, folder.orderIndex]
+        )
+    }
+
     @Test func freshDatabaseHasNoFolderImportFlag() throws {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -65,7 +73,7 @@ struct AppDatabaseLayoutTests {
         let queue = try DatabaseQueue(path: path)
         try AppDatabase.migrator.migrate(queue, upTo: "v3")
         try queue.write { db in
-            try FolderEntry(id: "F", title: "F", pageIndex: 0, orderIndex: 0).insert(db)
+            try insertBeforeV9(FolderEntry(id: "F", title: "F", pageIndex: 0, orderIndex: 0), db)
             let member = hasFolderApps
                 ? app("com.in", folderID: "F", folderOrder: 0)
                 : app("com.in", page: 0, order: 1)
@@ -92,7 +100,7 @@ struct AppDatabaseLayoutTests {
         let queue = try DatabaseQueue(path: path)
         try AppDatabase.migrator.migrate(queue, upTo: "v4")
         try queue.write { db in
-            try FolderEntry(id: "F", title: "F", pageIndex: 0, orderIndex: 1).insert(db)
+            try insertBeforeV9(FolderEntry(id: "F", title: "F", pageIndex: 0, orderIndex: 1), db)
             try insertBeforeV5(app("com.top", page: 0, order: 0), db)
             try insertBeforeV5(app("com.in", folderID: "F", folderOrder: 0), db)
         }

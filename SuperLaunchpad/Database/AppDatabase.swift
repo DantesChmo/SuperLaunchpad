@@ -121,6 +121,20 @@ final class AppDatabase {
                 t.add(column: "launchCount", .integer).notNull().defaults(to: 0)
             }
         }
+        migrator.registerMigration("v9") { db in
+            // No foreign key to `appEntry`: an uninstalled app's row goes, its
+            // icon stays for when it is installed again.
+            try db.create(table: "customIcon") { t in
+                t.primaryKey("bundleIdentifier", .text)
+                t.column("imageData", .blob).notNull()
+            }
+            try db.alter(table: "folderEntry") { t in
+                t.add(column: "coverEmoji", .text)
+            }
+            try db.alter(table: "folderEntry") { t in
+                t.add(column: "coverImageData", .blob)
+            }
+        }
         return migrator
     }
 
@@ -136,9 +150,11 @@ final class AppDatabase {
         }
     }
 
+    // Each app comes with its custom icon, if it has one.
     func fetchAllApps() throws -> [AppEntry] {
         try dbQueue.read { db in
-            try AppEntry
+            let iconData = try Dictionary(uniqueKeysWithValues: CustomIcon.fetchAll(db).map { ($0.bundleIdentifier, $0.imageData) })
+            return try AppEntry
                 .order(
                     // `ascNullsLast` keeps NULL `pageIndex` rows at the bottom.
                     // Without it, SQLite would sort NULLs first.
@@ -150,6 +166,11 @@ final class AppDatabase {
                     AppEntry.Columns.displayName.collating(.localizedCaseInsensitiveCompare)
                 )
                 .fetchAll(db)
+                .map { app in
+                    var app = app
+                    app.customIconData = iconData[app.bundleIdentifier]
+                    return app
+                }
         }
     }
 
@@ -192,6 +213,39 @@ final class AppDatabase {
                     AppEntry.Columns.launchCount += 1,
                     AppEntry.Columns.isNew.set(to: false)
                 )
+        }
+    }
+
+    // MARK: - Custom icons
+
+    // `nil` restores the app's own icon.
+    func setCustomIcon(_ imageData: Data?, bundleIdentifier: String) throws {
+        try dbQueue.write { db in
+            if let imageData {
+                try CustomIcon(bundleIdentifier: bundleIdentifier, imageData: imageData).save(db)
+            } else {
+                _ = try CustomIcon.deleteOne(db, key: bundleIdentifier)
+            }
+        }
+    }
+
+    // Makes the stored icons of these apps match their `customIconData`, in
+    // one transaction (a loaded layout file). Other apps' icons are kept.
+    func saveCustomIcons(of apps: [AppEntry]) throws {
+        try dbQueue.write { db in
+            for app in apps {
+                if let imageData = app.customIconData {
+                    try CustomIcon(bundleIdentifier: app.bundleIdentifier, imageData: imageData).save(db)
+                } else {
+                    _ = try CustomIcon.deleteOne(db, key: app.bundleIdentifier)
+                }
+            }
+        }
+    }
+
+    func fetchCustomIcons() throws -> [CustomIcon] {
+        try dbQueue.read { db in
+            try CustomIcon.fetchAll(db)
         }
     }
 
@@ -248,6 +302,26 @@ final class AppDatabase {
             _ = try FolderEntry
                 .filter(FolderEntry.Columns.id == id)
                 .updateAll(db, FolderEntry.Columns.title.set(to: title))
+        }
+    }
+
+    // Cover only; `nil` brings the 3×3 preview back.
+    func setFolderCover(id: String, cover: FolderCover?) throws {
+        var emoji: String?
+        var imageData: Data?
+        switch cover {
+        case .emoji(let value): emoji = value
+        case .image(let value): imageData = value
+        case nil: break
+        }
+        try dbQueue.write { db in
+            _ = try FolderEntry
+                .filter(FolderEntry.Columns.id == id)
+                .updateAll(
+                    db,
+                    FolderEntry.Columns.coverEmoji.set(to: emoji),
+                    FolderEntry.Columns.coverImageData.set(to: imageData)
+                )
         }
     }
 
