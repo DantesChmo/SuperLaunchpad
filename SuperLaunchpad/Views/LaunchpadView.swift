@@ -36,9 +36,13 @@ struct LaunchpadView: View {
         // still cover the whole screen.
         GeometryReader { geo in
             let dock = viewModel.dockInsets.edgeInsets
+            // The Frequently Used row takes a grid row's height whenever it
+            // has apps, also while searching, so the grid doesn't resize as
+            // the query comes and goes.
             let metrics = LayoutMetrics(
                 screenWidth: geo.size.width - dock.leading - dock.trailing,
-                screenHeight: geo.size.height - dock.bottom
+                screenHeight: geo.size.height - dock.bottom,
+                extraRows: viewModel.frequentApps.isEmpty ? 0 : 1
             )
 
             // Layered composition — the visual stack from back to front:
@@ -77,6 +81,19 @@ struct LaunchpadView: View {
                             .foregroundStyle(.white.opacity(contrast == .increased ? LabelContrast.increasedSecondaryOpacity : LabelContrast.secondaryOpacity))
                         Spacer()
                     } else {
+                        if !viewModel.frequentApps.isEmpty {
+                            FrequentAppsRow(
+                                apps: viewModel.frequentApps,
+                                metrics: metrics,
+                                isEditing: viewModel.isEditing,
+                                onLaunch: { app in
+                                    click(app)
+                                }
+                            )
+
+                            Spacer().frame(height: metrics.rowSpacing)
+                        }
+
                         PagingGridView(
                             viewModel: viewModel,
                             pages: viewModel.pages,

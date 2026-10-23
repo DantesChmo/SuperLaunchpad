@@ -46,9 +46,9 @@ final class LaunchpadViewModel {
     // out beside them. Set by `LaunchpadPanel` when it is placed on a screen.
     var dockInsets = DockInsets.zero
 
-    // Search results for `searchText` (see `AppSearch`), capped at one page.
-    // Stored for the same reason as `pages`.
-    private(set) var searchResults: [AppEntry] = []
+    // Search results for `searchText` (see `AppSearch`): apps and folders,
+    // capped at one page. Stored for the same reason as `pages`.
+    private(set) var searchResults: [LaunchpadItem] = []
     private(set) var selectedResultIndex = 0
     // Bumped on every `show()`; the search field takes focus when it changes,
     // so typing starts a query straight away.
@@ -57,9 +57,17 @@ final class LaunchpadViewModel {
     // True while the query has non-whitespace text.
     private(set) var isSearching = false
 
-    var selectedResult: AppEntry? {
+    var selectedResult: LaunchpadItem? {
         searchResults.indices.contains(selectedResultIndex) ? searchResults[selectedResultIndex] : nil
     }
+
+    // Settings → Search: the most launched apps, in a row above the grid;
+    // empty while the setting is off. Picked on `show()` and kept in that
+    // order while the launcher is open, so a ⌘-click doesn't move the icon
+    // under the pointer; the entries still follow `apps`.
+    private(set) var frequentApps: [AppEntry] = []
+    @ObservationIgnored private var frequentAppIDs: [String] = []
+    @ObservationIgnored var preferences = Preferences()
 
     // Derived view of `apps` + `folders` shaped for the UI:
     //   pages[i] = the items shown on page i, in display order.
@@ -83,12 +91,14 @@ final class LaunchpadViewModel {
         isBatchingContentUpdates = false
         rebuildPages()
         rebuildSearchResults()
+        rebuildFrequentApps()
     }
 
     private func rebuildPagesUnlessBatching() {
         guard !isBatchingContentUpdates else { return }
         rebuildPages()
         rebuildSearchResults()
+        rebuildFrequentApps()
     }
 
     private func rebuildPages() {
@@ -573,18 +583,22 @@ final class LaunchpadViewModel {
     func launchApp(_ app: AppEntry) -> Bool {
         guard !isEditing else { return false }
         opener.open(app.appPath, true)
-        clearNew(app.bundleIdentifier)
+        recordLaunch(app.bundleIdentifier)
         hide()
         return true
     }
 
-    // The blue dot goes once the app is opened from the launcher.
-    func clearNew(_ appID: String) {
-        guard let index = apps.firstIndex(where: { $0.bundleIdentifier == appID }), apps[index].isNew else { return }
-        apps[index].isNew = false
-        // A rescan running now read the flag before it was cleared.
+    // Every way of opening an app from the launcher counts a launch, which
+    // search ranks by, and takes the blue dot away.
+    func recordLaunch(_ appID: String) {
+        guard let index = apps.firstIndex(where: { $0.bundleIdentifier == appID }) else { return }
+        var app = apps[index]
+        app.launchCount += 1
+        app.isNew = false
+        apps[index] = app
+        // A rescan running now read the row before this launch.
         layoutRevision += 1
-        try? database?.clearNew(bundleIdentifier: appID)
+        try? database?.recordLaunch(bundleIdentifier: appID)
     }
 
     func show() {
@@ -593,6 +607,7 @@ final class LaunchpadViewModel {
         isVisible = true
         isOptionHeld = false
         searchFocusRequest += 1
+        pickFrequentApps()
     }
 
     func hide() {
@@ -966,13 +981,13 @@ final class LaunchpadViewModel {
         switch ItemMenu.clickAction(modifiers: modifiers, isEditing: isEditing) {
         case .launch:
             opener.open(app.appPath, true)
-            clearNew(app.bundleIdentifier)
+            recordLaunch(app.bundleIdentifier)
             return true
         case .launchKeepingLauncher:
             // The app stays in the background, so the launcher keeps the
             // keyboard for the next click.
             opener.open(app.appPath, false)
-            clearNew(app.bundleIdentifier)
+            recordLaunch(app.bundleIdentifier)
             return false
         case .showInFinder:
             opener.showInFinder(app.appPath)
@@ -986,7 +1001,7 @@ final class LaunchpadViewModel {
         switch action {
         case .open:
             opener.open(app.appPath, true)
-            clearNew(app.bundleIdentifier)
+            recordLaunch(app.bundleIdentifier)
             return true
         case .showInFinder:
             // Finder opens below the launcher's panel.
@@ -1179,8 +1194,30 @@ final class LaunchpadViewModel {
         selectedResultIndex = min(max(selectedResultIndex + delta, 0), searchResults.count - 1)
     }
 
+    // A folder found by search opens over the grid; the query is cleared, as
+    // typing would close the folder again.
+    func openFolderFromSearch(_ folder: FolderEntry) {
+        searchText = ""
+        requestFolderOpen(folder.id, renaming: false)
+    }
+
+    private func pickFrequentApps() {
+        frequentAppIDs = preferences.showsFrequentApps
+            ? AppSearch.mostLaunched(apps.filter { !$0.isHidden }).prefix(FrequentApps.maxCount).map(\.bundleIdentifier)
+            : []
+        rebuildFrequentApps()
+    }
+
+    private func rebuildFrequentApps() {
+        guard !frequentAppIDs.isEmpty || !frequentApps.isEmpty else { return }
+        let appsByID = Dictionary(apps.map { ($0.bundleIdentifier, $0) }) { first, _ in first }
+        let rebuilt = frequentAppIDs.compactMap { appsByID[$0] }.filter { !$0.isHidden }
+        // Assigned only on change, like `isSearching`.
+        if rebuilt != frequentApps { frequentApps = rebuilt }
+    }
+
     private func rebuildSearchResults() {
-        searchResults = Array(AppSearch.results(for: searchText, in: apps).prefix(Grid.appsPerPage))
+        searchResults = Array(AppSearch.results(for: searchText, in: apps, folders: folders).prefix(Grid.appsPerPage))
         selectedResultIndex = min(selectedResultIndex, max(searchResults.count - 1, 0))
     }
 }

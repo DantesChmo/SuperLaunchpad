@@ -60,7 +60,7 @@ Data flow:
 |------|------|
 | `SuperLaunchpadApp.swift` | `@main`, `AppDelegate`, `MenuBarExtra` |
 | `ViewModels/LaunchpadViewModel.swift` | source of truth — apps, pages, currentPage, show/hide/launch |
-| `Models/AppEntry.swift` | GRDB record — bundleIdentifier (PK), pageIndex, orderIndex, folderID, folderOrderIndex, isHidden, isNew (blue dot) |
+| `Models/AppEntry.swift` | GRDB record — bundleIdentifier (PK), pageIndex, orderIndex, folderID, folderOrderIndex, isHidden, isNew (blue dot), launchCount |
 | `Models/FolderEntry.swift` | GRDB record — id (PK), title, pageIndex, orderIndex |
 | `Models/GridItem.swift` | `LaunchpadItem` enum: `.app(AppEntry)` / `.folder(FolderEntry, apps)` |
 | `Database/AppDatabase.swift` | SQLite, migrations, CRUD |
@@ -70,7 +70,10 @@ Data flow:
 | `Views/AppIconView.swift` | icon + label, hover scale 1.08 |
 | `Views/FolderIconView.swift` | 3×3 mini preview |
 | `Views/FolderDetailView.swift` | folder popup, 4×3 grid |
+| `Views/SearchResultsView.swift` | one page of search results (apps and folders) with the keyboard selection |
+| `Views/FrequentAppsRow.swift` | Settings → Search: the most launched apps in a row above the grid |
 | `Views/ItemContextMenu.swift` | right-click menu on app icons and folder tiles, same items as VoiceOver actions |
+| `Helpers/AppSearch.swift` | pure search: name / word prefix, word initials, contains, fuzzy; ranking by launch count; folders by title |
 | `Helpers/ItemMenu.swift` | context-menu items per app / folder and their availability; what a click does by its modifiers |
 | `Services/AppOpener.swift` | open an app (in front or in the background), show it in Finder; injectable like `AppTrash.Operations` |
 | `Services/RunningApps.swift` | which apps run (dot under the icon, Quit / Force Quit, quit before Trash); `@Observable`, fed by an injectable `Source` (live: `NSWorkspace` + launch/terminate notifications) |
@@ -193,9 +196,11 @@ Things a new developer cannot guess from the code:
 - **Menu alternates:** an `ItemMenu.Item` may carry an `alternate` action shown while ⌥ is held (`modifierKeyAlternate`); VoiceOver gets it as an action of its own. Quit → Force Quit is the only one.
 - **Trash of a running app** quits it first: stage `.appIsOpen` → `.quitting` (only Cancel works; Return is ignored) → trash once it terminates, or `.didNotQuit` after `Uninstall.quitTimeout` (it is probably asking to save changes, behind the launcher's panel). Cancelling or hiding while quitting keeps the app on disk; the quit request has already gone out.
 - **Modifier clicks:** `⌘`-click opens the app without activating it (`AppOpener`, `activates = false`) so the launcher keeps the keyboard; `⌥⌘`-click shows it in Finder; `⌃`-click is left to the context menu. None of them act in edit mode.
-- **New apps (blue dot).** An app is marked `isNew` only when a rescan finds it without a DB row *and* `AppSetting.Key.newAppTracking` is set. The flag is set by the v6 migration for an existing layout, or by the first scan after which every app on disk has a row — so the first-run import (and apps the system Launchpad import skipped, added on the next rescan) never get the dot. Opening it from the launcher (click, `⌘`-click, menu Open) clears it (`clearNew`); a folder's label shows the dot while it holds a new app.
+- **New apps (blue dot).** An app is marked `isNew` only when a rescan finds it without a DB row *and* `AppSetting.Key.newAppTracking` is set. The flag is set by the v6 migration for an existing layout, or by the first scan after which every app on disk has a row — so the first-run import (and apps the system Launchpad import skipped, added on the next rescan) never get the dot. Opening it from the launcher (click, `⌘`-click, menu Open, Return in search) clears it (`recordLaunch`); a folder's label shows the dot while it holds a new app.
 - **Stored icons are `AppIcon.pixelSize` (256) px, whatever the display.** `NSImage.pngData(pixelSize:)` draws into an explicit 8-bit `NSBitmapImageRep`; `lockFocus` would render at the main screen's backing scale (128 px on a non-Retina main display, 16-bit 256 px on Retina). Migration v7 cleared the older icons; the launch rescan writes them back (`mergeNewApps` always refreshes `iconData`), and `IconCache` re-decodes because the fingerprint changes. Changing the size again needs another migration like v7.
-- **`searchText` exists on the ViewModel but is not wired.** Don't add filtering downstream of it without also building the search UI and decide on debounce/scope first.
+- **Search** (`AppSearch`, pure) runs on every keystroke over all apps — hidden ones too, shown dimmed with an eye — and over folder titles. Match kinds, best first: name prefix, word prefix, word initials (`vsc` → Visual Studio Code, `sysset` → System Settings; words also split at camelCase), contains, fuzzy (letters in order). Order: name-prefix matches first and fuzzy matches last; in between, and inside each of those groups, `launchCount` beats match kind. A folder result (Return or click) clears the query and opens the folder over the grid via `folderOpenRequest`.
+- **Launch counter.** Every launch from the launcher (click, `⌘`-click, menu Open, Return in search) goes through `recordLaunch`: `launchCount + 1` and `isNew = false` in memory and in one DB update, and a `layoutRevision` bump so a rescan running at that moment doesn't write back the row it read before. Show in Finder and clicks in edit mode don't count.
+- **Frequently Used row** (Settings → Search, `Preferences.showsFrequentApps`, off by default): up to `FrequentApps.maxCount` most launched visible apps, picked on `show()` and kept in that order while the launcher is open (a `⌘`-click must not move the icon under the pointer). While it has apps, `LayoutMetrics(extraRows: 1)` shares the grid's height with it, also during search, and the icon shrinks if the shorter cell needs it. Click only; arrows and Return keep paging; in edit mode it is dimmed and ignores clicks.
 
 ## Forbidden patterns
 
@@ -213,7 +218,6 @@ Things a new developer cannot guess from the code:
 
 These are intentionally unimplemented. Don't half-implement them as a side effect of another task.
 
-- **Search** — `searchText` property exists, not wired. Requires a full UI before backend filtering.
 - **Drag-and-drop reorder** — not feasible inside SwiftUI `ScrollView` on macOS as of Sequoia. Several attempts have been ruled out; consult before re-attempting.
 
 ## Workflow

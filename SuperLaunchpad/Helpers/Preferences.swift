@@ -8,12 +8,14 @@ struct Preferences {
         static let hotKeyCode = "hotKeyCode"
         static let hotKeyModifiers = "hotKeyModifiers"
         static let newAppPlacement = "newAppPlacement"
+        static let showsFrequentApps = "showsFrequentApps"
     }
 
     enum Default {
         static let pinchGestureEnabled = true
         static let hotKey = KeyCombo.default
         static let newAppPlacement = NewAppPlacement.end
+        static let showsFrequentApps = false
     }
 
     private let defaults: UserDefaults
@@ -25,6 +27,7 @@ struct Preferences {
             Key.hotKeyCode: Int(Default.hotKey.keyCode),
             Key.hotKeyModifiers: Int(Default.hotKey.modifiers),
             Key.newAppPlacement: Default.newAppPlacement.rawValue,
+            Key.showsFrequentApps: Default.showsFrequentApps,
         ])
     }
 
@@ -54,5 +57,11 @@ struct Preferences {
                 ?? Default.newAppPlacement
         }
         nonmutating set { defaults.set(newValue.rawValue, forKey: Key.newAppPlacement) }
+    }
+
+    // Settings → Search: a row of the most launched apps above the grid.
+    var showsFrequentApps: Bool {
+        get { defaults.bool(forKey: Key.showsFrequentApps) }
+        nonmutating set { defaults.set(newValue, forKey: Key.showsFrequentApps) }
     }
 }

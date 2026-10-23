@@ -56,4 +56,13 @@ struct PreferencesTests {
 
         #expect(Preferences(defaults: defaults).newAppPlacement == Preferences.Default.newAppPlacement)
     }
+
+    @Test func showsFrequentAppsDefaultsToOffAndRoundTrips() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        #expect(Preferences(defaults: defaults).showsFrequentApps == false)
+        Preferences(defaults: defaults).showsFrequentApps = true
+        #expect(Preferences(defaults: defaults).showsFrequentApps == true)
+    }
 }

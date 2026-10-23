@@ -248,14 +248,14 @@ struct NewAppsTests {
 
     // MARK: - Launch
 
-    @Test func clearNewDropsTheMarkInMemoryAndOnDisk() throws {
+    @Test func launchDropsTheMarkInMemoryAndOnDisk() throws {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
         try db.saveApps([app("com.a", page: 0, order: 0, isNew: true), app("com.b", page: 0, order: 1, isNew: true)])
         let vm = LaunchpadViewModel(database: db)
         vm.apps = try db.fetchAllApps()
 
-        vm.clearNew("com.a")
+        vm.recordLaunch("com.a")
 
         #expect(vm.apps.first { $0.bundleIdentifier == "com.a" }?.isNew == false)
         #expect(vm.apps.first { $0.bundleIdentifier == "com.b" }?.isNew == true)

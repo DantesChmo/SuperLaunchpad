@@ -85,6 +85,14 @@ enum Search {
     static let resultsTransition: Double = 0.12
 }
 
+// Settings → Search: a row of the most launched apps between the search
+// field and the grid.
+enum FrequentApps {
+    static let maxCount = Grid.columns
+    // The row is dimmed and ignores clicks in edit mode.
+    static let editingOpacity: Double = 0.4
+}
+
 // The blue dot in front of a new app's label.
 enum NewAppDot {
     // Its font size as a share of the label's.
@@ -128,21 +136,25 @@ struct LayoutMetrics {
 
     // Vertical gap between an icon and its label.
     static let iconLabelSpacing: CGFloat = 6
+    // Room for the label below the icon, in label font sizes: two lines plus
+    // slack.
+    static let labelRoomInFontSizes: CGFloat = 3
 
     // Hover / tap / drag target of a cell: the icon plus room for two label
     // lines, centered in the cell (see `GridItemContainer`).
     var itemHitSize: CGSize {
-        CGSize(width: iconSize, height: iconSize + Self.iconLabelSpacing + labelFont * 3)
+        CGSize(width: iconSize, height: iconSize + Self.iconLabelSpacing + labelFont * Self.labelRoomInFontSizes)
     }
 
-    init(screenWidth: CGFloat, screenHeight: CGFloat) {
+    // `extraRows` are rows drawn above the grid (the Frequently Used row),
+    // which share its height.
+    init(screenWidth: CGFloat, screenHeight: CGFloat, extraRows: Int = 0) {
         // All numbers are screen-relative so the grid looks proportionally the
         // same on a 13" MacBook and a 6K Pro Display. Hard-coded pixel sizes
         // would look cramped or sparse depending on the display.
         horizontalPadding = screenWidth * 0.06
         let availableWidth = screenWidth - horizontalPadding * 2
         itemWidth = availableWidth / CGFloat(Grid.columns)
-        iconSize = itemWidth * 0.5
         labelWidth = itemWidth * 0.8
         // Floor at 11pt so labels stay legible on small screens where the
         // proportional value (screenHeight * 0.012) would round down too far.
@@ -156,8 +168,19 @@ struct LayoutMetrics {
         // The rows and the gaps between them share that height; counting only
         // the rows pushed the last one into the page indicator.
         let rowSpacingRatio: CGFloat = 0.05
-        itemHeight = availableHeight / (CGFloat(Grid.rows) + CGFloat(Grid.rows - 1) * rowSpacingRatio)
+        let rows = Grid.rows + extraRows
+        itemHeight = availableHeight / (CGFloat(rows) + CGFloat(rows - 1) * rowSpacingRatio)
         rowSpacing = itemHeight * rowSpacingRatio
+
+        let widthBasedIconSize = itemWidth * 0.5
+        if extraRows > 0 {
+            // The shorter cells may not fit the icon and its label; the icon
+            // gives way.
+            let heightBasedIconSize = itemHeight - Self.iconLabelSpacing - labelFont * Self.labelRoomInFontSizes
+            iconSize = min(widthBasedIconSize, heightBasedIconSize)
+        } else {
+            iconSize = widthBasedIconSize
+        }
     }
 }
 

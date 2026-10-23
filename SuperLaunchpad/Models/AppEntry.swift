@@ -22,6 +22,8 @@ struct AppEntry: Identifiable, Equatable {
     // Installed since SuperLaunchpad started tracking apps and not yet opened
     // from the launcher: the label gets a blue dot.
     var isNew = false
+    // Times the app was opened from the launcher; search ranks by it.
+    var launchCount = 0
 
     // `Identifiable.id` lets SwiftUI's `ForEach` track this row across rebuilds.
     // Bundle ID is globally unique on macOS, so it doubles as our primary key.
@@ -38,6 +40,6 @@ extension AppEntry: Codable, FetchableRecord, PersistableRecord {
     // matches the column names exactly — never reference columns as raw strings.
     enum Columns: String, ColumnExpression {
         case bundleIdentifier, displayName, appPath, iconData, pageIndex, orderIndex
-        case folderID, folderOrderIndex, isHidden, isNew
+        case folderID, folderOrderIndex, isHidden, isNew, launchCount
     }
 }

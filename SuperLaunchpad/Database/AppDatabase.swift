@@ -116,6 +116,11 @@ final class AppDatabase {
             // shows the placeholder icon. Positions and flags are untouched.
             try AppEntry.updateAll(db, AppEntry.Columns.iconData.set(to: nil))
         }
+        migrator.registerMigration("v8") { db in
+            try db.alter(table: "appEntry") { t in
+                t.add(column: "launchCount", .integer).notNull().defaults(to: 0)
+            }
+        }
         return migrator
     }
 
@@ -176,12 +181,17 @@ final class AppDatabase {
         }
     }
 
-    // The app was opened from the launcher: it is no longer new.
-    func clearNew(bundleIdentifier: String) throws {
+    // The app was opened from the launcher: one more launch, and it is no
+    // longer new.
+    func recordLaunch(bundleIdentifier: String) throws {
         try dbQueue.write { db in
             _ = try AppEntry
                 .filter(AppEntry.Columns.bundleIdentifier == bundleIdentifier)
-                .updateAll(db, AppEntry.Columns.isNew.set(to: false))
+                .updateAll(
+                    db,
+                    AppEntry.Columns.launchCount += 1,
+                    AppEntry.Columns.isNew.set(to: false)
+                )
         }
     }
 

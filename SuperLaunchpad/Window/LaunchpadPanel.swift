@@ -268,11 +268,17 @@ final class LaunchpadPanel: NSPanel {
         case kVK_Return where viewModel.isEditing, kVK_ANSI_KeypadEnter where viewModel.isEditing:
             viewModel.exitEditMode()
         case kVK_Return where searching, kVK_ANSI_KeypadEnter where searching:
-            guard let app = viewModel.selectedResult else { return true }
-            // Hide first: `launchApp` also hides the view model, after which
-            // `hidePanel` would skip the `orderOut`.
-            hidePanel()
-            viewModel.launchApp(app)
+            switch viewModel.selectedResult {
+            case .app(let app):
+                // Hide first: `launchApp` also hides the view model, after
+                // which `hidePanel` would skip the `orderOut`.
+                hidePanel()
+                viewModel.launchApp(app)
+            case .folder(let folder, _):
+                viewModel.openFolderFromSearch(folder)
+            case nil:
+                break
+            }
         default:
             return false
         }

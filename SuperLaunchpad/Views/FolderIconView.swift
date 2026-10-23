@@ -7,6 +7,8 @@ struct FolderIconView: View {
     let folder: FolderEntry
     let apps: [AppEntry]
     let metrics: LayoutMetrics
+    // Keyboard selection in search results.
+    var isSelected = false
     let onTap: () -> Void
 
     // 3×3 preview — Apple's convention. Even if the folder has more apps,
@@ -27,6 +29,11 @@ struct FolderIconView: View {
                 .multilineTextAlignment(.center)
                 .frame(width: metrics.labelWidth)
         }
+        .background {
+            RoundedRectangle(cornerRadius: Search.selectionCornerRadius)
+                .fill(.white.opacity(isSelected ? Search.selectionOpacity : 0))
+                .padding(-metrics.iconSize * Search.selectionOutsetRatio)
+        }
         .launcherItemAccessibility(
             label: folder.title,
             hint: apps.count == 1
@@ -37,7 +44,7 @@ struct FolderIconView: View {
         .folderContextMenu(folder)
         .newAppAccessibilityValue(apps.contains(where: \.isNew))
         .accessibilityIdentifier("folder-icon")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private var folderIcon: some View {

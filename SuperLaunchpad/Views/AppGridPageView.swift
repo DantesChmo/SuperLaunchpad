@@ -4,7 +4,7 @@ import SwiftUI
 struct AppGridPageView: View {
     let items: [LaunchpadItem]
     let metrics: LayoutMetrics
-    // The keyboard-selected app in search results; nil on the main grid.
+    // The keyboard-selected item in search results; nil on the main grid.
     var selectedID: String? = nil
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
@@ -73,7 +73,7 @@ struct GridCellView: View {
                     onLaunch(app)
                 }
             case .folder(let folder, let apps):
-                FolderIconView(folder: folder, apps: apps, metrics: metrics) {
+                FolderIconView(folder: folder, apps: apps, metrics: metrics, isSelected: isSelected) {
                     onOpenFolder(folder)
                 }
                 .scaleEffect(isMergeTarget ? Drag.mergeTargetScale : 1)

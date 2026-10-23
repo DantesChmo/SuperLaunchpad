@@ -11,6 +11,9 @@ struct SettingsView: View {
     @AppStorage(Preferences.Key.newAppPlacement)
     private var newAppPlacement = Preferences.Default.newAppPlacement
 
+    @AppStorage(Preferences.Key.showsFrequentApps)
+    private var showsFrequentApps = Preferences.Default.showsFrequentApps
+
     @State private var launchAtLogin = LoginItem.isEnabled
     @State private var loginItemNeedsApproval = LoginItem.requiresApproval
     @State private var loginItemError: String?
@@ -58,6 +61,13 @@ struct SettingsView: View {
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            }
+
+            Section("Search") {
+                Toggle("Show frequently used apps above the grid", isOn: $showsFrequentApps)
+                Text("Search lists the apps you open most often first.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Keyboard") {

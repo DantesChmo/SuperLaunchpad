@@ -51,8 +51,8 @@ struct LaunchpadViewModelSearchTests {
         ])
         vm.searchText = "cal"
         #expect(vm.isSearching)
-        #expect(vm.searchResults.map(\.displayName) == ["Calculator", "Calendar"])
-        #expect(vm.selectedResult?.displayName == "Calculator")
+        #expect(vm.searchResults.map(\.name) == ["Calculator", "Calendar"])
+        #expect(vm.selectedResult?.name == "Calculator")
     }
 
     @Test func resultsAreCappedAtOnePage() {
@@ -65,7 +65,7 @@ struct LaunchpadViewModelSearchTests {
         let vm = makeVM(apps: [app("Safari")])
         vm.searchText = "s"
         vm.apps = [app("Safari"), app("Stocks")]
-        #expect(vm.searchResults.map(\.displayName) == ["Safari", "Stocks"])
+        #expect(vm.searchResults.map(\.name) == ["Safari", "Stocks"])
     }
 
     @Test func typingClosesOpenFolder() {
@@ -73,6 +73,57 @@ struct LaunchpadViewModelSearchTests {
         vm.openFolderID = "folder"
         vm.searchText = "m"
         #expect(vm.openFolderID == nil)
+    }
+
+    // MARK: - Folders
+
+    private func makeVMWithFolder() -> LaunchpadViewModel {
+        let vm = makeVM(apps: [
+            app("Terminal", page: nil, order: nil, folderID: "F"),
+            app("Utility Belt"),
+        ])
+        vm.folders = [FolderEntry(id: "F", title: "Utilities", pageIndex: 0, orderIndex: 1)]
+        return vm
+    }
+
+    @Test func foldersAreFoundByTitle() throws {
+        let vm = makeVMWithFolder()
+        vm.searchText = "util"
+
+        #expect(vm.searchResults.map(\.name) == ["Utilities", "Utility Belt"])
+        guard case .folder(let folder, let apps) = try #require(vm.selectedResult) else {
+            Issue.record("expected the folder to be selected")
+            return
+        }
+        #expect(folder.id == "F")
+        #expect(apps.map(\.displayName) == ["Terminal"])
+    }
+
+    @Test func resultsFollowFolderChanges() {
+        let vm = makeVMWithFolder()
+        vm.searchText = "tools"
+        #expect(vm.searchResults.isEmpty)
+        vm.folders = [FolderEntry(id: "F", title: "Tools", pageIndex: 0, orderIndex: 1)]
+        #expect(vm.searchResults.map(\.name) == ["Tools"])
+    }
+
+    @Test func openingFolderResultClearsQueryAndRequestsTheFolder() throws {
+        let vm = makeVMWithFolder()
+        vm.show()
+        vm.searchText = "util"
+        guard case .folder(let folder, _) = try #require(vm.selectedResult) else {
+            Issue.record("expected the folder to be selected")
+            return
+        }
+
+        vm.openFolderFromSearch(folder)
+
+        #expect(vm.searchText.isEmpty)
+        #expect(vm.isSearching == false)
+        #expect(vm.isVisible)
+        let request = try #require(vm.folderOpenRequest)
+        #expect(request.folderID == "F")
+        #expect(request.renaming == false)
     }
 
     // MARK: - Selection
@@ -88,7 +139,7 @@ struct LaunchpadViewModelSearchTests {
         #expect(vm.selectedResultIndex == 1 + Grid.columns)
         vm.moveSelection(by: Grid.columns)
         #expect(vm.selectedResultIndex == 9)
-        #expect(vm.selectedResult?.displayName == "App 09")
+        #expect(vm.selectedResult?.name == "App 09")
     }
 
     @Test func selectionResetsWhenQueryChanges() {

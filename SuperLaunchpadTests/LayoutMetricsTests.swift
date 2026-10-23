@@ -68,4 +68,33 @@ struct LayoutMetricsTests {
         #expect(large.horizontalPadding == small.horizontalPadding * 2)
         #expect(large.iconSize == small.iconSize * 2)
     }
+
+    // MARK: - Frequently Used row
+
+    @Test(arguments: [(1440.0, 900.0), (1920.0, 1080.0), (1280.0, 800.0), (3440.0, 1440.0)])
+    func extraRowSharesTheGridHeightAndCellsFitTheirIcons(width: Double, height: Double) {
+        let m = LayoutMetrics(screenWidth: width, screenHeight: height, extraRows: 1)
+        let availableHeight = height - height * 0.06 - height * 0.04 - height * 0.1
+        let rows = CGFloat(Grid.rows + 1)
+        let totalHeight = m.itemHeight * rows + m.rowSpacing * (rows - 1)
+        #expect(abs(totalHeight - availableHeight) < 0.001)
+        #expect(m.itemHitSize.height <= m.itemHeight + 0.001)
+        #expect(m.iconSize <= m.itemWidth * 0.5)
+    }
+
+    @Test func noExtraRowsKeepsTheStandardMetrics() {
+        let standard = LayoutMetrics(screenWidth: 1440, screenHeight: 900)
+        let explicit = LayoutMetrics(screenWidth: 1440, screenHeight: 900, extraRows: 0)
+        #expect(explicit.iconSize == standard.iconSize)
+        #expect(explicit.itemHeight == standard.itemHeight)
+        #expect(standard.iconSize == standard.itemWidth * 0.5)
+    }
+
+    @Test func extraRowMakesRowsShorterOnly() {
+        let standard = LayoutMetrics(screenWidth: 1440, screenHeight: 900)
+        let withRow = LayoutMetrics(screenWidth: 1440, screenHeight: 900, extraRows: 1)
+        #expect(withRow.itemHeight < standard.itemHeight)
+        #expect(withRow.itemWidth == standard.itemWidth)
+        #expect(withRow.labelFont == standard.labelFont)
+    }
 }

@@ -216,7 +216,7 @@ struct HiddenAppsTests {
 
         vm.searchText = "secret"
 
-        let result = try #require(vm.searchResults.first)
+        let result = try #require(vm.searchResults.first?.appEntry)
         #expect(vm.searchResults.count == 1)
         #expect(result.bundleIdentifier == "com.secret")
         #expect(result.isHidden)
@@ -225,13 +225,13 @@ struct HiddenAppsTests {
     @Test func searchResultFollowsHideAndUnhide() throws {
         let vm = try makeViewModel(nil)
         vm.searchText = "a"
-        #expect(vm.searchResults.first { $0.bundleIdentifier == "a" }?.isHidden == false)
+        #expect(vm.searchResults.first { $0.id == "a" }?.appEntry?.isHidden == false)
 
         #expect(vm.hideApp("a"))
-        #expect(vm.searchResults.first { $0.bundleIdentifier == "a" }?.isHidden == true)
+        #expect(vm.searchResults.first { $0.id == "a" }?.appEntry?.isHidden == true)
 
         #expect(vm.unhideApp("a"))
-        #expect(vm.searchResults.first { $0.bundleIdentifier == "a" }?.isHidden == false)
+        #expect(vm.searchResults.first { $0.id == "a" }?.appEntry?.isHidden == false)
     }
 
     // MARK: - Rescan
