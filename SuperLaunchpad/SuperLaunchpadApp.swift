@@ -36,7 +36,11 @@ struct SuperLaunchpadApp: App {
         }
 
         Settings {
-            SettingsView(hotKeyMonitor: appDelegate.hotKeyMonitor, updater: appDelegate.updater)
+            SettingsView(
+                hotKeyMonitor: appDelegate.hotKeyMonitor,
+                updater: appDelegate.updater,
+                viewModel: appDelegate.viewModel
+            )
         }
     }
 }
@@ -69,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: LaunchpadPanel!
     // UI tests get a fresh throwaway DB so every run exercises the first-launch
     // layout instead of whatever the user's real DB already holds.
-    private let viewModel = UserDefaults.standard.bool(forKey: "UITestMode")
+    let viewModel = UserDefaults.standard.bool(forKey: "UITestMode")
         ? LaunchpadViewModel(database: try? AppDatabase(path: FileManager.default.temporaryDirectory
             .appendingPathComponent("SuperLaunchpad-UITest-\(UUID().uuidString).sqlite").path))
         : LaunchpadViewModel()

@@ -9,6 +9,8 @@ enum ItemMenu {
         case open
         case showInFinder
         case moveToTrash
+        case hide
+        case unhide
         case rename
         case sortByName
         case disband
@@ -19,6 +21,8 @@ enum ItemMenu {
             case .open: "Open"
             case .showInFinder: "Show in Finder"
             case .moveToTrash: "Move to Trash"
+            case .hide: "Hide"
+            case .unhide: "Unhide"
             case .rename: "Rename"
             case .sortByName: "Sort by Name"
             case .disband: "Disband Folder"
@@ -31,6 +35,8 @@ enum ItemMenu {
             case .open: "arrow.up.forward.app"
             case .showInFinder: "folder"
             case .moveToTrash: "trash"
+            case .hide: "eye.slash"
+            case .unhide: "eye"
             case .rename: "pencil"
             case .sortByName: "arrow.up.arrow.down"
             case .disband: "folder.badge.minus"
@@ -52,6 +58,8 @@ enum ItemMenu {
         // Apps that are part of macOS can't be moved to the Trash.
         var isRemovable: Bool
         var canEditLayout: Bool
+        // Only search shows a hidden app; its menu offers Unhide for Hide.
+        var isHidden = false
     }
 
     struct FolderState: Equatable {
@@ -62,7 +70,7 @@ enum ItemMenu {
     static func items(for app: AppState) -> Sections {
         [
             [Item(action: .open), Item(action: .showInFinder)],
-            [Item(action: .moveToTrash, isEnabled: app.isRemovable)],
+            [Item(action: app.isHidden ? .unhide : .hide), Item(action: .moveToTrash, isEnabled: app.isRemovable)],
             [Item(action: .editLayout, isEnabled: app.canEditLayout)]
         ]
     }

@@ -80,6 +80,12 @@ enum Search {
 
 enum SettingsWindow {
     static let width: CGFloat = 420
+    static let hiddenAppIconSize: CGFloat = 20
+}
+
+enum HiddenApp {
+    // A hidden app in the search results is dimmed.
+    static let iconOpacity: Double = 0.5
 }
 
 enum HotKey {

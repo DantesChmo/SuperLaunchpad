@@ -6,9 +6,9 @@ Single GRDB-backed SQLite at `~/Library/Application Support/com.dantes.SuperLaun
 
 Versions are `"v1"`, `"v2"`, `"v3"`, … Add a new `"vN+1"` block to `migrate()` in `AppDatabase.swift`. **Never edit a shipped migration**, never `DROP TABLE`. Use `.add(column:)` / `.create(table:)` only.
 
-Current schema (after v4):
+Current schema (after v5):
 
-- `appEntry` — PK `bundleIdentifier`. Cols: `displayName`, `appPath`, `iconData`, `pageIndex?`, `orderIndex?`, `folderID?` (FK → `folderEntry.id`, `.setNull` on delete), `folderOrderIndex?`.
+- `appEntry` — PK `bundleIdentifier`. Cols: `displayName`, `appPath`, `iconData`, `pageIndex?`, `orderIndex?`, `folderID?` (FK → `folderEntry.id`, `.setNull` on delete), `folderOrderIndex?`, `isHidden` (v5, not null, default false; a hidden app has all four position columns nil).
 - `folderEntry` — PK `id` (UUID string, generated in code), `title`, `pageIndex`, `orderIndex`.
 - `appSetting` — PK `key` (`AppSetting.Key` raw value), `value`. Read/write via `setting(_:)` / `setSetting(_:_:)`.
 

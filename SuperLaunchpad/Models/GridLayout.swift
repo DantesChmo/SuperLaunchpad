@@ -35,8 +35,8 @@ struct GridLayout: Equatable {
 
     // Groups rows the same way `LaunchpadViewModel.rebuildPages` does, so the
     // layout matches what is on screen. Sparse page indices collapse; ties in
-    // order fall back to the order of the input arrays. Apps whose folder is
-    // missing are left out (they are not shown either).
+    // order fall back to the order of the input arrays. Hidden apps and apps
+    // whose folder is missing are left out (they are not shown either).
     init(apps: [AppEntry], folders folderEntries: [FolderEntry], pageCapacity: Int = Grid.appsPerPage) {
         struct Placed {
             let item: Item
@@ -49,7 +49,7 @@ struct GridLayout: Equatable {
         var placed: [Placed] = []
         var folderMembers: [String: [(app: AppEntry, sequence: Int)]] = [:]
 
-        for (sequence, app) in apps.enumerated() {
+        for (sequence, app) in apps.enumerated() where !app.isHidden {
             if let folderID = app.folderID {
                 guard folderIDs.contains(folderID) else { continue }
                 folderMembers[folderID, default: []].append((app, sequence))
@@ -163,6 +163,19 @@ struct GridLayout: Equatable {
     @discardableResult
     mutating func delete(_ appID: String) -> Bool {
         guard take(.app(appID)) != nil else { return false }
+        normalize()
+        return true
+    }
+
+    // Puts an app that is not in the layout (it was hidden) after the last
+    // item of the last page, opening a new page when that one is full.
+    @discardableResult
+    mutating func append(_ appID: String) -> Bool {
+        guard location(of: .app(appID)) == nil else { return false }
+        if pages.isEmpty {
+            pages.append([])
+        }
+        pages[pages.count - 1].append(.app(appID))
         normalize()
         return true
     }

@@ -64,6 +64,20 @@ struct GridLayoutTests {
         #expect(layout.location(of: .app("orphan")) == nil)
     }
 
+    @Test func initLeavesHiddenAppsOut() {
+        var hidden = app("h", page: 0, order: 1)
+        hidden.isHidden = true
+        var hiddenInFolder = app("hf", folderID: "F", folderOrder: 0)
+        hiddenInFolder.isHidden = true
+        let apps = [app("a", page: 0, order: 0), hidden, app("in", folderID: "F", folderOrder: 1), hiddenInFolder]
+        let folders = [FolderEntry(id: "F", title: "Tools", pageIndex: 0, orderIndex: 2)]
+
+        let layout = GridLayout(apps: apps, folders: folders)
+
+        #expect(names(layout) == [["a", "#F"]])
+        #expect(layout.folders["F"]?.appIDs == ["in"])
+    }
+
     @Test func initPutsUnpositionedAppsAtTheEndOfPageZero() {
         let layout = GridLayout(apps: [app("new"), app("a", page: 0, order: 0)], folders: [])
         #expect(names(layout) == [["a", "new"]])
@@ -304,6 +318,38 @@ struct GridLayoutTests {
         #expect(!deletedMissing)
         #expect(!deletedFolder)
         #expect(layout == before)
+    }
+
+    // MARK: - Append
+
+    @Test func appendPutsAppAfterLastItem() {
+        var grid = layout([["a", "b"], ["c"]])
+        let appended = grid.append("x")
+        #expect(appended)
+        #expect(names(grid) == [["a", "b"], ["c", "x"]])
+    }
+
+    @Test func appendOntoFullLastPageOpensNewPage() {
+        var grid = layout([["a", "b"]], capacity: 2)
+        let appended = grid.append("x")
+        #expect(appended)
+        #expect(names(grid) == [["a", "b"], ["x"]])
+    }
+
+    @Test func appendToEmptyLayoutOpensFirstPage() {
+        var grid = layout([])
+        let appended = grid.append("x")
+        #expect(appended)
+        #expect(names(grid) == [["x"]])
+    }
+
+    @Test(arguments: ["a", "in"])
+    func appendRejectsAppAlreadyInLayout(appID: String) {
+        var grid = layout([["a", "#F"]], folders: ["F": ["in"]])
+        let before = grid
+        let appended = grid.append(appID)
+        #expect(!appended)
+        #expect(grid == before)
     }
 
     // MARK: - Dissolve / rename

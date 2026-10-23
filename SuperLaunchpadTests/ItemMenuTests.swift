@@ -16,8 +16,14 @@ struct ItemMenuTests {
 
     @Test func appMenuListsActionsInSections() {
         let sections = ItemMenu.items(for: ItemMenu.AppState(isRemovable: true, canEditLayout: true))
-        #expect(actions(sections) == [[.open, .showInFinder], [.moveToTrash], [.editLayout]])
+        #expect(actions(sections) == [[.open, .showInFinder], [.hide, .moveToTrash], [.editLayout]])
         #expect(sections.joined().allSatisfy { $0.isEnabled })
+    }
+
+    @Test func hiddenAppOffersUnhideInsteadOfHide() {
+        let sections = ItemMenu.items(for: ItemMenu.AppState(isRemovable: true, canEditLayout: true, isHidden: true))
+        #expect(actions(sections) == [[.open, .showInFinder], [.unhide, .moveToTrash], [.editLayout]])
+        #expect(isEnabled(.unhide, in: sections) == true)
     }
 
     @Test func moveToTrashIsDisabledForSystemApps() {

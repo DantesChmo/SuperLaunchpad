@@ -91,6 +91,11 @@ final class AppDatabase {
                 try AppSetting(key: AppSetting.Key.folderImportDone.rawValue, value: "1").insert(db)
             }
         }
+        migrator.registerMigration("v5") { db in
+            try db.alter(table: "appEntry") { t in
+                t.add(column: "isHidden", .boolean).notNull().defaults(to: false)
+            }
+        }
         return migrator
     }
 
@@ -125,10 +130,12 @@ final class AppDatabase {
 
     // Used to decide whether to apply ordering from the system Launchpad DB
     // (first launch) or merge new apps into an existing layout (subsequent runs).
+    // A hidden app has no page but counts: the first-launch import would
+    // overwrite it as a visible app.
     func hasOrderingData() throws -> Bool {
         try dbQueue.read { db in
             let count = try AppEntry
-                .filter(AppEntry.Columns.pageIndex != nil)
+                .filter(AppEntry.Columns.pageIndex != nil || AppEntry.Columns.isHidden == true)
                 .fetchCount(db)
             return count > 0
         }

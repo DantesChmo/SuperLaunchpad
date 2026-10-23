@@ -304,6 +304,7 @@ private struct FolderAppIconView: View {
                 iconImage
                     .frame(width: iconSize, height: iconSize)
                     .removeAppBadge(app, iconSize: iconSize)
+                    .hideAppBadge(app, iconSize: iconSize)
 
                 Text(app.displayName)
                     .font(.system(size: labelFont))

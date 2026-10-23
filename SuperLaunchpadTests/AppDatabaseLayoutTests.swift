@@ -37,6 +37,18 @@ struct AppDatabaseLayoutTests {
 
     // MARK: - Migration v4
 
+    // `AppEntry.insert` writes columns added by later migrations; an older
+    // schema gets only the columns it has.
+    private func insertBeforeV5(_ app: AppEntry, _ db: Database) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO appEntry (bundleIdentifier, displayName, appPath, pageIndex, orderIndex, folderID, folderOrderIndex)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+            arguments: [app.bundleIdentifier, app.displayName, app.appPath, app.pageIndex, app.orderIndex, app.folderID, app.folderOrderIndex]
+        )
+    }
+
     @Test func freshDatabaseHasNoFolderImportFlag() throws {
         let (db, dir) = try makeTempDB()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -57,8 +69,8 @@ struct AppDatabaseLayoutTests {
             let member = hasFolderApps
                 ? app("com.in", folderID: "F", folderOrder: 0)
                 : app("com.in", page: 0, order: 1)
-            try member.insert(db)
-            try app("com.top", page: 0, order: 2).insert(db)
+            try insertBeforeV5(member, db)
+            try insertBeforeV5(app("com.top", page: 0, order: 2), db)
         }
         try queue.close()
 
@@ -66,6 +78,56 @@ struct AppDatabaseLayoutTests {
         #expect(try db.setting(.folderImportDone) == (hasFolderApps ? "1" : nil))
         #expect(try db.fetchAllApps().count == 2)
         #expect(try db.fetchAllFolders().count == 1)
+    }
+
+    // MARK: - Migration v5
+
+    // A v4 database is filled, then opened by `AppDatabase`, which runs v5:
+    // existing apps stay where they were and none is hidden.
+    @Test func v5AddsIsHiddenFalseAndKeepsPositions() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = dir.appendingPathComponent("test.db").path
+
+        let queue = try DatabaseQueue(path: path)
+        try AppDatabase.migrator.migrate(queue, upTo: "v4")
+        try queue.write { db in
+            try FolderEntry(id: "F", title: "F", pageIndex: 0, orderIndex: 1).insert(db)
+            try insertBeforeV5(app("com.top", page: 0, order: 0), db)
+            try insertBeforeV5(app("com.in", folderID: "F", folderOrder: 0), db)
+        }
+        try queue.close()
+
+        let db = try AppDatabase(path: path)
+        let apps = try db.fetchAllApps()
+        #expect(apps.count == 2)
+        #expect(apps.allSatisfy { !$0.isHidden })
+        #expect(apps.first { $0.bundleIdentifier == "com.top" }?.orderIndex == 0)
+        #expect(apps.first { $0.bundleIdentifier == "com.in" }?.folderID == "F")
+    }
+
+    @Test func isHiddenRoundTrips() throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var hidden = app("com.hidden")
+        hidden.isHidden = true
+        try db.saveApps([hidden, app("com.shown", page: 0, order: 0)])
+
+        let stored = try db.fetchAllApps()
+        #expect(stored.first { $0.bundleIdentifier == "com.hidden" }?.isHidden == true)
+        #expect(stored.first { $0.bundleIdentifier == "com.shown" }?.isHidden == false)
+    }
+
+    // Only hidden apps left: still an existing layout, so a rescan merges
+    // instead of re-importing everything as visible.
+    @Test func hasOrderingDataCountsHiddenApps() throws {
+        let (db, dir) = try makeTempDB()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var hidden = app("com.hidden")
+        hidden.isHidden = true
+        try db.saveApps([hidden])
+
+        #expect(try db.hasOrderingData())
     }
 
     @Test func settingRoundTripAndOverwrite() throws {

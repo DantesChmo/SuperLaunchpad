@@ -60,7 +60,7 @@ Data flow:
 |------|------|
 | `SuperLaunchpadApp.swift` | `@main`, `AppDelegate`, `MenuBarExtra` |
 | `ViewModels/LaunchpadViewModel.swift` | source of truth — apps, pages, currentPage, show/hide/launch |
-| `Models/AppEntry.swift` | GRDB record — bundleIdentifier (PK), pageIndex, orderIndex, folderID, folderOrderIndex |
+| `Models/AppEntry.swift` | GRDB record — bundleIdentifier (PK), pageIndex, orderIndex, folderID, folderOrderIndex, isHidden |
 | `Models/FolderEntry.swift` | GRDB record — id (PK), title, pageIndex, orderIndex |
 | `Models/GridItem.swift` | `LaunchpadItem` enum: `.app(AppEntry)` / `.folder(FolderEntry, apps)` |
 | `Database/AppDatabase.swift` | SQLite, migrations, CRUD |
@@ -186,6 +186,7 @@ Things a new developer cannot guess from the code:
 - **Multi-monitor:** `LaunchpadPanel` opens on the screen under the cursor (`Helpers/ScreenSelection.swift`, pure and tested). On `didChangeScreenParametersNotification` a visible panel stays on its display (by display ID) with the new frame, or moves under the cursor if that display was unplugged.
 - **Context menus open below the `.screenSaver` panel.** NSMenu windows sit at the pop-up menu level, so `LaunchpadPanel` steps down to just below it on `NSMenu.didBeginTrackingNotification` and back up on `didEndTrackingNotification` — still above the Dock and menu bar. `NSAlert` has the same problem, which is why the Trash dialog is drawn inside the launcher.
 - **Context menu items are built in one place:** `ItemMenu.items(for:)`, one function per item kind (app, folder). A new action (Hide, Quit, …) is a new `ItemMenu.Action` case, a line there and a branch in `LaunchpadViewModel.perform(_:on:)`; the menu and the VoiceOver actions pick it up. Actions returning `true` want the launcher hidden — the view posts `.hideLaunchpad`, it is not the view model's job.
+- **Hidden apps (`appEntry.isHidden`) have no position at all** — `pageIndex`, `orderIndex`, `folderID`, `folderOrderIndex` are all nil, so they take no slot on a page or in a folder (a folder they leave empty is dissolved). `rebuildPages` and `GridLayout.init` skip them; only search (`AppSearch` runs over every app) and Settings → Hidden Apps show them. `hideApp` / `unhideApp` go through `applyEdit`; unhiding appends to the end of the last page (`GridLayout.append`). A rescan keeps the flag (`mergeNewApps` copies existing rows and never attaches a hidden app to a re-imported folder), and `hasOrderingData` counts hidden rows so they are never re-imported as visible.
 - **Modifier clicks:** `⌘`-click opens the app without activating it (`AppOpener`, `activates = false`) so the launcher keeps the keyboard; `⌥⌘`-click shows it in Finder; `⌃`-click is left to the context menu. None of them act in edit mode.
 - **`searchText` exists on the ViewModel but is not wired.** Don't add filtering downstream of it without also building the search UI and decide on debounce/scope first.
 

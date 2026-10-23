@@ -29,9 +29,12 @@ struct AppIconView: View {
                     }
                 }
                 .scaleEffect(isMergeTarget ? Drag.mergeTargetScale : 1)
+                // Only search shows a hidden app.
+                .opacity(app.isHidden ? HiddenApp.iconOpacity : 1)
                 .removeAppBadge(app, iconSize: metrics.iconSize)
+                .hideAppBadge(app, iconSize: metrics.iconSize)
         } label: {
-            Text(app.displayName)
+            nameText
                 .font(.system(size: metrics.labelFont))
                 .foregroundStyle(.white)
                 .launcherLabelShadow()
@@ -47,7 +50,7 @@ struct AppIconView: View {
                 .padding(-metrics.iconSize * Search.selectionOutsetRatio)
         }
         .launcherItemAccessibility(
-            label: app.displayName,
+            label: app.isHidden ? String(localized: "\(app.displayName), hidden") : app.displayName,
             // Clicks don't launch in edit mode.
             hint: isEditing ? String(localized: "Drag to move") : String(localized: "Opens the app"),
             onActivate: onTap
@@ -58,6 +61,11 @@ struct AppIconView: View {
         // so XCUI's `app.buttons` query wouldn't match it without this trait.
         // Adding `.isButton` also gives VoiceOver the correct semantic role.
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private var nameText: Text {
+        guard app.isHidden else { return Text(app.displayName) }
+        return Text("\(Image(systemName: "eye.slash")) \(app.displayName)")
     }
 
     // `@ViewBuilder` lets us return different concrete view types from the

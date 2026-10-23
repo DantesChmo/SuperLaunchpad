@@ -93,10 +93,10 @@ final class LaunchpadViewModel {
 
     private func rebuildPages() {
         // 1. Split apps into those shown directly on the grid and those nested
-        //    in a folder, bucketed by folder ID.
+        //    in a folder, bucketed by folder ID. Hidden apps are in neither.
         var topLevelApps: [AppEntry] = []
         var folderAppsGrouped: [String: [AppEntry]] = [:]
-        for app in apps {
+        for app in apps where !app.isHidden {
             if let folderID = app.folderID {
                 folderAppsGrouped[folderID, default: []].append(app)
             } else {
@@ -432,8 +432,8 @@ final class LaunchpadViewModel {
                 existingApp.appPath = app.appPath
                 existingApp.iconData = app.iconData
                 // If folders were just re-imported, retroactively attach
-                // this existing app to its folder.
-                if let folderPos = folderAppPositions[app.bundleIdentifier] {
+                // this existing app to its folder, unless the user hid it.
+                if !existingApp.isHidden, let folderPos = folderAppPositions[app.bundleIdentifier] {
                     existingApp.folderID = folderPos.folderID
                     existingApp.folderOrderIndex = folderPos.folderOrderIndex
                     existingApp.pageIndex = nil
@@ -668,6 +668,40 @@ final class LaunchpadViewModel {
         return true
     }
 
+    // MARK: - Hidden apps
+    //
+    // A hidden app leaves the layout: its page or folder closes the gap (a
+    // folder it leaves empty is dissolved) and it keeps no position. Search
+    // still finds it. Unhiding puts it after the last item of the last page.
+
+    // For Settings, by name.
+    var hiddenApps: [AppEntry] {
+        apps.filter(\.isHidden)
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    @discardableResult
+    func hideApp(_ appID: String) -> Bool {
+        guard apps.contains(where: { $0.bundleIdentifier == appID && !$0.isHidden }) else { return false }
+        return applyEdit({ $0.delete(appID) }, updateApps: { apps in
+            guard let index = apps.firstIndex(where: { $0.bundleIdentifier == appID }) else { return }
+            apps[index].isHidden = true
+            apps[index].pageIndex = nil
+            apps[index].orderIndex = nil
+            apps[index].folderID = nil
+            apps[index].folderOrderIndex = nil
+        })
+    }
+
+    @discardableResult
+    func unhideApp(_ appID: String) -> Bool {
+        guard apps.contains(where: { $0.bundleIdentifier == appID && $0.isHidden }) else { return false }
+        return applyEdit({ $0.append(appID) }, updateApps: { apps in
+            guard let index = apps.firstIndex(where: { $0.bundleIdentifier == appID }) else { return }
+            apps[index].isHidden = false
+        })
+    }
+
     // MARK: - Drag session
 
     private struct ParkedRescan {
@@ -729,11 +763,18 @@ final class LaunchpadViewModel {
         receiveRescanResult(apps: parked.apps, folders: parked.folders, startRevision: parked.startRevision)
     }
 
-    private func applyEdit(_ edit: (inout GridLayout) -> Bool) -> Bool {
+    // `updateApps` changes rows the layout doesn't carry (hiding), after the
+    // edit and before the layout is written back into them.
+    private func applyEdit(
+        _ edit: (inout GridLayout) -> Bool,
+        updateApps: (inout [AppEntry]) -> Void = { _ in }
+    ) -> Bool {
         var layout = GridLayout(apps: apps, folders: folders)
         guard edit(&layout) else { return false }
         layout.dissolveEmptyFolders()
-        let result = layout.apply(to: apps, folders: folders)
+        var changedApps = apps
+        updateApps(&changedApps)
+        let result = layout.apply(to: changedApps, folders: folders)
         updateContents {
             apps = result.apps
             folders = result.folders
@@ -819,7 +860,11 @@ final class LaunchpadViewModel {
     }
 
     func menuItems(for app: AppEntry) -> ItemMenu.Sections {
-        ItemMenu.items(for: ItemMenu.AppState(isRemovable: isRemovable(app), canEditLayout: canEditLayout))
+        ItemMenu.items(for: ItemMenu.AppState(
+            isRemovable: isRemovable(app),
+            canEditLayout: canEditLayout,
+            isHidden: app.isHidden
+        ))
     }
 
     func menuItems(for folder: FolderEntry) -> ItemMenu.Sections {
@@ -861,6 +906,10 @@ final class LaunchpadViewModel {
             return true
         case .moveToTrash:
             requestRemoval(of: app)
+        case .hide:
+            hideApp(app.bundleIdentifier)
+        case .unhide:
+            unhideApp(app.bundleIdentifier)
         case .editLayout:
             enterEditMode()
         case .rename, .sortByName, .disband:
@@ -881,7 +930,7 @@ final class LaunchpadViewModel {
             disbandFolder(folder.id)
         case .editLayout:
             enterEditMode()
-        case .showInFinder, .moveToTrash:
+        case .showInFinder, .moveToTrash, .hide, .unhide:
             break
         }
     }

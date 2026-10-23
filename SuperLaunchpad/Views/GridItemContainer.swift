@@ -109,6 +109,11 @@ extension View {
         modifier(RemoveAppBadge(app: app, iconSize: iconSize))
     }
 
+    // The hide button on an app icon's top-right corner in edit mode.
+    func hideAppBadge(_ app: AppEntry, iconSize: CGFloat) -> some View {
+        modifier(HideAppBadge(app: app, iconSize: iconSize))
+    }
+
     // Long press to enter edit mode, plus the wiggle while in it. Shared by
     // grid icons and the open folder's icons.
     func editModeGestures(_ enterEditMode: EnterEditModeAction) -> some View {
@@ -158,11 +163,45 @@ private struct RemoveAppBadge: ViewModifier {
     }
 
     private var badge: some View {
-        let size = iconSize * Uninstall.badgeSizeRatio
-        return Button {
+        EditBadge(systemImage: "xmark", iconSize: iconSize, isLeading: true) {
             removeApp(app)
-        } label: {
-            Image(systemName: "xmark")
+        }
+        .accessibilityIdentifier("remove-app-badge")
+    }
+}
+
+private struct HideAppBadge: ViewModifier {
+    let app: AppEntry
+    let iconSize: CGFloat
+
+    @Environment(\.isEditing) private var isEditing
+    @Environment(\.itemMenu) private var itemMenu
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .topTrailing) {
+                if isEditing {
+                    EditBadge(systemImage: "eye.slash", iconSize: iconSize, isLeading: false) {
+                        itemMenu.perform(.hide, on: app)
+                    }
+                    .accessibilityIdentifier("hide-app-badge")
+                }
+            }
+    }
+}
+
+// A round button sticking out past one of the icon's top corners.
+private struct EditBadge: View {
+    let systemImage: String
+    let iconSize: CGFloat
+    let isLeading: Bool
+    let action: () -> Void
+
+    var body: some View {
+        let size = iconSize * Uninstall.badgeSizeRatio
+        let outset = size * Uninstall.badgeOutset
+        Button(action: action) {
+            Image(systemName: systemImage)
                 .font(.system(size: size * Uninstall.badgeGlyphRatio, weight: .bold))
                 .foregroundStyle(.black)
                 .frame(width: size, height: size)
@@ -171,8 +210,7 @@ private struct RemoveAppBadge: ViewModifier {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .offset(x: -size * Uninstall.badgeOutset, y: -size * Uninstall.badgeOutset)
-        .accessibilityIdentifier("remove-app-badge")
+        .offset(x: isLeading ? -outset : outset, y: -outset)
     }
 }
 

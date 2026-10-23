@@ -16,6 +16,9 @@ struct AppEntry: Identifiable, Equatable {
     var orderIndex: Int?
     var folderID: String?
     var folderOrderIndex: Int?
+    // Hidden from the grid (still found by search): no position at all, so it
+    // takes no slot on a page or in a folder.
+    var isHidden = false
 
     // `Identifiable.id` lets SwiftUI's `ForEach` track this row across rebuilds.
     // Bundle ID is globally unique on macOS, so it doubles as our primary key.
@@ -32,6 +35,6 @@ extension AppEntry: Codable, FetchableRecord, PersistableRecord {
     // matches the column names exactly — never reference columns as raw strings.
     enum Columns: String, ColumnExpression {
         case bundleIdentifier, displayName, appPath, iconData, pageIndex, orderIndex
-        case folderID, folderOrderIndex
+        case folderID, folderOrderIndex, isHidden
     }
 }

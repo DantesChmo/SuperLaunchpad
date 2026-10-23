@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     let hotKeyMonitor: HotKeyMonitor
     @Bindable var updater: UpdaterController
+    let viewModel: LaunchpadViewModel
 
     @AppStorage(Preferences.Key.pinchGestureEnabled)
     private var pinchGestureEnabled = Preferences.Default.pinchGestureEnabled
@@ -41,6 +42,25 @@ struct SettingsView: View {
 
             Section("Keyboard") {
                 HotKeyRecorderView(hotKeyMonitor: hotKeyMonitor)
+            }
+
+            Section {
+                if viewModel.hiddenApps.isEmpty {
+                    Text("No hidden apps.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(viewModel.hiddenApps) { app in
+                        HiddenAppRow(app: app) {
+                            viewModel.unhideApp(app.bundleIdentifier)
+                        }
+                    }
+                }
+            } header: {
+                Text("Hidden Apps")
+            } footer: {
+                Text("Hide an app from its context menu. Hidden apps can still be found by search.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Updates") {
@@ -87,5 +107,33 @@ struct SettingsView: View {
     private func refreshLoginItem() {
         launchAtLogin = LoginItem.isEnabled || LoginItem.requiresApproval
         loginItemNeedsApproval = LoginItem.requiresApproval
+    }
+}
+
+private struct HiddenAppRow: View {
+    let app: AppEntry
+    let onUnhide: () -> Void
+
+    var body: some View {
+        HStack {
+            Group {
+                if let icon = IconCache.shared.image(for: app) {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                } else {
+                    Image(systemName: "app.fill")
+                        .resizable()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .aspectRatio(contentMode: .fit)
+            .frame(width: SettingsWindow.hiddenAppIconSize, height: SettingsWindow.hiddenAppIconSize)
+            .accessibilityHidden(true)
+            Text(app.displayName)
+            Spacer()
+            Button("Unhide", action: onUnhide)
+                .accessibilityLabel("Unhide \(app.displayName)")
+        }
     }
 }
