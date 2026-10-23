@@ -107,6 +107,16 @@ enum SettingsWindow {
     static let hiddenAppIconSize: CGFloat = 20
 }
 
+enum ResetSheet {
+    static let width: CGFloat = 380
+    static let spacing: CGFloat = 12
+}
+
+enum LayoutBackup {
+    // Automatic backups made before a reset or a load; older ones are deleted.
+    static let keepCount = 10
+}
+
 enum HiddenApp {
     // A hidden app in the search results is dimmed.
     static let iconOpacity: Double = 0.5

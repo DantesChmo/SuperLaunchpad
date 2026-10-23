@@ -86,6 +86,10 @@ Data flow:
 | `Helpers/Constants.swift` | `Grid`, `FolderGrid`, `AnimationDuration`, `LayoutMetrics` |
 | `Helpers/NSImageExtensions.swift` | `pngData(pixelSize:)` — exact-pixel PNG for `iconData` |
 | `Helpers/NewAppPlacement.swift` | Settings → New Apps: where a rescan puts a new app; category folder title matching |
+| `Models/LayoutFile.swift` | layout file (JSON, `formatVersion`): pages, folders by title, hidden apps by bundle ID; pure encode/decode and `apply(to:)` onto the installed apps |
+| `Services/LayoutReset.swift` | Settings → Reset Layout: system Launchpad / categories / alphabetical, pure, reuses the first-run paths |
+| `Services/LayoutBackupStore.swift` | automatic backups before a reset or load (`Application Support/…/Layout Backups`, newest `LayoutBackup.keepCount` kept) |
+| `Views/LayoutSettingsSection.swift` | Settings → Layout: save / load / reset / restore previous, reset-mode sheet |
 | `SuperLaunchpadTests/` | swift-testing test suites |
 
 ## Conventions
@@ -201,6 +205,7 @@ Things a new developer cannot guess from the code:
 - **Search** (`AppSearch`, pure) runs on every keystroke over all apps — hidden ones too, shown dimmed with an eye — and over folder titles. Match kinds, best first: name prefix, word prefix, word initials (`vsc` → Visual Studio Code, `sysset` → System Settings; words also split at camelCase), contains, fuzzy (letters in order). Order: name-prefix matches first and fuzzy matches last; in between, and inside each of those groups, `launchCount` beats match kind. A folder result (Return or click) clears the query and opens the folder over the grid via `folderOpenRequest`.
 - **Launch counter.** Every launch from the launcher (click, `⌘`-click, menu Open, Return in search) goes through `recordLaunch`: `launchCount + 1` and `isNew = false` in memory and in one DB update, and a `layoutRevision` bump so a rescan running at that moment doesn't write back the row it read before. Show in Finder and clicks in edit mode don't count.
 - **Frequently Used row** (Settings → Search, `Preferences.showsFrequentApps`, off by default): up to `FrequentApps.maxCount` most launched visible apps, picked on `show()` and kept in that order while the launcher is open (a `⌘`-click must not move the icon under the pointer). While it has apps, `LayoutMetrics(extraRows: 1)` shares the grid's height with it, also during search, and the icon shrinks if the shorter cell needs it. Click only; arrows and Return keep paging; in edit mode it is dimmed and ignores clicks.
+- **Layout file and reset.** `LayoutFile` stores no folder IDs and no icons; `apply(to:)` makes new folder IDs, skips apps that aren't installed, drops folders left empty, spills pages longer than a page, puts apps the file doesn't have after the last item by name, and keeps an app hidden here that the file doesn't mention hidden. `decode` checks `formatVersion` first: a newer one is `LayoutFileError.newerFormat` and nothing is changed — bump `currentFormatVersion` whenever older builds can't read the file (2.0.0 grid size). `LaunchpadViewModel.resetLayout` / `loadLayout` save the current layout to `layoutBackups` first and change nothing if that throws; `restorePreviousLayout` loads the newest backup (after backing up, so a second restore undoes the first). A reset keeps hidden apps hidden and the new-app dot; the system Launchpad mode puts apps its DB doesn't know at the end (the first-run import drops them). Tests pass a temp `LayoutBackupStore`; the test init has none.
 
 ## Forbidden patterns
 

@@ -150,6 +150,9 @@ final class LaunchpadViewModel {
     // The launcher still works in-memory — just doesn't persist between launches.
     var database: AppDatabase?
 
+    // Where a reset or a load saves the layout first. `nil`: no backup.
+    @ObservationIgnored var layoutBackups: LayoutBackupStore?
+
     // Production init — owns its own AppDatabase.
     init() {
         do {
@@ -157,12 +160,14 @@ final class LaunchpadViewModel {
         } catch {
             print("Failed to initialize database: \(error)")
         }
+        layoutBackups = .standard
     }
 
     // Test init — accept a pre-built (typically temp) database. See
     // `makeTempDB()` in the tests.
-    init(database: AppDatabase?) {
+    init(database: AppDatabase?, layoutBackups: LayoutBackupStore? = nil) {
         self.database = database
+        self.layoutBackups = layoutBackups
     }
 
     // Two-phase loading strategy:
@@ -798,6 +803,57 @@ final class LaunchpadViewModel {
             guard let index = apps.firstIndex(where: { $0.bundleIdentifier == appID }) else { return }
             apps[index].isHidden = false
         })
+    }
+
+    // MARK: - Layout file
+    //
+    // Reset and load replace the whole layout. Both save the current one to
+    // `layoutBackups` first and change nothing when that fails.
+
+    var layoutFile: LayoutFile {
+        LayoutFile(apps: apps, folders: folders)
+    }
+
+    // Returns the backup.
+    @discardableResult
+    func resetLayout(
+        _ mode: LayoutReset.Mode,
+        systemOrdering: LaunchpadOrdering?,
+        categoryOf: (AppEntry) -> AppCategory = AppCategory.of
+    ) throws -> URL? {
+        let backup = try layoutBackups?.save(layoutFile)
+        let result = LayoutReset.build(mode, apps: apps, systemOrdering: systemOrdering, categoryOf: categoryOf)
+        replaceLayout(apps: result.apps, folders: result.folders)
+        return backup
+    }
+
+    @discardableResult
+    func loadLayout(_ file: LayoutFile) throws -> (applied: LayoutFile.Applied, backup: URL?) {
+        let backup = try layoutBackups?.save(layoutFile)
+        let applied = file.apply(to: apps)
+        replaceLayout(apps: applied.apps, folders: applied.folders)
+        return (applied, backup)
+    }
+
+    // Loads the newest backup, after backing up the current layout: a second
+    // restore undoes the first.
+    @discardableResult
+    func restorePreviousLayout() throws -> (applied: LayoutFile.Applied, backup: URL?)? {
+        guard let url = layoutBackups?.latest else { return nil }
+        let file = try LayoutFile.decode(Data(contentsOf: url))
+        return try loadLayout(file)
+    }
+
+    private func replaceLayout(apps newApps: [AppEntry], folders newFolders: [FolderEntry]) {
+        updateContents {
+            apps = newApps
+            folders = newFolders
+        }
+        openFolderID = nil
+        currentPage = 0
+        // A rescan running now read the old layout: make it write this one back.
+        layoutRevision += 1
+        try? database?.saveLayout(apps: newApps, folders: newFolders)
     }
 
     // MARK: - Drag session

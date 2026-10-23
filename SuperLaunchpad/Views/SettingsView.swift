@@ -93,6 +93,8 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            LayoutSettingsSection(viewModel: viewModel)
+
             Section("Updates") {
                 if updater.isAvailable {
                     Toggle("Automatically check for updates", isOn: $updater.automaticallyChecksForUpdates)
