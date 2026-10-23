@@ -56,6 +56,8 @@ struct PagingGridView: View {
     let onOpenFolder: (FolderEntry) -> Void
 
     var body: some View {
+        // Read once here, not per page: a focus move re-renders this view.
+        let focusedID = viewModel.keyboardFocus.focusedGridItemID
         GeometryReader { geo in
             HStack(spacing: 0) {
                 // Index identity is fine: pages are reshuffled holistically
@@ -64,6 +66,7 @@ struct PagingGridView: View {
                     AppGridPageView(
                         items: previewItems(page, index: index),
                         metrics: metrics,
+                        focusedID: focusedID,
                         onLaunch: { app in
                             guard !drag.isTapSuppressed else { return }
                             onLaunch(app)

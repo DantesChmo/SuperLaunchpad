@@ -222,7 +222,8 @@ struct LaunchpadView: View {
                         hiddenAppID: drag.session?.sourceFolderID == folder.id ? drag.session?.itemID : nil,
                         onFramesChange: { frames in
                             drag.folderFrames = frames
-                        }
+                        },
+                        focusedAppID: viewModel.keyboardFocus.focusedFolderAppID
                     )
                     // A different folder gets fresh edit state.
                     .id(folder.id)

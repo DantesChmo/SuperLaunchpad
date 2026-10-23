@@ -6,6 +6,8 @@ struct AppIconView: View {
     let app: AppEntry
     let metrics: LayoutMetrics
     var isSelected = false
+    // The arrow keys' focus is on it (see `KeyboardFocusModel`).
+    var isFocused = false
     // A lifted app rests on this one: a drop makes a folder of the two, so
     // the icon grows and gets a folder-style backplate.
     var isMergeTarget = false
@@ -52,6 +54,7 @@ struct AppIconView: View {
                 .fill(.white.opacity(isSelected ? Search.selectionOpacity : 0))
                 .padding(-metrics.iconSize * Search.selectionOutsetRatio)
         }
+        .keyboardFocusRing(isFocused, iconSize: metrics.iconSize)
         .launcherItemAccessibility(
             label: app.isHidden ? String(localized: "\(app.displayName), hidden") : app.displayName,
             // Clicks select instead of launching in edit mode.

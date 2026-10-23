@@ -242,7 +242,8 @@ final class LaunchpadPanel: NSPanel {
 
     // Returns true if the key was handled. Key codes are layout-independent,
     // so arrows behave the same on AZERTY / Dvorak. Everything not handled
-    // (letters, modified keys, ↑/↓ outside search) goes on to the search field.
+    // (letters, modified keys, Space outside edit mode) goes on to the search
+    // field.
     private func handleKeyDown(_ event: NSEvent) -> Bool {
         // While an input method is composing, its candidate window owns the
         // arrows, Return and Escape.
@@ -280,15 +281,13 @@ final class LaunchpadPanel: NSPanel {
                 hidePanel()
             }
         case kVK_LeftArrow:
-            if searching { viewModel.search.moveSelection(by: -1) } else { pager.step(by: -1) }
+            if searching { viewModel.search.moveSelection(by: -1) } else { moveFocus(.left) }
         case kVK_RightArrow:
-            if searching { viewModel.search.moveSelection(by: 1) } else { pager.step(by: 1) }
-        case kVK_UpArrow where searching:
-            viewModel.search.moveSelection(by: -Grid.columns)
-        case kVK_DownArrow where searching:
-            viewModel.search.moveSelection(by: Grid.columns)
-        case kVK_Return where viewModel.editing.isEditing, kVK_ANSI_KeypadEnter where viewModel.editing.isEditing:
-            viewModel.editing.exitEditMode()
+            if searching { viewModel.search.moveSelection(by: 1) } else { moveFocus(.right) }
+        case kVK_UpArrow:
+            if searching { viewModel.search.moveSelection(by: -Grid.columns) } else { moveFocus(.up) }
+        case kVK_DownArrow:
+            if searching { viewModel.search.moveSelection(by: Grid.columns) } else { moveFocus(.down) }
         case kVK_Return where searching, kVK_ANSI_KeypadEnter where searching:
             switch viewModel.search.selectedResult {
             case .app(let app):
@@ -301,8 +300,47 @@ final class LaunchpadPanel: NSPanel {
             case nil:
                 break
             }
+        case kVK_Return, kVK_ANSI_KeypadEnter:
+            return activateFocusedItem()
+        case kVK_Space where viewModel.editing.isEditing && !searching:
+            // Without a focused app the space goes on to the field.
+            return viewModel.keyboardFocus.toggleSelection()
         default:
             return false
+        }
+        return true
+    }
+
+    // An arrow outside search moves the keyboard focus (`KeyboardFocusModel`);
+    // crossing a page edge pages the grid with the usual settle. During an
+    // icon drag ← and → page as they always did.
+    private func moveFocus(_ direction: GridNavigation.Direction) {
+        if viewModel.editing.isDragSessionActive {
+            switch direction {
+            case .left: pager.step(by: -1)
+            case .right: pager.step(by: 1)
+            case .up, .down: break
+            }
+            return
+        }
+        if let page = viewModel.keyboardFocus.move(direction) {
+            pager.step(by: page - viewModel.currentPage)
+        }
+    }
+
+    // Return outside search: opens the focused folder (in edit mode too, as
+    // a click does) or launches the focused app. Otherwise it leaves edit
+    // mode, as before, or goes on to the field.
+    private func activateFocusedItem() -> Bool {
+        switch viewModel.keyboardFocus.focusedItem {
+        case .folder(let folder, _):
+            viewModel.keyboardFocus.openFolder(folder)
+        case .app(let app) where !viewModel.editing.isEditing:
+            // Hide first, as for a search result.
+            hidePanel()
+            viewModel.itemActions.launchApp(app)
+        default:
+            return viewModel.editing.exitEditMode()
         }
         return true
     }

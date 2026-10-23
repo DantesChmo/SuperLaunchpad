@@ -125,6 +125,24 @@ enum Search {
     static let resultsTransition: Double = 0.12
 }
 
+// The arrow-key focus ring (see `KeyboardFocusModel`): a white outline with
+// a dark edge, so it reads over a bright or a dark wallpaper. Increase
+// Contrast makes it wider and fully opaque.
+enum KeyboardFocus {
+    static let lineWidth: CGFloat = 3
+    static let increasedLineWidth: CGFloat = 4
+    static let opacity: Double = 0.9
+    static let edgeWidth: CGFloat = 1
+    static let edgeOpacity: Double = 0.35
+    static let increasedEdgeOpacity: Double = 0.8
+    // The ring shrinks onto the next icon from this scale (only fades with
+    // Reduce Motion).
+    static let appearScale: CGFloat = 1.08
+    static let ringAnimation: Double = 0.12
+    // An open folder pages to the focused app with this spring.
+    static let folderPageDuration: Double = 0.25
+}
+
 // Settings → Search: a row of the most launched apps between the search
 // field and the grid.
 enum FrequentApps {

@@ -6,6 +6,8 @@ struct AppGridPageView: View {
     let metrics: LayoutMetrics
     // The keyboard-selected item in search results; nil on the main grid.
     var selectedID: String? = nil
+    // The item the arrow keys focus on the main grid; nil in search results.
+    var focusedID: String? = nil
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
     // Item currently lifted by a drag, if it is on this page.
@@ -31,6 +33,7 @@ struct AppGridPageView: View {
                         item: item,
                         metrics: metrics,
                         isSelected: item.id == selectedID,
+                        isFocused: item.id == focusedID,
                         isMergeTarget: item.id == mergeTargetID,
                         onLaunch: onLaunch,
                         onOpenFolder: onOpenFolder
@@ -54,6 +57,7 @@ struct GridCellView: View {
     let item: LaunchpadItem
     let metrics: LayoutMetrics
     var isSelected = false
+    var isFocused = false
     var isMergeTarget = false
     let onLaunch: (AppEntry) -> Void
     let onOpenFolder: (FolderEntry) -> Void
@@ -69,11 +73,11 @@ struct GridCellView: View {
             // compile-time exhaustiveness checking.
             switch item {
             case .app(let app):
-                AppIconView(app: app, metrics: metrics, isSelected: isSelected, isMergeTarget: isMergeTarget) {
+                AppIconView(app: app, metrics: metrics, isSelected: isSelected, isFocused: isFocused, isMergeTarget: isMergeTarget) {
                     onLaunch(app)
                 }
             case .folder(let folder, let apps):
-                FolderIconView(folder: folder, apps: apps, metrics: metrics, isSelected: isSelected) {
+                FolderIconView(folder: folder, apps: apps, metrics: metrics, isSelected: isSelected, isFocused: isFocused) {
                     onOpenFolder(folder)
                 }
                 .scaleEffect(isMergeTarget ? Drag.mergeTargetScale : 1)

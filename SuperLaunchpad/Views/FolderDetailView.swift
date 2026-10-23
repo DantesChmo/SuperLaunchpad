@@ -19,6 +19,9 @@ struct FolderDetailView: View {
     // Where the card and its grid are (in `Drag.coordinateSpace`) and which
     // page is shown, for the drag gesture on the launcher root.
     var onFramesChange: (GridDragController.FolderFrames?) -> Void = { _ in }
+    // The app the arrow keys focus (see `KeyboardFocusModel`); the popup
+    // pages to it.
+    var focusedAppID: String? = nil
 
     @State private var currentPage: Int = 0
     @State private var isRenaming = false
@@ -26,6 +29,7 @@ struct FolderDetailView: View {
     @FocusState private var titleFieldFocused: Bool
     @State private var cardFrame: CGRect = .zero
     @State private var gridFrame: CGRect = .zero
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Splits the flat `apps` array into pages of `FolderGrid.appsPerPage`
     // (12). `stride(from:to:by:)` walks indices in steps; for each step we
@@ -134,6 +138,9 @@ struct FolderDetailView: View {
         .onChange(of: currentPage) {
             reportFrames()
         }
+        .onChange(of: focusedAppID) { _, appID in
+            showPage(of: appID)
+        }
         // Same swallow-the-tap trick: tapping anywhere inside the popup card
         // must NOT close the folder. Only taps on the surrounding dim layer
         // (in LaunchpadView) should close it. Clicking a non-focusable area
@@ -210,6 +217,16 @@ struct FolderDetailView: View {
         }
     }
 
+    // The arrow keys moved the focus past the shown page's edge.
+    private func showPage(of appID: String?) {
+        guard let appID, let index = apps.firstIndex(where: { $0.id == appID }) else { return }
+        let page = GridNavigation.position(ofFlatIndex: index, perPage: FolderGrid.appsPerPage).page
+        guard page != currentPage else { return }
+        withAnimation(Motion(reduced: reduceMotion).folderPageAnimation) {
+            currentPage = page
+        }
+    }
+
     private func reportFrames() {
         onFramesChange(GridDragController.FolderFrames(card: cardFrame, grid: gridFrame, page: currentPage))
     }
@@ -258,7 +275,8 @@ struct FolderDetailView: View {
                         iconSize: folderIconSize,
                         labelFont: metrics.labelFont,
                         labelWidth: folderItemWidth * FolderGrid.iconScale,
-                        showsLabels: metrics.showsLabels
+                        showsLabels: metrics.showsLabels,
+                        isFocused: app.id == focusedAppID
                     ) {
                         onLaunch(app)
                     }
@@ -291,6 +309,7 @@ private struct FolderAppIconView: View {
     let labelFont: CGFloat
     let labelWidth: CGFloat
     let showsLabels: Bool
+    var isFocused = false
     let onTap: () -> Void
 
     @State private var isHovering = false
@@ -330,6 +349,7 @@ private struct FolderAppIconView: View {
             }
             .editModeGestures(enterEditMode)
         }
+        .keyboardFocusRing(isFocused, iconSize: iconSize)
         .launcherItemAccessibility(
             label: app.displayName,
             hint: isEditing ? String(localized: "Selects it. Drag to move") : String(localized: "Opens the app"),

@@ -30,7 +30,11 @@ final class LaunchpadViewModel {
     }
     var currentPage: Int = 0
     var isVisible: Bool = false
-    var openFolderID: String?
+    var openFolderID: String? {
+        didSet {
+            if openFolderID != oldValue { keyboardFocus.openFolderDidChange() }
+        }
+    }
     // Edges of the launcher's screen covered by the Dock; the content is laid
     // out beside them. Set by `LaunchpadPanel` when it is placed on a screen.
     var dockInsets = DockInsets.zero
@@ -43,6 +47,7 @@ final class LaunchpadViewModel {
     @ObservationIgnored private(set) lazy var layoutFiles = LayoutFileModel(launchpad: self)
     @ObservationIgnored private(set) lazy var itemActions = ItemActionsModel(launchpad: self)
     @ObservationIgnored private(set) lazy var customIcons = CustomIconModel(launchpad: self)
+    @ObservationIgnored private(set) lazy var keyboardFocus = KeyboardFocusModel(launchpad: self)
 
     @ObservationIgnored var runningApps = RunningApps(source: .live)
 
@@ -69,6 +74,7 @@ final class LaunchpadViewModel {
         rebuildPages()
         search.contentsDidChange()
         editing.contentsDidChange()
+        keyboardFocus.contentsDidChange()
     }
 
     private func rebuildPagesUnlessBatching() {
@@ -76,6 +82,7 @@ final class LaunchpadViewModel {
         rebuildPages()
         search.contentsDidChange()
         editing.contentsDidChange()
+        keyboardFocus.contentsDidChange()
     }
 
     private func rebuildPages() {
@@ -380,6 +387,7 @@ final class LaunchpadViewModel {
         isVisible = true
         editing.resetOptionKey()
         search.launcherDidShow()
+        keyboardFocus.launcherDidShow()
     }
 
     func hide() {

@@ -10,6 +10,8 @@ struct FolderIconView: View {
     let metrics: LayoutMetrics
     // Keyboard selection in search results.
     var isSelected = false
+    // The arrow keys' focus is on it (see `KeyboardFocusModel`).
+    var isFocused = false
     let onTap: () -> Void
 
     // 3×3 preview — Apple's convention. Even if the folder has more apps,
@@ -35,6 +37,7 @@ struct FolderIconView: View {
                 .fill(.white.opacity(isSelected ? Search.selectionOpacity : 0))
                 .padding(-metrics.iconSize * Search.selectionOutsetRatio)
         }
+        .keyboardFocusRing(isFocused, iconSize: metrics.iconSize)
         .launcherItemAccessibility(
             label: folder.title,
             hint: apps.count == 1

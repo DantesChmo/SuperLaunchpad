@@ -78,4 +78,16 @@ struct MotionTests {
         #expect(full.editScale(isEditing: true) == 1)
         #expect(full.editScale(isEditing: false) == 1)
     }
+
+    // MARK: - Keyboard focus
+
+    @Test func focusRingShrinksOnOnlyWithoutReduceMotion() {
+        #expect(full.focusRingAppearScale == KeyboardFocus.appearScale)
+        #expect(reduced.focusRingAppearScale == 1)
+    }
+
+    @Test func folderPagesToTheFocusInstantlyWithReduceMotion() {
+        #expect(full.folderPageAnimation == .spring(duration: KeyboardFocus.folderPageDuration, bounce: 0))
+        #expect(reduced.folderPageAnimation == nil)
+    }
 }

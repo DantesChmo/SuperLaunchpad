@@ -59,6 +59,18 @@ struct Motion: Equatable {
         isHovering && !reduced ? AnimationDuration.hoverScale : 1
     }
 
+    // MARK: - Keyboard focus
+
+    // The focus ring shrinks onto the focused icon, or only fades in.
+    var focusRingAppearScale: CGFloat {
+        reduced ? 1 : KeyboardFocus.appearScale
+    }
+
+    // An open folder slides to the page of the focused app, or jumps there.
+    var folderPageAnimation: Animation? {
+        reduced ? nil : .spring(duration: KeyboardFocus.folderPageDuration, bounce: 0)
+    }
+
     // MARK: - Drag and edit mode
 
     // Reflow, lift and drop of a dragged icon.
