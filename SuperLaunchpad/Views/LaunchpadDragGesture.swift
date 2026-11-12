@@ -81,6 +81,7 @@ struct LaunchpadDragGesture: ViewModifier {
                     pointer: value.location,
                     grid: gridContext,
                     folder: folderContext,
+                    canLift: viewModel.editing.isEditing,
                     flipPage: flipPage,
                     leaveFolder: onLeaveFolder,
                     companions: { viewModel.editing.dragCompanions(for: $0) },

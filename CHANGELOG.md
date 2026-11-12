@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Keep an app in the Dock by dragging its icon from the launcher onto the
+  Dock, as from Finder. The icon stays where it is in the launcher.
+
+### Changed
+
+- Icons move on the grid only in edit mode (long-press an icon or hold `⌥`
+  first). Outside edit mode a drag carries the app itself, for the Dock.
+
 ## [1.1.0] - 2026-10-22
 
 ### Added

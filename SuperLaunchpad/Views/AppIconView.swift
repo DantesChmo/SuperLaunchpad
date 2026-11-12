@@ -38,6 +38,7 @@ struct AppIconView: View {
                 .selectionCheckmark(app, iconSize: metrics.iconSize)
                 .customIconDrop(app, iconSize: metrics.iconSize)
                 .runningDot(app)
+                .appFileDrag(app, iconSize: metrics.iconSize)
         } label: {
             nameText
                 .font(.system(size: metrics.labelFont))

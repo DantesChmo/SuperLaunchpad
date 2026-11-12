@@ -116,6 +116,8 @@ final class GridDragController {
     // `companions` gives the apps a lift of the given app carries along (the
     // rest of the selection). With `marquee` set, a press on the grid
     // outside any icon draws a band and reports the apps under it.
+    // `canLift` is false outside edit mode: an icon dragged there leaves as
+    // its .app file (`appFileDrag`), so the gesture ignores it.
     // Returns true when this update lifted an icon.
     @discardableResult
     func update(
@@ -123,6 +125,7 @@ final class GridDragController {
         pointer: CGPoint,
         grid: GridContext?,
         folder: FolderContext? = nil,
+        canLift: Bool = true,
         flipPage: @escaping (Int) -> Int?,
         leaveFolder: @escaping () -> Void = {},
         companions: (String) -> [AppEntry] = { _ in [] },
@@ -145,7 +148,7 @@ final class GridDragController {
             return false
         case .idle:
             // A drop is still flying home: don't start a second drag on top.
-            guard session == nil, let lifted = lift(at: start, companions: companions) else {
+            guard session == nil, canLift, let lifted = lift(at: start, companions: companions) else {
                 if session == nil, let report, folder == nil, let grid, grid.frame.contains(start) {
                     phase = .marquee
                     isTapSuppressed = true

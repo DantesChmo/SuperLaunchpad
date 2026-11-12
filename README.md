@@ -20,10 +20,11 @@ Built as a replacement for the system Launchpad removed in macOS 26 Tahoe.
 - **Global hotkey** `⌘⌥L`, changeable or removable in Settings
 - **Settings** window: launch at login, pinch gesture on/off, hotkey, updates
 - **Launch at login** through the system login items
-- **Drag to reorder** icons; hold an icon at the screen edge to flip pages (past the last page a new one is added)
+- **Drag to reorder** icons in jiggle mode; hold an icon at the screen edge to flip pages (past the last page a new one is added)
 - **Folders by drag and drop**: hold an app over another app to make a folder named after its category, drop apps onto folders, drag them out of an open folder
 - **Folder rename**: click the title of an open folder
-- **Jiggle mode** for editing the layout: long-press an icon, start a drag, or hold `⌥`; `Esc`, `Return` or a click on the background ends it
+- **Keep in Dock**: outside jiggle mode, drag an app's icon onto the Dock — it's dragged as the app itself, like from Finder
+- **Jiggle mode** for editing the layout: long-press an icon or hold `⌥`; `Esc`, `Return` or a click on the background ends it
 - **Delete apps**: in jiggle mode click the × on an app to move it to the Trash (apps that are part of macOS have none). Apps that need an administrator password go through Finder, which asks for it; the first time, macOS asks to let SuperLaunchpad control Finder
 - **First-run layout**: imports icons and folders from the system Launchpad database when it exists; on macOS 26 Tahoe, where it doesn't, builds a categorized layout (Apple apps first, Utilities in an "Other" folder, third-party apps in category folders)
 - **Multi-monitor**: opens on the display under the cursor
