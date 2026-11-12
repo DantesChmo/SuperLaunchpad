@@ -79,6 +79,7 @@ Data flow:
 | `Views/AppIconView.swift` | icon + label, hover scale 1.08 |
 | `Views/FolderIconView.swift` | 3×3 mini preview, or the folder's cover |
 | `Views/FolderCoverDialog.swift` | Change Cover…: emoji field or Choose Image…, drawn inside the launcher |
+| `Views/AppFileDrag.swift` | `appFileDrag(_:iconSize:)` — outside edit mode an app icon drags as its `.app` file URL (`onDrag`), so dropping it on the Dock keeps it there |
 | `Views/CustomIconDrop.swift` | `customIconDrop(_:iconSize:)` — file drop target on app icons, edit mode only |
 | `Views/FolderDetailView.swift` | folder popup, 4×3 grid |
 | `Views/SearchResultsView.swift` | one page of search results (apps and folders) with the keyboard selection |
@@ -247,6 +248,7 @@ Things a new developer cannot guess from the code:
 
 - **`NSPanel` must be `.screenSaver` level** with `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`. Lower levels leave the launcher behind Dock/menubar; wrong collection behavior breaks multi-Space usage.
 - **Trackpad gestures only work via `NSEvent.addGlobalMonitorForEvents`** (and a paired local monitor for events while the app is focused). SwiftUI `.gesture(MagnifyGesture)` does **not** fire when SuperLaunchpad isn't the frontmost app — that's why the global monitor exists.
+- **Icon drags depend on edit mode.** Outside edit mode an app icon is a drag-and-drop source carrying its `.app` file URL (`appFileDrag`, a SwiftUI `onDrag`): the Dock, drawn above the panel, accepts it and keeps the app; the launcher's layout doesn't change. Only in edit mode does `LaunchpadDragGesture` lift icons (`GridDragController.update(canLift:)`), and there the icon has no `onDrag`. A long press enters edit mode before the drag threshold, so press-and-hold then drag still moves the icon. Folders have no file drag (they're DB records, not directories).
 - **An app inside a folder has `pageIndex == nil` and `orderIndex == nil`.** Its position is solely `folderID + folderOrderIndex`. Setting both at once is a bug; pick one positioning scheme.
 - **Sort display names with `localizedCaseInsensitiveCompare`**, not `<`. Otherwise unicode/locale ordering goes wrong (e.g. `é` vs `e`).
 - **`FolderEntry.id` is generated in code** (`UUID().uuidString`), not by SQLite. Newly created folders need this set before `save(db)`.

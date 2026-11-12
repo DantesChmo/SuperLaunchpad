@@ -340,6 +340,7 @@ private struct FolderAppIconView: View {
                     .selectionCheckmark(app, iconSize: iconSize)
                     .customIconDrop(app, iconSize: iconSize)
                     .runningDot(app)
+                    .appFileDrag(app, iconSize: iconSize)
 
                 if showsLabels {
                     Text.launcherLabel(app.displayName, isNew: app.isNew, fontSize: labelFont)
